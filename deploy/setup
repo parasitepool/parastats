@@ -53,4 +53,7 @@ echo API_URL="https://parasite.wtf" >> .env
 
 pnpm build
 
-pm2 restart ckstats --update-env || pm2 start pnpm --name "ckstats" -- start --hostname 0.0.0.0 --port 80
+pm2 restart parastats-collector --update-env || pm2 start "pnpm collect-stats" --name "parastats-collector"
+pm2 restart parastats --update-env || pm2 start pnpm --name "parastats" -- start --hostname 0.0.0.0 --port 80
+pm2 save
+pm2 startup
