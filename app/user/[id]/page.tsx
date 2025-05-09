@@ -34,7 +34,7 @@ export default function UserDashboard() {
         }
         
         // First check if the address is valid
-        const isValid = isValidBitcoinAddress(userId.trim().toLowerCase());
+        const isValid = isValidBitcoinAddress(userId.trim());
         
         if (mounted) {
           setIsValidAddress(isValid);
