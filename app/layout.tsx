@@ -11,20 +11,11 @@ export const metadata: Metadata = {
     title: "Parasite",
     description: "Parasite bitcoin mining pool",
     type: "website",
-    images: [
-      {
-        url: "/parasite-white.png",
-        width: 1200,
-        height: 630,
-        alt: "Parasite Logo",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Parasite",
     description: "Parasite bitcoin mining pool",
-    images: ["/parasite-white.png"],
   },
 };
 
