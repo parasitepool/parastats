@@ -38,7 +38,7 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
             center: ['50%', '58%'],
             min: 0,
             max: 69,
-            splitNumber: 6.9,
+            splitNumber: 10,
             radius: '100%',
             axisLine: {
               lineStyle: {
@@ -77,6 +77,9 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
               color: foregroundColor,
               distance: 40,
               fontSize: 12,
+              formatter: function(value: number) {
+                return value.toFixed(0);
+              }
             },
             detail: {
               valueAnimation: true,
@@ -122,4 +125,4 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
       <div ref={chartRef} style={{ width: '100%', height: '350px' }}></div>
     </div>
   );
-} 
+}
