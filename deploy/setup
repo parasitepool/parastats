@@ -16,6 +16,8 @@ hostnamectl set-hostname $DOMAIN
 apt-get install --yes \
   acl \
   curl \
+  sqlite3 \
+  libsqlite3-dev \
   sudo \
   ufw \
   vim 
