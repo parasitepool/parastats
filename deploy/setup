@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+# This script is idempotent.
+
+set -euxo pipefail
+
+CHAIN=$1
+DOMAIN=$2
+
+export DEBIAN_FRONTEND=noninteractive
+
+touch ~/.hushlogin
+
+hostnamectl set-hostname $DOMAIN
+
+apt-get install --yes \
+  acl \
+  curl \
+  sqlite3 \
+  libsqlite3-dev \
+  sudo \
+  ufw \
+  vim 
+
+apt-get remove --yes --auto-remove
+
+ufw default allow outgoing
+ufw default deny incoming
+
+ufw allow http
+ufw allow ssh
+
+sed -i -E 's/#?PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+sshd -t
+systemctl restart sshd
+
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
+
+\. "$HOME/.nvm/nvm.sh"
+
+nvm install 22
+node -v
+nvm current
+corepack enable pnpm
+pnpm -v
+curl -fsSL https://get.pnpm.io/install.sh | bash
+
+npm install pm2@latest -g
+
+pnpm install
+
+pnpm build
+
+pm2 restart parastats-collector --update-env || pm2 start pnpm --name "parastats-collector" -- collect-stats
+pm2 restart parastats --update-env || pm2 start pnpm --name "parastats" -- start --hostname 0.0.0.0 --port 80
+pm2 save
+pm2 startup
