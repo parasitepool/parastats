@@ -1,0 +1,97 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --primary: #444444;
+  --primary-hover: #555555;
+  --secondary: #222222;
+  --secondary-hover: #333333;
+  --muted: #666666;
+  --highlight: #888888;
+  --highlight-hover: #999999;
+  --border: #444444;
+  --accent-1: #cccccc;
+  --accent-2: #aaaaaa;
+  --accent-3: #777777;
+  --default-mono-font-family: "Courier New", Courier, monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --primary: #444444;
+    --primary-hover: #555555;
+    --secondary: #222222;
+    --secondary-hover: #333333;
+    --muted: #666666;
+    --highlight: #888888;
+    --highlight-hover: #999999;
+    --border: #444444;
+    --accent-1: #cccccc;
+    --accent-2: #aaaaaa;
+    --accent-3: #777777;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Courier New", Courier, monospace;
+  padding: 0 0.5rem;
+}
+
+/* RetroProgressBar pulse animation */
+@keyframes retroPulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+
+.retro-pulse {
+  animation: retroPulse 3s ease-in-out infinite;
+}
+
+/* Hide scrollbar but maintain functionality */
+.scrollbar-hide {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
+/* Custom Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-hover);
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary) var(--secondary);
+}

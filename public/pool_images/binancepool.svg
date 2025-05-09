@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 80 80" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g id="页面-1">
+        <g id="画板">
+            <g id="Binance-Pool">
+                <path id="形状" d="M18.047,40L9.063,49.063L0,40L9.063,30.938L18.047,40ZM40,18.047L55.469,33.516L64.531,24.453L48.984,9.063L40,0L15.469,24.531L24.531,33.594L40,18.047ZM70.938,30.938L61.875,40L70.938,49.063L80,40L70.938,30.938ZM40,61.875L24.453,46.406L15.469,55.469L40,80L49.063,70.938L64.453,55.469L55.469,46.406L40,61.875ZM40,48.984L49.063,39.922L40,30.938L30.938,40L40,48.984Z" style="fill:rgb(194,194,194);fill-rule:nonzero;"/>
+            </g>
+        </g>
+    </g>
+</svg>

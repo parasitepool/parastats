@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 80 80" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g id="页面-1">
+        <g id="画板">
+            <g id="F2Pool">
+                <g id="编组">
+                    <defs>
+                        <mask id="Mask">
+                        
+                            <g transform="matrix(1,-0,-0,1,0,0)"><image id="_Image1" width="80px" height="80px" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAAAAACreq1xAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANElEQVRYhe3MQQ0AAAgEILV/Zy1xmx8IQG9lTfgTCoVCoVAoFAqFQqFQKBQKhUKhUCh8Dg858AGf+XPYFAAAAABJRU5ErkJggg=="/>
+                            </g>
+                        </mask>
+                    </defs>
+                    <g mask="url(#Mask)">
+                        <path id="Fill-1" d="M40,0C17.908,0 0,17.908 0,40C0,62.092 17.908,80 40,80C62.092,80 80,62.092 80,40C80,17.908 62.092,0 40,0" style="fill:rgb(111,111,111);"/>
+                    </g>
+                    <path id="Fill-3" d="M50.488,63.082C43.629,59.082 43.377,51.097 43.377,51.097C42.78,55.443 43.908,59.851 46.518,63.378C44.536,63.393 42.557,63.264 40.592,62.991C37.22,65.763 32.774,66.852 28.503,65.954C30.693,65.048 31.877,62.664 31.274,60.371C22.059,55.793 17.837,45.808 21.437,34.548C24.077,37.4 27.465,39.454 31.214,40.474C37.866,42.223 41.437,37.215 38.503,32.978C45.451,33.734 60.459,43.732 61.54,58.163C58.539,61.042 54.646,62.812 50.503,63.186L50.488,63.082ZM27.94,24.563C27.94,24.563 26.962,35.215 32.074,37.897C32.074,37.897 28.488,39.378 21.703,33.541C22.802,29.974 24.962,26.827 27.896,24.519L27.94,24.563ZM37.585,12.282C37.585,12.282 36.281,21.171 41.718,25.008C38.237,26.741 30.844,22.934 28.77,23.526C30.315,18.831 33.462,14.83 37.659,12.222L37.585,12.282ZM52.4,54.356C52.45,55.32 53.271,56.061 54.235,56.012C55.086,55.968 55.78,55.319 55.881,54.473L55.881,54.356C55.792,53.394 54.94,52.686 53.979,52.775C53.142,52.854 52.477,53.517 52.4,54.356Z" style="fill:white;"/>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>
