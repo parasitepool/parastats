@@ -1,36 +1,73 @@
 # Parastats
 
+A mining pool frontend for parasite
+
+## Features
+
+- **Real-time Statistics**: Monitor pool and individual miner statistics with automatic updates
+- **Historical Data**: Track performance over time with detailed charts
+- **User Dashboard**: Personal dashboard for miners
+- **Automated Data Collection**: Background service collecting pool statistics every minute
+
+## Tech Stack
+
+- **Frontend**: Next.js 15.3 with React 19
+- **Styling**: TailwindCSS 4.1
+- **Database**: SQLite (via better-sqlite3)
+- **Charts**: ECharts 5.6
+- **Bitcoin Integration**: @mempool/mempool.js
+
 ## Getting Started
 
-First, run the development server:
-
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Start the development server:
+```bash
+pnpm dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Start the stats collector (in a separate terminal):
+```bash
+pnpm collect-stats
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The application will be available at [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+## Development
 
-To learn more about Next.js, take a look at the following resources:
+- `pnpm dev` - Start development server with Turbopack
+- `pnpm build` - Create production build
+- `pnpm start` - Start production server
+- `pnpm lint` - Run linter
+- `pnpm lint:fix` - Fix linting issues
+- `pnpm collect-stats` - Start the statistics collector
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `/app` - Next.js application code
+  - `/components` - React components
+  - `/api` - API routes
+  - `/user` - User dashboard
+  - `/worker` - Worker dashboard
+- `/lib` - Shared utilities and database code
+- `/scripts` - Background jobs and utilities
+- `/data` - SQLite database and other data files
 
-## Deploy on Vercel
+## Contributing
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+This work is licensed under a [Creative Commons Attribution-NonCommercial 4.0 International License](http://creativecommons.org/licenses/by-nc/4.0/).
+
+This means you are free to:
+- Share — copy and redistribute the material in any medium or format
+- Adapt — remix, transform, and build upon the material
+
+Under the following terms:
+- Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made.
+- NonCommercial — You may not use the material for commercial purposes.
