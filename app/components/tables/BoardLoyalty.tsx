@@ -28,7 +28,7 @@ export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/leaderboard?type=loyalty&limit=15');
+      const response = await fetch('/api/leaderboard?type=loyalty&limit=99');
       if (!response.ok) {
         throw new Error('Failed to fetch data');
       }
