@@ -32,7 +32,7 @@ export default function BoardCombined({ initialData }: BoardCombinedProps) {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/leaderboard?type=combined&limit=15');
+      const response = await fetch('/api/leaderboard?type=combined&limit=9');
       if (!response.ok) {
         throw new Error('Failed to fetch data');
       }

@@ -69,7 +69,9 @@ export default function Navigation({
         {/* Right: Counter */}
         <div className="flex-shrink-0 flex items-center space-x-4 w-auto sm:w-[200px] lg:w-[300px] justify-end">
           {/* <Counter value={0} /> */}
-          <Image src={parasiteBug} alt="Parasite Bug" height={64} className='h-10 sm:h-12 w-auto' />
+          <Link href="/">
+            <Image src={parasiteBug} alt="Parasite Bug" height={64} className='h-10 sm:h-12 w-auto' />
+          </Link>
         </div>
 
         {/* Right: Pool status */}

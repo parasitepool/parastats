@@ -101,6 +101,7 @@ export default function UsersWorkersChart({ data, loading = false }: UsersWorker
           nameTextStyle: {
             color: usersColor,
             fontFamily: '"Courier New", Courier, monospace',
+            fontWeight: 'bold'
           },
           position: "left",
           axisLine: {
@@ -109,8 +110,9 @@ export default function UsersWorkersChart({ data, loading = false }: UsersWorker
             },
           },
           axisLabel: {
-            color: foregroundColor,
+            color: usersColor,
             fontFamily: '"Courier New", Courier, monospace',
+            fontWeight: 'bold'
           },
           splitLine: {
             lineStyle: {
@@ -125,8 +127,9 @@ export default function UsersWorkersChart({ data, loading = false }: UsersWorker
           scale: true,
           minInterval: 1,
           nameTextStyle: {
-            color: foregroundColor,
+            color: workersColor,
             fontFamily: '"Courier New", Courier, monospace',
+            fontWeight: 'bold'
           },
           position: "right",
           axisLine: {
@@ -135,8 +138,9 @@ export default function UsersWorkersChart({ data, loading = false }: UsersWorker
             },
           },
           axisLabel: {
-            color: foregroundColor,
+            color: workersColor,
             fontFamily: '"Courier New", Courier, monospace',
+            fontWeight: 'bold'
           },
           splitLine: {
             show: false,
