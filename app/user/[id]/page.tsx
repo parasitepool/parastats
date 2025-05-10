@@ -307,19 +307,15 @@ export default function UserDashboard() {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <p className="text-gray-500">Hashrate</p>
-                  <p className="font-medium">{worker.hashrate}</p>
+                  <p className="font-medium">{formatHashrate(parseHashrate(worker.hashrate))}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Best Difficulty</p>
-                  <p className="font-medium">{worker.bestDifficulty}</p>
+                  <p className="font-medium">{formatDifficulty(worker.bestDifficulty)}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Last Submission</p>
-                  <p className="font-medium">{worker.lastSubmission}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Uptime</p>
-                  <p className="font-medium">{worker.uptime}</p>
+                  <p className="font-medium">{formatRelativeTime(parseInt(worker.lastSubmission))}</p>
                 </div>
               </div>
             </div>
