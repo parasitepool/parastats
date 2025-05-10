@@ -32,7 +32,7 @@ export default function BoardDiff({ initialData }: LeaderboardProps) {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/leaderboard?type=difficulty&limit=15');
+      const response = await fetch('/api/leaderboard?type=difficulty&limit=99');
       if (!response.ok) {
         throw new Error('Failed to fetch data');
       }
