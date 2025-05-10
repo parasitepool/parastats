@@ -16,12 +16,12 @@ interface LeaderboardProps {
   initialData?: User[];
 }
 
-type TimeRange = 'weekly' | 'monthly' | 'lifetime';
+// type TimeRange = 'weekly' | 'monthly' | 'lifetime';
 
 export default function BoardDiff({ initialData }: LeaderboardProps) {
   const [data, setData] = useState<User[]>(initialData || []);
   const [isLoading, setIsLoading] = useState(!initialData);
-  const [timeRange, setTimeRange] = useState<TimeRange>('weekly');
+  // const [timeRange, setTimeRange] = useState<TimeRange>('weekly');
 
   useEffect(() => {
     if (!initialData) {
