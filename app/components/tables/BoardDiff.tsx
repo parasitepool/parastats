@@ -70,11 +70,11 @@ export default function BoardDiff({ initialData }: LeaderboardProps) {
       data={data}
       columns={columns}
       isLoading={isLoading}
-      timeRange={{
-        current: timeRange,
-        options: ['weekly', 'monthly', 'lifetime'],
-        onChange: (range) => setTimeRange(range as TimeRange)
-      }}
+      // timeRange={{
+      //   current: timeRange,
+      //   options: ['weekly', 'monthly', 'lifetime'],
+      //   onChange: (range) => setTimeRange(range as TimeRange)
+      // }}
     />
   );
 }
