@@ -6,9 +6,10 @@ import { useState, useEffect } from 'react';
 import UserAddressHelp from '../../components/UserAddressHelp';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
+import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
 import SortableTable from '../../components/SortableTable';
 import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/utils/formatters';
 import { parseHashrate } from '@/app/utils/formatters';
@@ -21,6 +22,8 @@ export default function UserDashboard() {
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
   const [historicalData, setHistoricalData] = useState<HistoricalUserStats[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hashrate, setHashrate] = useState<Hashrate>();
+  const [tooltipVisible, setTooltipVisible] = useState(false);
 
   // Function to check if the address is valid and fetch user data
   useEffect(() => {
@@ -40,18 +43,28 @@ export default function UserDashboard() {
           setIsValidAddress(isValid);
           
           if (isValid) {
-            // Fetch actual user data from our API
-            const data = await getUserData(userId);
+            // Fetch user data and hashrate in parallel
+            const [data, hashrateData] = await Promise.all([
+              getUserData(userId),
+              getHashrate()
+            ]);
             if (mounted) {
               setUserData(data);
+              setHashrate(hashrateData);
             }
           }
         }
       } catch (error) {
         if (mounted) {
-          console.error('Error fetching user data:', error);
-          setError('Failed to fetch user data. Please try again later.');
-          setUserData(null);
+          if (error instanceof Error && error.message.includes('404')) {
+            // For 404 errors, treat as invalid address
+            setIsValidAddress(false);
+            setUserData(null);
+          } else {
+            console.error('Error fetching user data:', error);
+            setError('Failed to fetch user data. Please try again later.');
+            setUserData(null);
+          }
         }
       } finally {
         if (mounted) {
@@ -122,7 +135,24 @@ export default function UserDashboard() {
     },
     {
       title: 'Best Difficulty',
-      value: userData?.bestDifficulty ? `${userData.bestDifficulty} (${Math.round((parseFloat(userData.bestDifficulty) / 180) * 100)}%)` : '-',
+      value: userData?.bestDifficulty && hashrate?.currentDifficulty ? 
+        <span className='flex gap-1'>{userData.bestDifficulty} 
+          <span 
+            className="relative inline-block"
+            onMouseEnter={() => setTooltipVisible(true)}
+            onMouseLeave={() => setTooltipVisible(false)}
+          >
+            <span className="text-sm text-muted-foreground cursor-help">
+              ({Number(((parseHashrate(userData.bestDifficulty) / hashrate.currentDifficulty) * 100).toFixed(4))}%)
+            </span>
+            {tooltipVisible && (
+              <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-48 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
+                Percentage of the current network difficulty
+              </span>
+            )}
+          </span>
+        </span> : 
+        '-',
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
@@ -277,19 +307,15 @@ export default function UserDashboard() {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <p className="text-gray-500">Hashrate</p>
-                  <p className="font-medium">{worker.hashrate}</p>
+                  <p className="font-medium">{formatHashrate(parseHashrate(worker.hashrate))}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Best Difficulty</p>
-                  <p className="font-medium">{worker.bestDifficulty}</p>
+                  <p className="font-medium">{formatDifficulty(worker.bestDifficulty)}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Last Submission</p>
-                  <p className="font-medium">{worker.lastSubmission}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Uptime</p>
-                  <p className="font-medium">{worker.uptime}</p>
+                  <p className="font-medium">{formatRelativeTime(parseInt(worker.lastSubmission))}</p>
                 </div>
               </div>
             </div>

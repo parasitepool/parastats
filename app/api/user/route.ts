@@ -53,8 +53,9 @@ export async function POST(request: Request) {
         is_active,
         is_public,
         created_at,
-        updated_at
-      ) VALUES (?, ?, ?, ?, ?)
+        updated_at,
+        authorised_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -62,7 +63,8 @@ export async function POST(request: Request) {
       1,  // is_active
       1,  // is_public
       now,
-      now
+      now,
+      now  // authorised_at
     );
 
     console.log(`Added new address to monitor: ${address}`);
