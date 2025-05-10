@@ -6,7 +6,7 @@ import Footer from "./components/Footer";
 export const metadata: Metadata = {
   title: "Parasite",
   description: "Parasite bitcoin mining pool",
-  metadataBase: new URL('https://parasite.wtf'),
+  metadataBase: new URL('https://parasite.space'),
   openGraph: {
     title: "Parasite",
     description: "Parasite bitcoin mining pool",

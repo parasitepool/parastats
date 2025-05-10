@@ -15,7 +15,7 @@ export default function NavigationWrapper() {
   
   // Handle address validation and navigation
   const handleAddressSubmit = async (submittedAddress: string) => {
-    const trimmedAddress = submittedAddress.trim();
+    const trimmedAddress = submittedAddress.split(".")[0].trim();
     
     if (!trimmedAddress) {
       setErrorMessage('Please enter a Bitcoin address');
