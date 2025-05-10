@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'combined';
-    const limit = parseInt(searchParams.get('limit') || '10', 10);
+    const limit = parseInt(searchParams.get('limit') || '9', 10);
     
     const db = getDb();
     
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
             authorised_at,
             created_at
           FROM monitored_users 
-          WHERE is_active = 1 AND is_public = 1
+          WHERE is_active = 1 AND is_public = 1 AND authorised_at != 0
           ORDER BY bestever DESC
           LIMIT ?
         `).all(limit).map((user: unknown) => ({
@@ -63,7 +63,7 @@ export async function GET(request: Request) {
             created_at,
             bestever
           FROM monitored_users 
-          WHERE is_active = 1 AND is_public = 1
+          WHERE is_active = 1 AND is_public = 1 AND authorised_at != 0
           ORDER BY authorised_at ASC
           LIMIT ?
         `).all(limit).map((user: unknown) => ({
@@ -84,7 +84,7 @@ export async function GET(request: Request) {
               RANK() OVER (ORDER BY bestever DESC) as diff_rank,
               RANK() OVER (ORDER BY authorised_at ASC) as loyalty_rank
             FROM monitored_users
-            WHERE is_active = 1 AND is_public = 1
+            WHERE is_active = 1 AND is_public = 1 AND authorised_at != 0
           )
           SELECT 
             id,
