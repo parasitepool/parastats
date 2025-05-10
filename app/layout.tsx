@@ -13,10 +13,10 @@ export const metadata: Metadata = {
     type: "website",
     images: [
       {
-        url: "/parasite-white.png",
-        width: 1200,
-        height: 630,
-        alt: "Parasite Logo",
+        url: "/og-bug.png",
+        width: 600,
+        height: 315,
+        alt: "Parasite",
       },
     ],
   },
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Parasite",
     description: "Parasite bitcoin mining pool",
-    images: ["/parasite-white.png"],
+    images: ["/og-bug.png"],
   },
 };
 
