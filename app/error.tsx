@@ -14,7 +14,7 @@ export default function Error({
   const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
-    // Log the error to an error reporting service
+    // Log error to console still too, could later push this to an error reporting service
     console.error('Application error:', error);
   }, [error]);
 
