@@ -49,6 +49,8 @@ export default function Dashboard() {
         setHistoricalStats(data);
       } catch (error) {
         console.error("Error fetching historical stats:", error);
+        // Set historicalStats to empty array on error to prevent undefined access
+        setHistoricalStats([]);
       } finally {
         setHistoricalLoading(false);
       }
@@ -62,8 +64,8 @@ export default function Dashboard() {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Format data for HashrateChart
-  const hashrateChartData = {
+  // Format data for HashrateChart only if we have valid historical stats
+  const hashrateChartData = historicalStats.length > 0 ? {
     timestamps: historicalStats.map(entry => {
       const date = new Date(entry.timestamp * 1000);
       return date.toLocaleString("en-US", {
@@ -75,11 +77,11 @@ export default function Dashboard() {
         hour12: false,
       });
     }),
-    hashrates: historicalStats.map(entry => entry.hashrate15m),
-  };
+    hashrates: historicalStats.map(entry => entry.hashrate15m ?? 0),
+  } : { timestamps: [], hashrates: [] };
 
-  // Format data for UsersWorkersChart
-  const usersWorkersChartData = {
+  // Format data for UsersWorkersChart only if we have valid historical stats
+  const usersWorkersChartData = historicalStats.length > 0 ? {
     dates: historicalStats.map(entry => {
       const date = new Date(entry.timestamp * 1000);
       return date.toLocaleString("en-US", {
@@ -91,11 +93,11 @@ export default function Dashboard() {
         hour12: false,
       });
     }),
-    users: historicalStats.map(entry => entry.users),
-    workers: historicalStats.map(entry => entry.workers),
-    idle: historicalStats.map(entry => entry.idle),
-    disconnected: historicalStats.map(entry => entry.disconnected),
-  };
+    users: historicalStats.map(entry => entry.users ?? 0),
+    workers: historicalStats.map(entry => entry.workers ?? 0),
+    idle: historicalStats.map(entry => entry.idle ?? 0),
+    disconnected: historicalStats.map(entry => entry.disconnected ?? 0),
+  } : { dates: [], users: [], workers: [], idle: [], disconnected: [] };
 
   return (
     <main className="flex min-h-screen flex-col items-center pb-8">
