@@ -14,7 +14,10 @@ interface UsersWorkersChartProps {
   loading?: boolean;
 }
 
-export default function UsersWorkersChart({ data, loading = false }: UsersWorkersChartProps) {
+export default function UsersWorkersChart({
+  data,
+  loading = false,
+}: UsersWorkersChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,7 +104,7 @@ export default function UsersWorkersChart({ data, loading = false }: UsersWorker
           nameTextStyle: {
             color: usersColor,
             fontFamily: '"Courier New", Courier, monospace',
-            fontWeight: 'bold'
+            fontWeight: "bold",
           },
           position: "left",
           axisLine: {
@@ -112,7 +115,7 @@ export default function UsersWorkersChart({ data, loading = false }: UsersWorker
           axisLabel: {
             color: usersColor,
             fontFamily: '"Courier New", Courier, monospace',
-            fontWeight: 'bold'
+            fontWeight: "bold",
           },
           splitLine: {
             lineStyle: {
@@ -129,7 +132,7 @@ export default function UsersWorkersChart({ data, loading = false }: UsersWorker
           nameTextStyle: {
             color: workersColor,
             fontFamily: '"Courier New", Courier, monospace',
-            fontWeight: 'bold'
+            fontWeight: "bold",
           },
           position: "right",
           axisLine: {
@@ -140,7 +143,7 @@ export default function UsersWorkersChart({ data, loading = false }: UsersWorker
           axisLabel: {
             color: workersColor,
             fontFamily: '"Courier New", Courier, monospace',
-            fontWeight: 'bold'
+            fontWeight: "bold",
           },
           splitLine: {
             show: false,
@@ -246,28 +249,32 @@ export default function UsersWorkersChart({ data, loading = false }: UsersWorker
       chart.dispose();
       window.removeEventListener("resize", handleResize);
     };
-  }, []);  // Empty dependency array for initialization
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array for initialization
 
   // Separate effect for data updates
   useEffect(() => {
     if (!chartRef.current || !data) return;
     const chart = echarts.getInstanceByDom(chartRef.current);
     if (chart) {
-      chart.setOption({
-        xAxis: {
-          data: data.dates,
+      chart.setOption(
+        {
+          xAxis: {
+            data: data.dates,
+          },
+          series: [
+            {
+              data: data.users,
+            },
+            {
+              data: data.workers,
+            },
+          ],
         },
-        series: [
-          {
-            data: data.users,
-          },
-          {
-            data: data.workers,
-          },
-        ],
-      }, { notMerge: false });
+        { notMerge: false }
+      );
     }
-  }, [data]);  // Only run when data changes
+  }, [data]); // Only run when data changes
 
   return (
     <div className="bg-background py-6 shadow-md border border-border">

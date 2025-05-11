@@ -35,7 +35,7 @@ export default function Navigation({
   };
 
   useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+    const handleGlobalKeyDown = (e: globalThis.KeyboardEvent) => {
       // Check for Cmd/Ctrl + K
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault(); // Prevent default browser behavior
@@ -44,11 +44,11 @@ export default function Navigation({
     };
 
     // Add event listener
-    document.addEventListener('keydown', handleGlobalKeyDown as any);
+    document.addEventListener('keydown', handleGlobalKeyDown);
 
     // Cleanup
     return () => {
-      document.removeEventListener('keydown', handleGlobalKeyDown as any);
+      document.removeEventListener('keydown', handleGlobalKeyDown);
     };
   }, []);
 
