@@ -116,7 +116,6 @@ export function formatExpectedBlockTime(poolHashrate: number | string | undefine
   
   // Calculate seconds to find a block
   // Time = (Difficulty × 2^32) / Hashrate
-  console.log(difficulty, hashrate);
   const secondsToBlock = (difficulty * Math.pow(2, 32)) / hashrate;
   
   // Convert to appropriate time unit

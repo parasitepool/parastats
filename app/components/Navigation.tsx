@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRef, KeyboardEvent, Dispatch, SetStateAction } from 'react';
+import { useRef, KeyboardEvent, Dispatch, SetStateAction, useEffect } from 'react';
 
 import parasiteLogo from '@/public/parasite-white.png';
 import parasiteBug from '@/public/bug.png';
 import ErrorModal from './modals/ErrorModal';
-import Counter from './Counter';
+// import Counter from './Counter';
 
 interface NavigationProps {
   address?: string;
@@ -34,6 +34,24 @@ export default function Navigation({
     }
   };
 
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Check for Cmd/Ctrl + K
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault(); // Prevent default browser behavior
+        inputRef.current?.focus();
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleGlobalKeyDown as any);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown as any);
+    };
+  }, []);
+
   return (
     <header className={`bg-background text-foreground py-4`}>
       <div className="container mx-auto flex items-end gap-4">
@@ -51,7 +69,7 @@ export default function Navigation({
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Enter your wallet address..."
+                placeholder="Enter your wallet address... (Ctrl/Cmd + K)"
                 className="w-full py-2 px-2 xl:px-4 bg-background border border-gray-300 focus:outline-none focus:ring-2 focus:ring-foreground text-xs xl:text-sm"
               />
               <button 
