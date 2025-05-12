@@ -85,6 +85,7 @@ export default function UserDashboard() {
         clearInterval(intervalId);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   // Function to fetch historical data
@@ -268,7 +269,7 @@ export default function UserDashboard() {
               {
                 key: 'name',
                 header: 'Name',
-                render: (value, worker) => (
+                render: (value) => (
                   // <Link href={`/worker/${worker.id}`} className="text-foreground font-bold hover:underline">
                   <Link href='#' className="text-foreground font-bold hover:underline">
                     {value as string}

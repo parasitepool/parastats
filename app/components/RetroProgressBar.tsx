@@ -2,15 +2,6 @@
 
 import { FC, useRef, useEffect, useState, useCallback } from 'react';
 
-// Debounce helper function
-const debounce = <T extends unknown[]>(func: (...args: T) => void, wait: number) => {
-  let timeout: NodeJS.Timeout;
-  return (...args: T) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-};
-
 interface RetroProgressBarProps {
   current: number;
   max: number;
@@ -42,8 +33,8 @@ const RetroProgressBar: FC<RetroProgressBarProps> = ({
   const [barCount, setBarCount] = useState<number>(0); // Default, will be updated
 
   // Update bar count based on container width (with debounce)
-  const updateBarCount = useCallback(
-    debounce(() => {
+  const updateBarCount = useCallback(() => {
+    const debouncedUpdate = () => {
       if (containerRef.current) {
         // Each bar is 8px wide (w-2) + 2px margin (mx-px)
         // So each bar takes approximately 3px of space
@@ -52,9 +43,12 @@ const RetroProgressBar: FC<RetroProgressBarProps> = ({
         const estimatedBarCount = Math.floor(width / 8);
         setBarCount(estimatedBarCount > 0 ? estimatedBarCount : 50);
       }
-    }, 100), 
-    []
-  );
+    };
+
+    const timeoutRef = { current: undefined as NodeJS.Timeout | undefined };
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(debouncedUpdate, 100);
+  }, []);
 
   useEffect(() => {
     // Update initially
