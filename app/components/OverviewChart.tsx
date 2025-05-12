@@ -14,17 +14,14 @@ interface OverviewChartProps {
 export default function OverviewChart({ data }: OverviewChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   
-  // Mock data
-  const mockData = {
-    dates: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    users: [120, 132, 101, 134, 90, 230, 210],
-    workers: [220, 182, 191, 234, 290, 330, 310]
-  };
-  
   useEffect(() => {
     if (chartRef.current) {
       const chart = echarts.init(chartRef.current);
-      const chartData = data || mockData;
+      const chartData = data || {
+        dates: [],
+        users: [],
+        workers: []
+      };
       
       // Get theme colors from CSS variables
       const foregroundColor = getComputedStyle(document.documentElement).getPropertyValue('--foreground').trim();

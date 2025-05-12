@@ -224,6 +224,7 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
       chart.dispose();
       window.removeEventListener("resize", handleResize);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty dependency array for initialization
 
   // Separate effect for data updates
