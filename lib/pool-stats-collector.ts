@@ -123,11 +123,13 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
       );
 
       // Update monitored_users with latest bestever and authorised_at if they're higher
+      // Also reset failed_attempts since we succeeded
       const updateStmt = db.prepare(`
         UPDATE monitored_users 
         SET 
           bestever = CASE WHEN bestever < ? THEN ? ELSE bestever END,
           authorised_at = CASE WHEN authorised_at < ? THEN ? ELSE authorised_at END,
+          failed_attempts = 0,
           updated_at = ?
         WHERE id = ?
       `);
@@ -144,6 +146,33 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
 
   } catch (error) {
     console.error(`Error collecting stats for user ${address}:`, error);
+    
+    // Increment failed attempts and deactivate if threshold reached
+    const db = getDb();
+    db.transaction(() => {
+      // First get the current failed attempts count
+      const user = db.prepare('SELECT failed_attempts FROM monitored_users WHERE id = ?').get(userId) as { failed_attempts: number };
+      const newFailedAttempts = (user?.failed_attempts ?? 0) + 1;
+      const now = Math.floor(Date.now() / 1000);
+
+      // Then update based on the new count
+      const updateStmt = db.prepare(`
+        UPDATE monitored_users 
+        SET 
+          failed_attempts = ?,
+          is_active = ?,
+          updated_at = ?
+        WHERE id = ?
+      `);
+
+      // If we hit 10 failures, deactivate and reset counter, otherwise just increment
+      updateStmt.run(
+        newFailedAttempts >= 10 ? 0 : newFailedAttempts,
+        newFailedAttempts >= 10 ? 0 : 1,
+        now,
+        userId
+      );
+    })();
   }
 }
 

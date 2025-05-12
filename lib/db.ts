@@ -64,10 +64,21 @@ function initializeTables() {
       is_public BOOLEAN NOT NULL DEFAULT 1,
       bestever REAL DEFAULT 0,
       authorised_at INTEGER DEFAULT 0,
+      failed_attempts INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )
   `);
+
+  // Add failed_attempts column if it doesn't exist since we added this field later
+  try {
+    db.exec(`ALTER TABLE monitored_users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0`);
+  } catch (error: any) {
+    // Column might already exist, which is fine
+    if (!error.message.includes('duplicate column name')) {
+      console.error('Error adding failed_attempts column:', error);
+    }
+  }
 
   // Create index on address for faster lookups
   db.exec(`
