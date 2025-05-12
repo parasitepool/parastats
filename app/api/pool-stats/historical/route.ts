@@ -33,6 +33,23 @@ export async function GET(request: Request) {
     const period = searchParams.get('period') || '24h';
     const interval = searchParams.get('interval') || '5m';
     
+    // Validate interval is positive for numeric intervals
+    if (interval !== 'raw') {
+      const intervalMatch = interval.match(/^(-?\d+)([mh])$/);
+      if (!intervalMatch || parseInt(intervalMatch[1], 10) <= 0) {
+        return new NextResponse(
+          JSON.stringify({ error: "Interval must be 'raw' or a positive value with unit (e.g., '5m', '1h')" }), 
+          { 
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store'
+            }
+          }
+        );
+      }
+    }
+    
     // Determine cache duration based on interval
     let cacheDuration = 300; // Default 5 minutes
     switch (interval) {
@@ -57,29 +74,36 @@ export async function GET(request: Request) {
     const now = Math.floor(Date.now() / 1000);
     let startTime = now;
     
-    switch (period) {
-      case '1h':
-        startTime = now - 60 * 60;
-        break;
-      case '6h':
-        startTime = now - 6 * 60 * 60;
-        break;
-      case '24h':
-      case '1d':
-        startTime = now - 24 * 60 * 60;
-        break;
-      case '7d':
-        startTime = now - 7 * 24 * 60 * 60;
-        break;
-      case '9d':
-        startTime = now - 9 * 24 * 60 * 60;
-        break;
-      case '30d':
-        startTime = now - 30 * 24 * 60 * 60;
-        break;
-      default:
-        // Default to 24 hours
-        startTime = now - 24 * 60 * 60;
+    // Parse period format (e.g., "18d" or "6h")
+    const periodMatch = period.match(/^(-?\d+)([dh])$/);
+    
+    if (periodMatch) {
+      const value = parseInt(periodMatch[1], 10);
+      if (value <= 0) {
+        return new NextResponse(
+          JSON.stringify({ error: "Period must be a positive value (e.g., '24h' or '7d')" }),
+          { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+        );
+      }
+
+      const unit = periodMatch[2];
+      
+      // Calculate total days for 30d max check
+      const totalDays = unit === 'd' ? value : value / 24;
+      
+      if (totalDays > 30) {
+        return new NextResponse(
+          JSON.stringify({ error: "Period cannot exceed 30 days" }),
+          { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+        );
+      }
+      
+      // Calculate seconds based on unit (d for days, h for hours)
+      const multiplier = unit === 'd' ? 24 * 60 * 60 : 60 * 60;
+      startTime = now - value * multiplier;
+    } else {
+      // Default to 24 hours if format is invalid
+      startTime = now - 24 * 60 * 60;
     }
     
     // Get the data from the database
@@ -87,6 +111,25 @@ export async function GET(request: Request) {
     
     // If interval is 'raw', return all data points
     if (interval === 'raw') {
+      // Calculate expected number of points (1 point per minute)
+      const expectedPoints = Math.ceil((now - startTime) / 60);
+      const MAX_RAW_POINTS = 2880; // 48 hours of 1-minute data
+      
+      if (expectedPoints > MAX_RAW_POINTS) {
+        return new NextResponse(
+          JSON.stringify({ 
+            error: `Raw data requests are limited to ${MAX_RAW_POINTS} points (${MAX_RAW_POINTS / 60} hours). Please use a shorter period or specify an interval.` 
+          }), 
+          { 
+            status: 400,
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store'
+            }
+          }
+        );
+      }
+
       const rows = db.prepare(`
         SELECT 
           timestamp, users, workers, idle, disconnected, 
