@@ -34,20 +34,18 @@ export async function GET(request: Request) {
     const interval = searchParams.get('interval') || '5m';
     
     // Validate interval is positive for numeric intervals
-    if (interval !== 'raw') {
-      const intervalMatch = interval.match(/^(-?\d+)([mh])$/);
-      if (!intervalMatch || parseInt(intervalMatch[1], 10) <= 0) {
-        return new NextResponse(
-          JSON.stringify({ error: "Interval must be 'raw' or a positive value with unit (e.g., '5m', '1h')" }), 
-          { 
-            status: 400,
-            headers: {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-store'
-            }
+    const intervalMatch = interval.match(/^(-?\d+)([mh])$/);
+    if (!intervalMatch || parseInt(intervalMatch[1], 10) <= 0) {
+      return new NextResponse(
+        JSON.stringify({ error: "Interval must be a positive value with unit (e.g., '5m', '1h')" }), 
+        { 
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store'
           }
-        );
-      }
+        }
+      );
     }
     
     // Determine cache duration based on interval
@@ -88,12 +86,24 @@ export async function GET(request: Request) {
 
       const unit = periodMatch[2];
       
-      // Calculate total days for 30d max check
+      // Calculate total days for max period check
       const totalDays = unit === 'd' ? value : value / 24;
       
-      if (totalDays > 30) {
+      // Set max period based on the selected interval
+      let maxPeriodDays = 30; // Default max
+      
+      // Apply interval-specific limits
+      if (interval === '1m') {
+        maxPeriodDays = 2; // 2 days max for 1-minute intervals
+      } else if (interval === '5m') {
+        maxPeriodDays = 10; // 10 days max for 5-minute intervals
+      }
+      
+      if (totalDays > maxPeriodDays) {
         return new NextResponse(
-          JSON.stringify({ error: "Period cannot exceed 30 days" }),
+          JSON.stringify({ 
+            error: `For ${interval} interval, period cannot exceed ${maxPeriodDays} days` 
+          }),
           { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
         );
       }
@@ -109,53 +119,7 @@ export async function GET(request: Request) {
     // Get the data from the database
     const db = getDb();
     
-    // If interval is 'raw', return all data points
-    if (interval === 'raw') {
-      // Calculate expected number of points (1 point per minute)
-      const expectedPoints = Math.ceil((now - startTime) / 60);
-      const MAX_RAW_POINTS = 2880; // 48 hours of 1-minute data
-      
-      if (expectedPoints > MAX_RAW_POINTS) {
-        return new NextResponse(
-          JSON.stringify({ 
-            error: `Raw data requests are limited to ${MAX_RAW_POINTS} points (${MAX_RAW_POINTS / 60} hours). Please use a shorter period or specify an interval.` 
-          }), 
-          { 
-            status: 400,
-            headers: {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-store'
-            }
-          }
-        );
-      }
-
-      const rows = db.prepare(`
-        SELECT 
-          timestamp, users, workers, idle, disconnected, 
-          hashrate15m, hashrate1d
-        FROM pool_stats 
-        WHERE timestamp >= ? 
-        ORDER BY timestamp ASC
-      `).all(startTime) as RawStatsRow[];
-      
-      // Process hashrates
-      const results = rows.map(row => ({
-        ...row,
-        hashrate15m: parseHashrate(row.hashrate15m),
-        hashrate1d: parseHashrate(row.hashrate1d)
-      }));
-      
-      // Return response with cache headers
-      return new NextResponse(JSON.stringify(results), {
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': `s-maxage=${cacheDuration}, stale-while-revalidate=${cacheDuration * 2}`
-        }
-      });
-    }
-    
-    // Otherwise, aggregate data based on the interval
+    // Parse the interval
     let intervalSeconds;
     switch (interval) {
       case '1m':
