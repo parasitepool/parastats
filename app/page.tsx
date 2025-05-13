@@ -78,7 +78,9 @@ export default function Dashboard() {
       });
     }),
     hashrates: historicalStats.map(entry => entry.hashrate15m ?? 0),
-  } : { timestamps: [], hashrates: [] };
+    hashrates2: historicalStats.map(entry => entry.hashrate1d ?? 0),
+    hashrates2Title: "1D Average"
+  } : { timestamps: [], hashrates: [], hashrates2: [], hashrates2Title: "1D Average" };
 
   // Format data for UsersWorkersChart only if we have valid historical stats
   const usersWorkersChartData = historicalStats.length > 0 ? {
