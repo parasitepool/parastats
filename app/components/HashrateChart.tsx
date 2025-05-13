@@ -8,6 +8,8 @@ interface HashrateChartProps {
   data?: {
     timestamps: string[];
     hashrates: number[];
+    hashrates2?: number[];
+    hashrates2Title?: string;
   };
   loading?: boolean;
 }
@@ -32,7 +34,7 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
       .trim();
 
     // Hashrate line color
-    const hashrateColor = "#666666";
+    const hashrateColor = "#CCCCCC";
 
     const getChartOption = (chartData: typeof data) => ({
       backgroundColor: "transparent",
@@ -50,28 +52,38 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
           fontFamily: '"Courier New", Courier, monospace',
         },
         formatter: function (params: CallbackDataParams[]) {
-          const hashrate = Number(params[0].value);
-          let unit = "H/s";
-          let value: number = hashrate;
+          const formatHashrate = (hashrate: number) => {
+            let unit = "H/s";
+            let value: number = hashrate;
 
-          if (hashrate >= 1e15) {
-            value = hashrate / 1e15;
-            unit = "PH/s";
-          } else if (hashrate >= 1e12) {
-            value = hashrate / 1e12;
-            unit = "TH/s";
-          } else if (hashrate >= 1e9) {
-            value = hashrate / 1e9;
-            unit = "GH/s";
-          } else if (hashrate >= 1e6) {
-            value = hashrate / 1e6;
-            unit = "MH/s";
-          } else if (hashrate >= 1e3) {
-            value = hashrate / 1e3;
-            unit = "KH/s";
+            if (hashrate >= 1e15) {
+              value = hashrate / 1e15;
+              unit = "PH/s";
+            } else if (hashrate >= 1e12) {
+              value = hashrate / 1e12;
+              unit = "TH/s";
+            } else if (hashrate >= 1e9) {
+              value = hashrate / 1e9;
+              unit = "GH/s";
+            } else if (hashrate >= 1e6) {
+              value = hashrate / 1e6;
+              unit = "MH/s";
+            } else if (hashrate >= 1e3) {
+              value = hashrate / 1e3;
+              unit = "KH/s";
+            }
+
+            return `${value.toFixed(2)} ${unit}`;
+          };
+
+          let tooltipText = `${params[0].name}<br/>`;
+          tooltipText += `Hashrate: ${formatHashrate(Number(params[0].value))}`;
+          
+          if (params.length > 1 && params[1].value !== undefined) {
+            tooltipText += `<br/>${params[1].seriesName}: ${formatHashrate(Number(params[1].value))}`;
           }
 
-          return `${params[0].name}<br/>Hashrate: ${value.toFixed(2)} ${unit}`;
+          return tooltipText;
         },
         axisPointer: {
           type: "line",
@@ -112,6 +124,7 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
         nameTextStyle: {
           color: foregroundColor,
           fontFamily: '"Courier New", Courier, monospace',
+          fontWeight: "bold",
         },
         axisLine: {
           lineStyle: {
@@ -121,6 +134,7 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
         axisLabel: {
           color: foregroundColor,
           fontFamily: '"Courier New", Courier, monospace',
+          fontWeight: "bold",
           formatter: function (value: number) {
             if (value >= 1e15) return (value / 1e15).toFixed(1) + " PH/s";
             if (value >= 1e12) return (value / 1e12).toFixed(1) + " TH/s";
@@ -208,6 +222,25 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
             opacity: 0.1,
           },
         },
+        ...(chartData?.hashrates2 ? [{
+          name: chartData.hashrates2Title || "Secondary Hashrate",
+          type: "line",
+          data: chartData.hashrates2,
+          smooth: true,
+          sampling: "average",
+          lineStyle: {
+            color: "#666666",
+            width: 2,
+            type: "dashed"
+          },
+          itemStyle: {
+            color: "#666666"
+          },
+          symbol: "circle",
+          symbolSize: 6,
+          showSymbol: false,
+          showAllSymbol: "auto"
+        }] : []),
       ],
     });
 
@@ -240,6 +273,9 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
           {
             data: data.hashrates,
           },
+          ...(data.hashrates2 ? [{
+            data: data.hashrates2,
+          }] : []),
         ],
       }, { notMerge: false });
     }
