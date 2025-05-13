@@ -49,10 +49,10 @@ export default function MinerSetupGuide() {
       </li>
       <li>
         Set your username using this format:
-        <div className="font-mono bg-foreground/10 px-2 py-1 rounded mt-2">
+        <div className="font-mono bg-foreground/10 px-2 py-1 rounded mt-2 break-words">
           xverseL1address.username.staticlnaddress@parasite.sati.pro
         </div>
-        <p className="text-sm mt-2 italic">
+        <p className="text-sm mt-2 italic break-words">
           Example:
           bc1qnotarealaddress.steve.yourreallnurlhere@parasite.sati.pro
         </p>
