@@ -11,7 +11,7 @@ export interface BoardColumn<T> {
 }
 
 interface BoardProps<T> {
-  title: string;
+  title: string | ReactNode;
   data: T[];
   columns: BoardColumn<T>[];
   timeRange?: {
