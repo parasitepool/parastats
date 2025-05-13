@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import {
   formatDifficulty,
   formatPrice,
-  formatExpectedBlockTime
+  formatExpectedBlockTime,
+  parseHashrate
 } from "../utils/formatters";
 import StatCard from "./StatCard";
 import { 
@@ -33,6 +34,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
   const [bitcoinPrice, setBitcoinPrice] = useState<number | null>(null);
   const [difficultyAdjustment, setDifficultyAdjustment] = useState<Adjustment>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [highestDiffTooltipVisible, setHighestDiffTooltipVisible] = useState(false);
   const [localLoading, setLocalLoading] = useState(true);
 
   useEffect(() => {
@@ -95,7 +97,25 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
     },
     {
       title: "Pool's Highest Diff",
-      value: poolStats?.highestDifficulty,
+      value: poolStats?.highestDifficulty && hashrate?.currentDifficulty ? (
+        <span className='flex gap-1'>
+          {poolStats.highestDifficulty}
+          <span 
+            className="relative inline-block"
+            onMouseEnter={() => setHighestDiffTooltipVisible(true)}
+            onMouseLeave={() => setHighestDiffTooltipVisible(false)}
+          >
+            <span className="text-sm text-muted-foreground cursor-help">
+              ({Number(((parseHashrate(poolStats.highestDifficulty) / hashrate.currentDifficulty) * 100).toFixed(2))}%)
+            </span>
+            {highestDiffTooltipVisible && (
+              <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-48 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
+                Percentage of the current network difficulty
+              </span>
+            )}
+          </span>
+        </span>
+      ) : '-',
       icon: <TrendingUpIcon />,
     },
     {

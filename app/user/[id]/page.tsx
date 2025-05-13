@@ -96,7 +96,7 @@ export default function UserDashboard() {
       if (!isValidAddress) return;
       
       try {
-        const data = await getHistoricalUserStats(userId);
+        const data = await getHistoricalUserStats(userId, '3d', '5m');
         if (mounted) {
           setHistoricalData(data);
         }
