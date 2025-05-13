@@ -45,7 +45,7 @@ export default function Dashboard() {
     async function fetchHistoricalData() {
       try {
         setHistoricalLoading(true);
-        const data = await getHistoricalPoolStats("9d", "5m");
+        const data = await getHistoricalPoolStats("9d", "15m");
         setHistoricalStats(data);
       } catch (error) {
         console.error("Error fetching historical stats:", error);
