@@ -48,7 +48,7 @@ export default function DifficultyInfoModal({ isOpen, onClose }: DifficultyInfoM
 
           <h3 className="text-lg font-semibold text-foreground mt-6">How Difficulty Works</h3>
           <p>
-            The difficulty adjusts every 2,016 blocks (approximately every 2 weeks) to maintain Bitcoin's 
+            The difficulty adjusts every 2,016 blocks (approximately every 2 weeks) to maintain Bitcoin&apos;s 
             10-minute average block time. If blocks are being mined too quickly, the difficulty increases; 
             if too slowly, it decreases.
           </p>
