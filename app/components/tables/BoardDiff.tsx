@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { formatDifficulty, formatAddress } from '../../utils/formatters';
 import Board, { BoardColumn } from './Board';
+import { InfoIcon } from '../icons';
+import DifficultyInfoModal from '../modals/DifficultyInfoModal';
 
 interface User {
   id: number;
@@ -21,6 +23,7 @@ interface LeaderboardProps {
 export default function BoardDiff({ initialData }: LeaderboardProps) {
   const [data, setData] = useState<User[]>(initialData || []);
   const [isLoading, setIsLoading] = useState(!initialData);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   // const [timeRange, setTimeRange] = useState<TimeRange>('weekly');
 
   useEffect(() => {
@@ -65,16 +68,33 @@ export default function BoardDiff({ initialData }: LeaderboardProps) {
   ];
 
   return (
-    <Board
-      title="Top Difficulties"
-      data={data}
-      columns={columns}
-      isLoading={isLoading}
-      // timeRange={{
-      //   current: timeRange,
-      //   options: ['weekly', 'monthly', 'lifetime'],
-      //   onChange: (range) => setTimeRange(range as TimeRange)
-      // }}
-    />
+    <>
+      <Board
+        title={
+          <div className="flex items-center gap-2">
+            <span>Top Difficulties</span>
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="p-1 rounded-full hover:bg-foreground/10 transition-colors cursor-pointer"
+              aria-label="Difficulty information"
+            >
+              <InfoIcon className="h-5 w-5 text-foreground/60" />
+            </button>
+          </div>
+        }
+        data={data}
+        columns={columns}
+        isLoading={isLoading}
+        // timeRange={{
+        //   current: timeRange,
+        //   options: ['weekly', 'monthly', 'lifetime'],
+        //   onChange: (range) => setTimeRange(range as TimeRange)
+        // }}
+      />
+      <DifficultyInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+      />
+    </>
   );
 }
