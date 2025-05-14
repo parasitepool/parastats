@@ -12,9 +12,10 @@ interface HashrateChartProps {
     hashrates2Title?: string;
   };
   loading?: boolean;
+  height?: string;
 }
 
-export default function HashrateChart({ data, loading = false }: HashrateChartProps) {
+export default function HashrateChart({ data, loading = false, height = "400px" }: HashrateChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -285,7 +286,7 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
     <div className="bg-background shadow-md border border-border py-6">
       <h2 className="text-2xl font-semibold mb-4 px-6">Historic Hashrate</h2>
       {loading && <p className="text-center">Loading data...</p>}
-      <div ref={chartRef} style={{ width: "100%", height: "400px" }}></div>
+      <div ref={chartRef} style={{ width: "100%", height: height }}></div>
     </div>
   );
 }

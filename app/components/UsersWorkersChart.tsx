@@ -12,11 +12,13 @@ interface UsersWorkersChartProps {
     disconnected: number[];
   };
   loading?: boolean;
+  height?: string;
 }
 
 export default function UsersWorkersChart({
   data,
   loading = false,
+  height = "450px",
 }: UsersWorkersChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -280,7 +282,7 @@ export default function UsersWorkersChart({
     <div className="bg-background py-6 shadow-md border border-border">
       <h2 className="text-2xl font-semibold mb-4 px-6">Users & Workers</h2>
       {loading && <p className="text-center">Loading data...</p>}
-      <div ref={chartRef} style={{ width: "100%", height: "450px" }}></div>
+      <div ref={chartRef} style={{ width: "100%", height: height }}></div>
     </div>
   );
 }

@@ -5,10 +5,13 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import UserAddressHelp from '../../components/UserAddressHelp';
 import HashrateChart from '../../components/HashrateChart';
+import UsersWorkersChart from '../../components/UsersWorkersChart';
+import { PlusIcon, MinusIcon } from '../../components/icons';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, getHistoricalPoolStats } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
+import { HistoricalPoolStats } from '@/app/api/pool-stats/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
 import SortableTable from '../../components/SortableTable';
 import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/utils/formatters';
@@ -21,9 +24,37 @@ export default function UserDashboard() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
   const [historicalData, setHistoricalData] = useState<HistoricalUserStats[] | null>(null);
+  const [historicalPoolData, setHistoricalPoolData] = useState<HistoricalPoolStats[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hashrate, setHashrate] = useState<Hashrate>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [isPoolStatsExpanded, setIsPoolStatsExpanded] = useState(false);
+
+  // Function to fetch historical pool data
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null;
+
+    async function fetchHistoricalPoolData() {
+      try {
+        const data = await getHistoricalPoolStats('3d', '5m');
+        setHistoricalPoolData(data);
+      } catch (error) {
+        console.error('Error fetching historical pool data:', error);
+      }
+    }
+
+    // Only fetch data and set up interval if stats are expanded
+    if (isPoolStatsExpanded) {
+      fetchHistoricalPoolData();
+      intervalId = setInterval(fetchHistoricalPoolData, 60000); // Update every minute
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [isPoolStatsExpanded]);
 
   // Function to check if the address is valid and fetch user data
   useEffect(() => {
@@ -230,7 +261,7 @@ export default function UserDashboard() {
       </div>
 
       {/* Hashrate Chart */}
-      <div className="w-full mb-6">
+      <div className="w-full mb-4">
         <HashrateChart
           data={historicalData ? {
             timestamps: historicalData.map(d => {
@@ -248,6 +279,64 @@ export default function UserDashboard() {
           } : undefined}
           loading={!historicalData}
         />
+      </div>
+
+      {/* Pool Charts Section */}
+      <div className="w-full">
+        <div className="flex justify-between items-center">
+          <div></div>
+          <button
+            onClick={() => setIsPoolStatsExpanded(!isPoolStatsExpanded)}
+            className="text-accent-2 hover:text-primary flex items-center gap-1 transition-all duration-300 ease-in-out"
+            aria-label={isPoolStatsExpanded ? "Collapse charts" : "Expand charts"}
+          >
+            <span className="text-sm">{isPoolStatsExpanded ? "Collapse Pool Charts" : "Show Pool Charts"}</span>
+            {isPoolStatsExpanded ? <MinusIcon /> : <PlusIcon />}
+          </button>
+        </div>
+        {isPoolStatsExpanded && (
+          <div className="my-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <UsersWorkersChart 
+                data={historicalPoolData ? {
+                  dates: historicalPoolData.map(d => {
+                    const date = new Date(d.timestamp * 1000);
+                    return date.toLocaleString("en-US", {
+                      year: undefined,
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: false,
+                    });
+                  }),
+                  users: historicalPoolData.map(d => d.users),
+                  workers: historicalPoolData.map(d => d.workers),
+                  idle: historicalPoolData.map(d => d.idle),
+                  disconnected: historicalPoolData.map(d => d.disconnected),
+                } : undefined}
+                height="350px"
+              />
+              <HashrateChart
+                data={historicalPoolData ? {
+                  timestamps: historicalPoolData.map(d => {
+                    const date = new Date(d.timestamp);
+                    return date.toLocaleString("en-US", {
+                      year: undefined,
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      hour12: false,
+                    });
+                  }),
+                  hashrates: historicalPoolData.map(d => d.hashrate15m)
+                } : undefined}
+                height="350px"
+              />
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Mining Projections - Uncomment when UserMiningStats is implemented */}
