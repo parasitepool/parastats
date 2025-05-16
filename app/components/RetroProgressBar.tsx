@@ -98,7 +98,7 @@ const RetroProgressBar: FC<RetroProgressBarProps> = ({
       {(showLabel || label) && (
         <div className={`flex justify-between mb-1 text-${labelSize} text-foreground font-semibold`}>
           <span>{label || `${Math.round(percentage)}%`}</span>
-          {showLabel && !onlyCurrent ? <span>{current} {units} / {max} {units}</span> : <span>{current}{units}</span>}
+          {showLabel && !onlyCurrent ? <span>{current} {units} / {max} {units}</span> : <span>{Number(current.toFixed(4)).toString()}{units}</span>}
         </div>
       )}
       <div className="relative">
@@ -138,4 +138,4 @@ const RetroProgressBar: FC<RetroProgressBarProps> = ({
   );
 };
 
-export default RetroProgressBar; 
+export default RetroProgressBar;

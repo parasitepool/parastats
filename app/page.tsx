@@ -112,8 +112,8 @@ export default function Dashboard() {
       <div className="w-full mb-6">
         {/* <RetroProgressBarExample /> */}
         <RetroProgressBar
-          current={(poolStats?.hashrate || 0) / 1000000000000000}
-          max={1000}
+          current={(poolStats?.hashrate || 0) / 10000000000000000}
+          max={100}
           showLabel={true}
           label="Parasite Power"
           labelSize="md"
@@ -122,7 +122,7 @@ export default function Dashboard() {
           onlyCurrent={true}
         />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full mb-6">
         <div className="lg:col-span-2">
           <UsersWorkersChart data={usersWorkersChartData} loading={historicalLoading} />
         </div>
@@ -131,7 +131,7 @@ export default function Dashboard() {
       {/* <div className="w-full mb-6">
         <OverviewChart />
       </div> */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full mb-6">
         <HashrateGauge totalHashrate={(poolStats?.hashrate || 0) / 1000000000000000} />
         <div className="lg:col-span-2">
           <HashrateChart data={hashrateChartData} loading={historicalLoading} />
@@ -141,7 +141,7 @@ export default function Dashboard() {
       <div className="w-full mb-6">
         <HashrateTrends />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full mb-6">
         <Leaderboard />
         <LoyaltyBoard />
       </div>

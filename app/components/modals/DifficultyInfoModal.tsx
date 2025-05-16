@@ -58,12 +58,12 @@ export default function DifficultyInfoModal({ isOpen, onClose }: DifficultyInfoM
             Difficulty numbers use the following suffixes for readability:
           </p>
           <ul className="list-disc pl-6 space-y-2">
-            <li><strong>K</strong> = Thousand (1,000)</li>
-            <li><strong>M</strong> = Million (1,000,000)</li>
-            <li><strong>G</strong> = Billion (1,000,000,000)</li>
-            <li><strong>T</strong> = Trillion (1,000,000,000,000)</li>
-            <li><strong>P</strong> = Quadrillion (1,000,000,000,000,000)</li>
-            <li><strong>E</strong> = Quintillion (1,000,000,000,000,000,000)</li>
+            <li><strong>K</strong> = Thousand (1,000) - from <em>Kilo</em></li>
+            <li><strong>M</strong> = Million (1,000,000) - from <em>Mega</em></li>
+            <li><strong>G</strong> = Billion (1,000,000,000) - from <em>Giga</em></li>
+            <li><strong>T</strong> = Trillion (1,000,000,000,000) - from <em>Tera</em></li>
+            <li><strong>P</strong> = Quadrillion (1,000,000,000,000,000) - from <em>Peta</em></li>
+            <li><strong>E</strong> = Quintillion (1,000,000,000,000,000,000) - from <em>Exa</em></li>
           </ul>
           
           <p className="mt-4">
