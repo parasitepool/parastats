@@ -77,10 +77,26 @@ export default function Dashboard() {
         hour12: false,
       });
     }),
-    hashrates: historicalStats.map(entry => entry.hashrate15m ?? 0),
-    hashrates2: historicalStats.map(entry => entry.hashrate1d ?? 0),
-    hashrates2Title: "1D Average"
-  } : { timestamps: [], hashrates: [], hashrates2: [], hashrates2Title: "1D Average" };
+    series: [
+      {
+        data: historicalStats.map(entry => entry.hashrate1hr ?? 0),
+        title: "1H Average"
+      },
+      {
+        data: historicalStats.map(entry => entry.hashrate1d ?? 0),
+        title: "1D Average",
+        lineStyle: "dashed" as const
+      },
+      {
+        data: historicalStats.map(entry => entry.hashrate7d ?? 0),
+        title: "7D Average",
+        lineStyle: "dotted" as const
+      }
+    ]
+  } : { 
+    timestamps: [], 
+    series: [{ data: [], title: "1H Average" }] 
+  };
 
   // Format data for UsersWorkersChart only if we have valid historical stats
   const usersWorkersChartData = historicalStats.length > 0 ? {
