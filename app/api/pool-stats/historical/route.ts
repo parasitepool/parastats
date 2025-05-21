@@ -18,19 +18,6 @@ export interface HistoricalPoolStats {
   hashrate7d: number;
 }
 
-interface RawStatsRow {
-  timestamp: number;
-  users: number;
-  workers: number;
-  idle: number;
-  disconnected: number;
-  hashrate15m: string;
-  hashrate1hr: string;
-  hashrate6hr: string;
-  hashrate1d: string;
-  hashrate7d: string;
-}
-
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
