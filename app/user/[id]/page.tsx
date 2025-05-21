@@ -244,7 +244,12 @@ export default function UserDashboard() {
                 hour12: false,
               });
             }),
-            hashrates: historicalData.map(d => d.hashrate)
+            series: [
+              {
+                data: historicalData.map(d => d.hashrate),
+                title: "Hashrate"
+              }
+            ]
           } : undefined}
           loading={!historicalData}
         />
