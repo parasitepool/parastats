@@ -23,6 +23,14 @@ export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
     if (!initialData) {
       fetchData();
     }
+    
+    // Set up auto-refresh every 60 seconds
+    const refreshInterval = setInterval(() => {
+      fetchData();
+    }, 60000);
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(refreshInterval);
   }, [initialData]);
 
   const fetchData = async () => {
