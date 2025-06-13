@@ -150,6 +150,7 @@ function formatHexTimestamp(hexTimestamp: string): string {
     const timestamp = parseInt(hexTimestamp, 16);
     return new Date(timestamp * 1000).toLocaleString();
   } catch (error) {
+    console.error('Error formatting hex timestamp:', error);
     return 'Invalid timestamp';
   }
 }

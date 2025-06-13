@@ -8,11 +8,9 @@ import RawMessage from "./RawMessage";
 
 interface NotificationDetailsProps {
   notification: StratumNotification;
-  onClose: () => void;
-  showCloseButton?: boolean;
 }
 
-export default function NotificationDetails({ notification, onClose, showCloseButton = true }: NotificationDetailsProps) {
+export default function NotificationDetails({ notification }: NotificationDetailsProps) {
   return (
     <div className="bg-background border border-border shadow-lg">
       {/* Header */}

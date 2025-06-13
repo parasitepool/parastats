@@ -16,7 +16,25 @@ export interface StratumNotification {
   cleanJobs: boolean;
   extranonce1?: string;
   extranonce2Size?: number;
-  raw: any;
+  raw: Record<string, unknown>;
+}
+
+interface StratumNotificationRow {
+  id: string;
+  timestamp: number;
+  pool: string;
+  job_id: string;
+  prev_block_hash: string;
+  coinbase1: string;
+  coinbase2: string;
+  merkle_branches: string;
+  version: string;
+  n_bits: string;
+  n_time: string;
+  clean_jobs: number;
+  extranonce1: string | null;
+  extranonce2_size: number | null;
+  raw_message: string;
 }
 
 export async function GET() {
@@ -29,7 +47,7 @@ export async function GET() {
       WHERE pool = 'Parasite' 
       ORDER BY created_at DESC 
       LIMIT 10
-    `).all() as any[];
+    `).all() as StratumNotificationRow[];
     
     if (rows.length === 0) {
       // Return empty array if no real data available
@@ -55,9 +73,9 @@ export async function GET() {
       nBits: row.n_bits,
       nTime: row.n_time,
       cleanJobs: Boolean(row.clean_jobs),
-      extranonce1: row.extranonce1,
-      extranonce2Size: row.extranonce2_size,
-      raw: JSON.parse(row.raw_message)
+      extranonce1: row.extranonce1 || undefined,
+      extranonce2Size: row.extranonce2_size || undefined,
+      raw: JSON.parse(row.raw_message) as Record<string, unknown>
     }));
     
     return NextResponse.json(notifications, {

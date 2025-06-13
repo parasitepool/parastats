@@ -4,9 +4,28 @@ import { getDb } from './db';
 interface StratumMessage {
   id?: number;
   method?: string;
-  params?: any[];
-  result?: any;
-  error?: any;
+  params?: unknown[];
+  result?: unknown;
+  error?: unknown;
+}
+
+interface StratumNotificationData {
+  id: string;
+  timestamp: number;
+  pool: string;
+  job_id: string;
+  prev_block_hash: string;
+  coinbase1: string;
+  coinbase2: string;
+  merkle_branches: string;
+  version: string;
+  n_bits: string;
+  n_time: string;
+  clean_jobs: number;
+  extranonce1: string | null;
+  extranonce2_size: number | null;
+  raw_message: string;
+  created_at: number;
 }
 
 class StratumCollector {
@@ -163,20 +182,20 @@ class StratumCollector {
       ] = message.params;
 
       const now = Math.floor(Date.now() / 1000);
-      const notificationId = `${now}_${jobId}`;
+      const notificationId = `${now}_${String(jobId)}`;
 
-      const notification = {
+      const notification: StratumNotificationData = {
         id: notificationId,
         timestamp: now,
         pool: 'Parasite',
-        job_id: jobId,
-        prev_block_hash: prevBlockHash,
-        coinbase1: coinbase1,
-        coinbase2: coinbase2,
+        job_id: String(jobId),
+        prev_block_hash: String(prevBlockHash),
+        coinbase1: String(coinbase1),
+        coinbase2: String(coinbase2),
         merkle_branches: JSON.stringify(merkleBranches),
-        version: version,
-        n_bits: nBits,
-        n_time: nTime,
+        version: String(version),
+        n_bits: String(nBits),
+        n_time: String(nTime),
         clean_jobs: cleanJobs ? 1 : 0,
         extranonce1: this.extranonce1,
         extranonce2_size: this.extranonce2Size,
@@ -195,7 +214,7 @@ class StratumCollector {
     }
   }
 
-  private storeNotification(notification: any): void {
+  private storeNotification(notification: StratumNotificationData): void {
     try {
       const db = getDb();
       
@@ -277,7 +296,7 @@ class StratumCollector {
     this.sendMessage(authorizeMsg);
   }
 
-  private sendMessage(message: any): void {
+  private sendMessage(message: Record<string, unknown>): void {
     if (!this.socket || this.socket.destroyed) return;
 
     try {

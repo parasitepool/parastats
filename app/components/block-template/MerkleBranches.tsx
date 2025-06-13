@@ -2,8 +2,6 @@
 
 import { StratumNotification } from "../../api/stratum/route";
 import { getCoinbaseTxHash } from "../../utils/bitcoinUtils";
-import { getMerkleColor } from "../../utils/colorUtils";
-import InfoCard from "./InfoCard";
 import MerkleTreeVisualization from "./MerkleTreeVisualization";
 import { useMemo } from "react";
 

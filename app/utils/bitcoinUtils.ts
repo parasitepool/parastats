@@ -48,7 +48,7 @@ export interface OpReturnData {
     // Elastos specific
     elastosBlockHash?: string;
     // Generic fields for other protocols
-    [key: string]: any;
+    [key: string]: unknown;
   };
   dataHex?: string; // Raw hex data for fallback display
 }
@@ -201,7 +201,7 @@ function identifyProtocol(dataHex: string): string {
 }
 
 // Decode protocol-specific data
-function decodeProtocolData(dataHex: string, protocol: string): Record<string, any> | undefined {
+function decodeProtocolData(dataHex: string, protocol: string): Record<string, unknown> | undefined {
   switch (protocol) {
     case 'CoreDAO':
       return decodeCoreDAOData(dataHex);
@@ -214,7 +214,7 @@ function decodeProtocolData(dataHex: string, protocol: string): Record<string, a
   }
 }
 
-function decodeCoreDAOData(dataHex: string): Record<string, any> | undefined {
+function decodeCoreDAOData(dataHex: string): Record<string, unknown> | undefined {
   // Simplified CoreDAO decoding - extend as needed
   try {
     if (dataHex.length >= 48) { // At least 24 bytes for addresses
@@ -223,13 +223,13 @@ function decodeCoreDAOData(dataHex: string): Record<string, any> | undefined {
         rewardAddress: dataHex.length > 48 ? dataHex.substring(48, 88) : undefined
       };
     }
-  } catch (error) {
-    console.error('Error decoding CoreDAO data:', error);
+  } catch {
+    console.error('Error decoding CoreDAO data');
   }
   return undefined;
 }
 
-function decodeRSKData(dataHex: string): Record<string, any> | undefined {
+function decodeRSKData(dataHex: string): Record<string, unknown> | undefined {
   // Simplified RSK decoding
   try {
     if (dataHex.length >= 70) { // "RSK" + 32-byte hash
@@ -237,13 +237,13 @@ function decodeRSKData(dataHex: string): Record<string, any> | undefined {
         rskBlockHash: dataHex.substring(6, 70) // Skip "RSK" prefix
       };
     }
-  } catch (error) {
-    console.error('Error decoding RSK data:', error);
+  } catch {
+    console.error('Error decoding RSK data');
   }
   return undefined;
 }
 
-function decodeMergedMiningData(dataHex: string): Record<string, any> | undefined {
+function decodeMergedMiningData(dataHex: string): Record<string, unknown> | undefined {
   // Simplified merged mining decoding
   try {
     const magicIndex = dataHex.toLowerCase().indexOf('fabe6d6d');
@@ -255,8 +255,8 @@ function decodeMergedMiningData(dataHex: string): Record<string, any> | undefine
         };
       }
     }
-  } catch (error) {
-    console.error('Error decoding merged mining data:', error);
+  } catch {
+    console.error('Error decoding merged mining data');
   }
   return undefined;
 }
@@ -282,7 +282,7 @@ export function computeCoinbaseOutputs(coinbaseRaw: string): CoinbaseOutput[] {
         try {
           outputAddress = address.fromOutputScript(out.script, networks.bitcoin);
           outputType = 'address';
-        } catch (error) {
+        } catch {
           // If we can't decode as address, check for known script patterns
           outputAddress = parseScriptToReadableFormat(scriptHex);
           outputType = outputAddress ? 'address' : 'unknown';
@@ -339,7 +339,7 @@ function parseScriptToReadableFormat(scriptHex: string): string | undefined {
     }
     
     return `Unknown Script (${scriptHex.substring(0, Math.min(20, scriptHex.length))}...)`;
-  } catch (error) {
+  } catch {
     return undefined;
   }
 }
