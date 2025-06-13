@@ -97,6 +97,35 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_user_stats_user_time ON user_stats_history(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_user_stats_created_at ON user_stats_history(created_at);
   `);
+
+  // Create stratum notifications table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stratum_notifications (
+      id TEXT PRIMARY KEY,
+      timestamp INTEGER NOT NULL,
+      pool TEXT NOT NULL,
+      job_id TEXT NOT NULL,
+      prev_block_hash TEXT NOT NULL,
+      coinbase1 TEXT NOT NULL,
+      coinbase2 TEXT NOT NULL,
+      merkle_branches TEXT NOT NULL,
+      version TEXT NOT NULL,
+      n_bits TEXT NOT NULL,
+      n_time TEXT NOT NULL,
+      clean_jobs BOOLEAN NOT NULL,
+      extranonce1 TEXT,
+      extranonce2_size INTEGER,
+      raw_message TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )
+  `);
+
+  // Create indexes for efficient querying of stratum data
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_stratum_timestamp ON stratum_notifications(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_stratum_pool ON stratum_notifications(pool);
+    CREATE INDEX IF NOT EXISTS idx_stratum_created_at ON stratum_notifications(created_at);
+  `);
 }
 
 // Close the database connection when the app is shutting down

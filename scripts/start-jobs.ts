@@ -3,12 +3,17 @@ import {
   startPoolStatsCollector,
   purgeOldData,
 } from "../lib/pool-stats-collector";
+import { startStratumCollector, stopStratumCollector } from "../lib/stratum-collector";
 import { closeDb } from "../lib/db";
 import cron from "node-cron";
 
 // Global references to jobs
 let statsCollectorJob = startPoolStatsCollector();
 console.log("📊 Pool stats collector started");
+
+// Start stratum collector
+let stratumCollector = startStratumCollector();
+console.log("⚡ Stratum collector started");
 
 // Set up a job to purge old data daily at midnight
 let purgeJob = cron.schedule("0 0 * * *", () => {
@@ -31,6 +36,12 @@ function shutdown() {
 
   if (purgeJob) {
     purgeJob.stop();
+  }
+
+  // Stop stratum collector
+  if (stratumCollector) {
+    stopStratumCollector();
+    console.log("⚡ Stratum collector stopped");
   }
 
   // Close database connection
