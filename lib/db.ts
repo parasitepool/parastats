@@ -2,8 +2,8 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-// Ensure the data directory exists
-const dataDir = path.join(process.cwd(), 'data');
+// Ensure the data directory exists - configurable via environment variable
+const dataDir = process.env.PARASTATS_DATA_DIR || path.join(process.cwd(), 'data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
