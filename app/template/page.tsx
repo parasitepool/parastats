@@ -121,7 +121,9 @@ export default function BlockTemplatePage() {
       <div className="w-full max-w-7xl">
         <div className="mb-4">
           <div className="flex items-center gap-4 mb-4">
-            <h1 className="text-3xl font-bold mb-2">Possible Next Block Template</h1>
+            <h1 className="text-3xl font-bold mb-2">
+              Possible Next Block Template
+            </h1>
             <div className="flex items-center gap-2">
               <div
                 className={`w-2 h-2 rounded-full ${
@@ -145,11 +147,7 @@ export default function BlockTemplatePage() {
         </div>
 
         {notification ? (
-          <NotificationDetails
-            notification={notification}
-            onClose={() => {}} // No close button needed since this is the main view
-            showCloseButton={false}
-          />
+          <NotificationDetails notification={notification} />
         ) : (
           <div className="text-center py-12">
             <div className="mb-4">
