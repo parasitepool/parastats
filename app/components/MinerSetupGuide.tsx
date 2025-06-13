@@ -50,11 +50,15 @@ export default function MinerSetupGuide() {
       <li>
         Set your username using this format:
         <div className="font-mono bg-foreground/10 px-2 py-1 rounded mt-2 break-words">
-          xverseL1address.username.staticlnaddress@parasite.sati.pro
+          xverseL1address.username.staticlnaddress@staticdomain
         </div>
+        <p className="text-sm mt-2">
+          <strong>Important:</strong> Use the same ending/domain (@sati.pro or @parasite.sati.pro) that appears in your generated static ln address
+        </p>
         <p className="text-sm mt-2 italic break-words">
-          Example:
-          bc1qnotarealaddress.steve.yourreallnurlhere@parasite.sati.pro
+          <strong>Examples:</strong><br/>
+          bc1qnotarealaddress.steveMiner.d1a7a1bef2@sati.pro<br/>
+          bc1qnotarealaddress.jillAxe.a5f9b2c8e1@parasite.sati.pro
         </p>
       </li>
       <li>Use any password (it&apos;s not checked)</li>
