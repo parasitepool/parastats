@@ -20,7 +20,8 @@ export interface StratumNotification {
 }
 
 interface StratumNotificationRow {
-  id: string;
+  id: number;
+  notification_id: string;
   timestamp: number;
   pool: string;
   job_id: string;
@@ -61,7 +62,7 @@ export async function GET() {
     }
     
     const notifications: StratumNotification[] = rows.map(row => ({
-      id: row.id,
+      id: row.notification_id,
       timestamp: row.timestamp,
       pool: row.pool,
       jobId: row.job_id,

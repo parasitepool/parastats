@@ -101,7 +101,8 @@ function initializeTables() {
   // Create stratum notifications table
   db.exec(`
     CREATE TABLE IF NOT EXISTS stratum_notifications (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      notification_id TEXT NOT NULL,
       timestamp INTEGER NOT NULL,
       pool TEXT NOT NULL,
       job_id TEXT NOT NULL,
@@ -116,7 +117,8 @@ function initializeTables() {
       extranonce1 TEXT,
       extranonce2_size INTEGER,
       raw_message TEXT NOT NULL,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      UNIQUE(notification_id)
     )
   `);
 
@@ -124,7 +126,6 @@ function initializeTables() {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_stratum_timestamp ON stratum_notifications(timestamp);
     CREATE INDEX IF NOT EXISTS idx_stratum_pool ON stratum_notifications(pool);
-    CREATE INDEX IF NOT EXISTS idx_stratum_created_at ON stratum_notifications(created_at);
   `);
 }
 

@@ -10,7 +10,7 @@ interface StratumMessage {
 }
 
 interface StratumNotificationData {
-  id: string;
+  notification_id: string;
   timestamp: number;
   pool: string;
   job_id: string;
@@ -39,6 +39,9 @@ class StratumCollector {
   private messageBuffer: string = '';
   private extranonce1: string | null = null;
   private extranonce2Size: number | null = null;
+  private notificationCount: number = 0;
+  private readonly CLEANUP_INTERVAL = 50; // Run cleanup every 50 notifications
+  private readonly MAX_NOTIFICATIONS = 100; // Keep only latest 100 notifications
 
   constructor(
     private host: string = 'parasite.wtf',
@@ -185,7 +188,7 @@ class StratumCollector {
       const notificationId = `${now}_${String(jobId)}`;
 
       const notification: StratumNotificationData = {
-        id: notificationId,
+        notification_id: notificationId,
         timestamp: now,
         pool: 'Parasite',
         job_id: String(jobId),
@@ -220,14 +223,14 @@ class StratumCollector {
       
       const stmt = db.prepare(`
         INSERT OR REPLACE INTO stratum_notifications (
-          id, timestamp, pool, job_id, prev_block_hash,
+          notification_id, timestamp, pool, job_id, prev_block_hash,
           coinbase1, coinbase2, merkle_branches, version,
           n_bits, n_time, clean_jobs, extranonce1, extranonce2_size, raw_message, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       stmt.run(
-        notification.id,
+        notification.notification_id,
         notification.timestamp,
         notification.pool,
         notification.job_id,
@@ -245,8 +248,11 @@ class StratumCollector {
         notification.created_at
       );
 
-      // Clean up old notifications (keep only last 100)
-      this.cleanupOldNotifications();
+      // Increment counter and cleanup periodically instead of every insert
+      this.notificationCount++;
+      if (this.notificationCount % this.CLEANUP_INTERVAL === 0) {
+        this.cleanupOldNotifications();
+      }
 
     } catch (error) {
       console.error('Error storing stratum notification:', error);
@@ -257,15 +263,18 @@ class StratumCollector {
     try {
       const db = getDb();
       
-      // Keep only the latest 100 notifications
-      db.exec(`
+      // Delete all notifications except the latest number defined in MAX_NOTIFICATIONS
+      const result = db.prepare(`
         DELETE FROM stratum_notifications 
-        WHERE id NOT IN (
-          SELECT id FROM stratum_notifications 
-          ORDER BY created_at DESC 
-          LIMIT 100
+        WHERE id <= (
+          SELECT COALESCE(MAX(id) - ?, 0) 
+          FROM stratum_notifications
         )
-      `);
+      `).run(this.MAX_NOTIFICATIONS);
+
+      if (result.changes > 0) {
+        console.log(`🧹 Cleaned up ${result.changes} old stratum notifications`);
+      }
     } catch (error) {
       console.error('Error cleaning up old notifications:', error);
     }
@@ -312,6 +321,7 @@ class StratumCollector {
 
     this.isConnecting = false;
     this.messageBuffer = ''; // Clear message buffer on disconnect
+    this.notificationCount = 0; // Reset notification counter on disconnect
     
     if (this.socket) {
       this.socket.removeAllListeners();
