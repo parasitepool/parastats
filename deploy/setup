@@ -48,7 +48,7 @@ curl -fsSL https://get.pnpm.io/install.sh | bash
 npm install pm2@latest -g
 
 pnpm install
-
+pnpm rebuild better-sqlite3
 pnpm build
 
 pm2 restart parastats-collector --update-env || pm2 start pnpm --name "parastats-collector" -- collect-stats
