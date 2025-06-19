@@ -296,7 +296,7 @@ export default function UsersWorkersChart({
       });
       
       // Update y-axes if we found valid data
-      const yAxisUpdates: any[] = [{}, {}]; // Array for both y-axes
+      const yAxisUpdates: Array<{ min?: number; max?: number }> = [{}, {}]; // Array for both y-axes
       
       if (usersMin !== Infinity && usersMax !== -Infinity) {
         // Add padding for users axis (10% on each side) and ensure integer values
