@@ -235,9 +235,14 @@ export default function UsersWorkersChart({
     chart.setOption(getChartOption(data));
 
     // Add datazoom event listener for auto-scaling y-axes
-    const handleDataZoom = (params: any) => {
+    const handleDataZoom = (params: unknown) => {
+      const dataZoomParams = params as { start: number; end: number; type: string };
+      
       // Get current data from the chart option
-      const currentOption = chart.getOption() as any;
+      const currentOption = chart.getOption() as {
+        series?: Array<{ data?: number[]; name?: string; yAxisIndex?: number }>;
+        xAxis?: Array<{ data?: string[] }>;
+      };
       const currentSeries = currentOption.series;
       const currentXAxisData = currentOption.xAxis?.[0]?.data;
       
@@ -246,8 +251,8 @@ export default function UsersWorkersChart({
       }
       
       // Get start and end percentages from the event params
-      const startPercent = params.start || 0;
-      const endPercent = params.end || 100;
+      const startPercent = dataZoomParams.start || 0;
+      const endPercent = dataZoomParams.end || 100;
       
       // If fully zoomed out, revert to automatic scaling for both axes
       if (startPercent <= 0 && endPercent >= 100) {
@@ -271,7 +276,7 @@ export default function UsersWorkersChart({
       let workersMin = Infinity;
       let workersMax = -Infinity;
       
-      currentSeries.forEach((series: any) => {
+      currentSeries.forEach((series) => {
         if (!series.data) return;
         
         for (let i = startIndex; i <= endIndex && i < series.data.length; i++) {

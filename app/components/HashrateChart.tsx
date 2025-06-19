@@ -244,9 +244,13 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
     chart.setOption(buildChartOptions(data));
 
     // Add datazoom event listener for auto-scaling y-axis
-    const handleDataZoom = (params: any) => {
+    const handleDataZoom = (params: unknown) => {
+      const dataZoomParams = params as { start: number; end: number; type: string };
       // Get current data from the chart option instead of using closure data
-      const currentOption = chart.getOption() as any;
+      const currentOption = chart.getOption() as {
+        series?: Array<{ data?: number[]; name?: string }>;
+        xAxis?: Array<{ data?: string[] }>;
+      };
       const currentSeries = currentOption.series;
       const currentXAxisData = currentOption.xAxis?.[0]?.data;
       
@@ -255,8 +259,8 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
       }
       
       // Get start and end percentages directly from the event params
-      const startPercent = params.start || 0;
-      const endPercent = params.end || 100;
+      const startPercent = dataZoomParams.start || 0;
+      const endPercent = dataZoomParams.end || 100;
       
       // If fully zoomed out, revert to automatic scaling
       if (startPercent <= 0 && endPercent >= 100) {
@@ -278,7 +282,7 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
       let visibleMin = Infinity;
       let visibleMax = -Infinity;
       
-      currentSeries.forEach((series: any) => {
+      currentSeries.forEach((series) => {
         if (!series.data) return;
         
         for (let i = startIndex; i <= endIndex && i < series.data.length; i++) {
