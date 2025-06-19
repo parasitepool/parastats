@@ -243,6 +243,73 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
     // Initial chart setup
     chart.setOption(buildChartOptions(data));
 
+    // Add datazoom event listener for auto-scaling y-axis
+    const handleDataZoom = (params: any) => {
+      // Get current data from the chart option instead of using closure data
+      const currentOption = chart.getOption() as any;
+      const currentSeries = currentOption.series;
+      const currentXAxisData = currentOption.xAxis?.[0]?.data;
+      
+      if (!currentSeries || !currentSeries.length || !currentXAxisData || !currentXAxisData.length) {
+        return;
+      }
+      
+      // Get start and end percentages directly from the event params
+      const startPercent = params.start || 0;
+      const endPercent = params.end || 100;
+      
+      // If fully zoomed out, revert to automatic scaling
+      if (startPercent <= 0 && endPercent >= 100) {
+        chart.setOption({
+          yAxis: {
+            min: null,
+            max: null
+          }
+        }, false);
+        return;
+      }
+      
+      // Calculate the actual data indices for the zoom range
+      const totalDataLength = currentXAxisData.length;
+      const startIndex = Math.floor((startPercent / 100) * totalDataLength);
+      const endIndex = Math.min(Math.ceil((endPercent / 100) * totalDataLength), totalDataLength - 1);
+      
+      // Find min and max values within the visible range for all series
+      let visibleMin = Infinity;
+      let visibleMax = -Infinity;
+      
+      currentSeries.forEach((series: any) => {
+        if (!series.data) return;
+        
+        for (let i = startIndex; i <= endIndex && i < series.data.length; i++) {
+          const value = series.data[i];
+          if (value !== null && value !== undefined && !isNaN(value)) {
+            visibleMin = Math.min(visibleMin, value);
+            visibleMax = Math.max(visibleMax, value);
+          }
+        }
+      });
+      
+      // Only update if we found valid data
+      if (visibleMin !== Infinity && visibleMax !== -Infinity) {
+        // Add some padding (10% on each side for better visibility)
+        const range = visibleMax - visibleMin;
+        const padding = Math.max(range * 0.1, range === 0 ? visibleMax * 0.1 : 0);
+        // const adjustedMin = Math.max(0, visibleMin - padding); // Don't go below 0 for hashrate
+        const adjustedMax = visibleMax + padding;
+        
+        // Update y-axis with new range
+        chart.setOption({
+          yAxis: {
+            min: 0, // For hashrate, let's just keep it at 0 for now
+            max: adjustedMax
+          }
+        }, false);
+      }
+    };
+
+    chart.on('datazoom', handleDataZoom);
+
     const handleResize = () => {
       chart.resize();
     };
@@ -250,6 +317,7 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
     window.addEventListener("resize", handleResize);
 
     return () => {
+      chart.off('datazoom', handleDataZoom);
       chart.dispose();
       window.removeEventListener("resize", handleResize);
     };
