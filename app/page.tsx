@@ -45,7 +45,7 @@ export default function Dashboard() {
     async function fetchHistoricalData() {
       try {
         setHistoricalLoading(true);
-        const data = await getHistoricalPoolStats("9d", "15m");
+        const data = await getHistoricalPoolStats("30d", "30m");
         setHistoricalStats(data);
       } catch (error) {
         console.error("Error fetching historical stats:", error);
@@ -155,7 +155,7 @@ export default function Dashboard() {
         {/* <HashrateDistribution /> */}
       </div>
       <div className="w-full mb-6">
-        <HashrateTrends />
+        <HashrateTrends historicalData={historicalStats} loading={historicalLoading} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full mb-6">
         <Leaderboard />
