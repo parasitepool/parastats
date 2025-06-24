@@ -350,7 +350,7 @@ function OutputCard({
         <div className="mb-2">
           {output.address === "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" ? (
             <div className="font-mono text-xs bg-foreground/10 p-1.5 rounded break-all text-accent-3">
-              Block Miner's Address
+              Block Miner&apos;s Address
             </div>
           ) : output.address === "bc1qkgef7pl8vdrtuc4wk8fssycz366xp5ukzsm8gp" ? (
             <div className="space-y-1">
