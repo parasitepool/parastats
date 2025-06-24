@@ -122,7 +122,7 @@ export default function BlockTemplatePage() {
         <div className="mb-4">
           <div className="flex items-center gap-4 mb-4">
             <h1 className="text-3xl font-bold mb-2">
-              Possible Next Block Template
+              Parasite Block Template
             </h1>
             <div className="flex items-center gap-2">
               <div
