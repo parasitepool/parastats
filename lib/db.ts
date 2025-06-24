@@ -73,9 +73,9 @@ function initializeTables() {
   // Add failed_attempts column if it doesn't exist since we added this field later
   try {
     db.exec(`ALTER TABLE monitored_users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0`);
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Column might already exist, which is fine
-    if (!error.message.includes('duplicate column name')) {
+    if (error instanceof Error && !error.message.includes('duplicate column name')) {
       console.error('Error adding failed_attempts column:', error);
     }
   }
