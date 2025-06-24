@@ -12,17 +12,10 @@ export interface HistoricalPoolStats {
   idle: number;
   disconnected: number;
   hashrate15m: number;
+  hashrate1hr: number;
+  hashrate6hr: number;
   hashrate1d: number;
-}
-
-interface RawStatsRow {
-  timestamp: number;
-  users: number;
-  workers: number;
-  idle: number;
-  disconnected: number;
-  hashrate15m: string;
-  hashrate1d: string;
+  hashrate7d: number;
 }
 
 export async function GET(request: Request) {
@@ -162,13 +155,16 @@ export async function GET(request: Request) {
           AVG(idle) as idle, 
           AVG(disconnected) as disconnected,
           hashrate15m,
+          hashrate1hr,
+          hashrate6hr,
           hashrate1d,
+          hashrate7d,
           timestamp
         FROM pool_stats 
         WHERE timestamp >= ? AND timestamp < ?
         ORDER BY timestamp DESC
         LIMIT 1
-      `).all(start, end) as RawStatsRow[];
+      `).all(start, end) as HistoricalPoolStats[];
       
       if (rows.length > 0) {
         const row = rows[0];
@@ -181,7 +177,10 @@ export async function GET(request: Request) {
             idle: Math.round(row.idle),
             disconnected: Math.round(row.disconnected),
             hashrate15m: parseHashrate(row.hashrate15m),
-            hashrate1d: parseHashrate(row.hashrate1d)
+            hashrate1hr: parseHashrate(row.hashrate1hr),
+            hashrate6hr: parseHashrate(row.hashrate6hr),
+            hashrate1d: parseHashrate(row.hashrate1d),
+            hashrate7d: parseHashrate(row.hashrate7d)
           });
         }
       }

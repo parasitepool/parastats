@@ -4,12 +4,17 @@ import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { CallbackDataParams } from "echarts/types/dist/shared";
 
+interface HashrateSeries {
+  data: number[];
+  title: string;
+  color?: string;
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
+}
+
 interface HashrateChartProps {
   data?: {
     timestamps: string[];
-    hashrates: number[];
-    hashrates2?: number[];
-    hashrates2Title?: string;
+    series: HashrateSeries[];
   };
   loading?: boolean;
 }
@@ -33,10 +38,11 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
       .getPropertyValue("--secondary")
       .trim();
 
-    // Hashrate line color
-    const hashrateColor = "#CCCCCC";
+    // Default colors for series
+    const defaultColors = ["#CCCCCC", "#666666", "#999999", "#AAAAAA", "#888888"];
 
-    const getChartOption = (chartData: typeof data) => ({
+    // Function to build chart options - can be reused for updates
+    const buildChartOptions = (chartData: typeof data) => ({
       backgroundColor: "transparent",
       animation: false,
       textStyle: {
@@ -77,11 +83,13 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
           };
 
           let tooltipText = `${params[0].name}<br/>`;
-          tooltipText += `Hashrate: ${formatHashrate(Number(params[0].value))}`;
           
-          if (params.length > 1 && params[1].value !== undefined) {
-            tooltipText += `<br/>${params[1].seriesName}: ${formatHashrate(Number(params[1].value))}`;
-          }
+          // Loop through all series in the tooltip
+          params.forEach((param, index) => {
+            if (param.value !== undefined) {
+              tooltipText += `${index > 0 ? '<br/>' : ''}${param.seriesName}: ${formatHashrate(Number(param.value))}`;
+            }
+          });
 
           return tooltipText;
         },
@@ -128,7 +136,7 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
         },
         axisLine: {
           lineStyle: {
-            color: hashrateColor,
+            color: defaultColors[0],
           },
         },
         axisLabel: {
@@ -190,62 +198,121 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
           showDetail: false,
         },
       ],
-      series: [
-        {
-          name: "Hashrate",
+      series: chartData?.series.map((series, index) => {
+        const color = series.color || defaultColors[index % defaultColors.length];
+        const isPrimary = index === 0;
+        
+        return {
+          name: series.title || `Hashrate ${index + 1}`,
           type: "line",
-          data: chartData?.hashrates || [],
+          data: series.data,
           smooth: true,
           sampling: "average",
           lineStyle: {
-            color: hashrateColor,
-            width: 3,
+            color: color,
+            width: isPrimary ? 3 : 2,
+            type: series.lineStyle === 'dashed' ? 'dashed' : 
+                 series.lineStyle === 'dotted' ? 'dotted' : 'solid'
           },
           itemStyle: {
-            color: hashrateColor,
+            color: color,
           },
           symbol: "circle",
-          symbolSize: 8,
+          symbolSize: isPrimary ? 8 : 6,
           showSymbol: false,
           showAllSymbol: "auto",
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              {
-                offset: 0,
-                color: hashrateColor,
-              },
-              {
-                offset: 1,
-                color: "transparent",
-              },
-            ]),
-            opacity: 0.1,
-          },
-        },
-        ...(chartData?.hashrates2 ? [{
-          name: chartData.hashrates2Title || "Secondary Hashrate",
-          type: "line",
-          data: chartData.hashrates2,
-          smooth: true,
-          sampling: "average",
-          lineStyle: {
-            color: "#666666",
-            width: 2,
-            type: "dashed"
-          },
-          itemStyle: {
-            color: "#666666"
-          },
-          symbol: "circle",
-          symbolSize: 6,
-          showSymbol: false,
-          showAllSymbol: "auto"
-        }] : []),
-      ],
+          ...(isPrimary ? {
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                {
+                  offset: 0,
+                  color: color,
+                },
+                {
+                  offset: 1,
+                  color: "transparent",
+                },
+              ]),
+              opacity: 0.1,
+            }
+          } : {})
+        };
+      }) || []
     });
 
     // Initial chart setup
-    chart.setOption(getChartOption(data));
+    chart.setOption(buildChartOptions(data));
+
+    // Add datazoom event listener for auto-scaling y-axis
+    const handleDataZoom = (params: unknown) => {
+      const dataZoomParams = params as { start: number; end: number; type: string };
+      // Get current data from the chart option instead of using closure data
+      const currentOption = chart.getOption() as {
+        series?: Array<{ data?: number[]; name?: string }>;
+        xAxis?: Array<{ data?: string[] }>;
+      };
+      const currentSeries = currentOption.series;
+      const currentXAxisData = currentOption.xAxis?.[0]?.data;
+      
+      if (!currentSeries || !currentSeries.length || !currentXAxisData || !currentXAxisData.length) {
+        return;
+      }
+      
+      // Get start and end percentages directly from the event params
+      const startPercent = dataZoomParams.start || 0;
+      const endPercent = dataZoomParams.end || 100;
+      
+      // If fully zoomed out, revert to automatic scaling
+      if (startPercent <= 0 && endPercent >= 100) {
+        chart.setOption({
+          yAxis: {
+            min: null,
+            max: null
+          }
+        }, false);
+        return;
+      }
+      
+      // Calculate the actual data indices for the zoom range
+      const totalDataLength = currentXAxisData.length;
+      const startIndex = Math.floor((startPercent / 100) * totalDataLength);
+      const endIndex = Math.min(Math.ceil((endPercent / 100) * totalDataLength), totalDataLength - 1);
+      
+      // Find min and max values within the visible range for all series
+      let visibleMin = Infinity;
+      let visibleMax = -Infinity;
+      
+      currentSeries.forEach((series) => {
+        if (!series.data) return;
+        
+        for (let i = startIndex; i <= endIndex && i < series.data.length; i++) {
+          const value = series.data[i];
+          if (value !== null && value !== undefined && !isNaN(value)) {
+            visibleMin = Math.min(visibleMin, value);
+            visibleMax = Math.max(visibleMax, value);
+          }
+        }
+      });
+      
+      // Only update if we found valid data
+      if (visibleMin !== Infinity && visibleMax !== -Infinity) {
+        // Add some padding (10% on each side for better visibility)
+        const range = visibleMax - visibleMin;
+        const padding = Math.max(range * 0.1, range === 0 ? visibleMax * 0.1 : 0);
+        // const adjustedMin = Math.max(0, visibleMin - padding); // Don't go below 0 for hashrate
+        const adjustedMax = visibleMax + padding;
+        
+        // Update y-axis with new range
+        chart.setOption({
+          yAxis: {
+            min: 0, // For hashrate, let's just keep it at 0 for now
+            max: adjustedMax
+          }
+        }, false);
+      }
+    };
+
+    chart.on('datazoom', handleDataZoom);
 
     const handleResize = () => {
       chart.resize();
@@ -254,6 +321,7 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
     window.addEventListener("resize", handleResize);
 
     return () => {
+      chart.off('datazoom', handleDataZoom);
       chart.dispose();
       window.removeEventListener("resize", handleResize);
     };
@@ -265,18 +333,39 @@ export default function HashrateChart({ data, loading = false }: HashrateChartPr
     if (!chartRef.current || !data) return;
     const chart = echarts.getInstanceByDom(chartRef.current);
     if (chart) {
+      // Default colors for visual consistency
+      const defaultColors = ["#CCCCCC", "#666666", "#999999", "#AAAAAA", "#888888"];
+      
+      // Update data points and timestamps while preserving visual styling
       chart.setOption({
         xAxis: {
           data: data.timestamps,
         },
-        series: [
-          {
-            data: data.hashrates,
-          },
-          ...(data.hashrates2 ? [{
-            data: data.hashrates2,
-          }] : []),
-        ],
+        series: data.series.map((series, index) => {
+          const color = series.color || defaultColors[index % defaultColors.length];
+          const isPrimary = index === 0;
+          
+          return {
+            // Type and name are required to identify the series
+            type: "line",
+            name: series.title || `Hashrate ${index + 1}`,
+            // Update the data points
+            data: series.data,
+            // Include styling to maintain visual consistency
+            lineStyle: {
+              color: color,
+              width: isPrimary ? 3 : 2,
+              type: series.lineStyle === 'dashed' ? 'dashed' : 
+                   series.lineStyle === 'dotted' ? 'dotted' : 'solid'
+            },
+            itemStyle: {
+              color: color
+            },
+            // Prevent dots from showing
+            showSymbol: false,
+            symbolSize: isPrimary ? 8 : 6
+          };
+        })
       }, { notMerge: false });
     }
   }, [data]); // Only run when data changes

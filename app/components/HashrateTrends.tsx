@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import StatCard from "./StatCard";
 import { formatHashrate } from "../utils/formatters";
-import { getHistoricalPoolStats } from "../utils/api";
+import type { HistoricalPoolStats } from "../api/pool-stats/historical/route";
 
 interface HashrateWithChange {
   value: number;
@@ -12,33 +12,28 @@ interface HashrateTrendsProps {
   oneDayAvg?: HashrateWithChange;
   sixDayAvg?: HashrateWithChange;
   nineDayAvg?: HashrateWithChange;
+  historicalData?: HistoricalPoolStats[];
+  loading?: boolean;
 }
 
 export default function HashrateTrends({
   oneDayAvg,
   sixDayAvg,
   nineDayAvg,
+  historicalData,
+  loading: externalLoading = false,
 }: HashrateTrendsProps) {
   const [data, setData] = useState<{
     oneDayAvg: HashrateWithChange;
     sixDayAvg: HashrateWithChange;
     nineDayAvg: HashrateWithChange;
   } | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchData() {
+    // If historical data is provided as prop, use it instead of fetching
+    if (historicalData && historicalData.length > 0) {
       try {
-        setLoading(true);
-        // Fetch 18 days of data with 1-hour intervals for better performance
-        const historicalData = await getHistoricalPoolStats('18d', '1h');
-        
-        if (historicalData.length === 0) {
-          setError('No data available');
-          return;
-        }
-        
         // Sort data by timestamp, oldest first
         const sortedData = [...historicalData].sort((a, b) => a.timestamp - b.timestamp);
         
@@ -46,7 +41,7 @@ export default function HashrateTrends({
         const now = Date.now() / 1000;
         const oneDayData = sortedData.filter(item => item.timestamp >= now - 24 * 60 * 60);
         const sixDayData = sortedData.filter(item => item.timestamp >= now - 6 * 24 * 60 * 60);
-        const nineDayData = sortedData;
+        const nineDayData = sortedData.filter(item => item.timestamp >= now - 9 * 24 * 60 * 60);
         
         // Calculate average hashrates
         const calculateAvg = (data: typeof sortedData) => {
@@ -88,20 +83,11 @@ export default function HashrateTrends({
         
         setError(null);
       } catch (err) {
-        console.error('Error fetching hashrate trends:', err);
-        setError('Failed to fetch data');
-      } finally {
-        setLoading(false);
+        console.error('Error processing hashrate trends:', err);
+        setError('Failed to process data');
       }
     }
-    
-    fetchData();
-    
-    // Refresh data every 15 minutes
-    const intervalId = setInterval(fetchData, 15 * 60 * 1000);
-    
-    return () => clearInterval(intervalId);
-  }, []);
+  }, [historicalData]);
 
   const formatChange = (change: number) => {
     const isPositive = change >= 0;
@@ -167,7 +153,7 @@ export default function HashrateTrends({
             />
           </svg>
         }
-        loading={loading}
+        loading={externalLoading}
       />
     );
   };
