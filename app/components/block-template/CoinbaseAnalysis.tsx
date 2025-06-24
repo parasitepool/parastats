@@ -101,7 +101,6 @@ export default function CoinbaseAnalysis({
 
   return (
     <div className="space-y-6">
-
       {/* ScriptSig Analysis */}
       <div className="space-y-4">
         <h4 className="text-md font-semibold">ScriptSig Analysis</h4>
@@ -236,9 +235,7 @@ export default function CoinbaseAnalysis({
 
       {/* Output Analysis */}
       <div className="space-y-4">
-        <h4 className="text-md font-semibold">
-          Outputs Analysis
-        </h4>
+        <h4 className="text-md font-semibold">Outputs Analysis</h4>
 
         {/* Transaction Overview */}
         <div className="grid lg:grid-cols-3 gap-4">
@@ -326,10 +323,10 @@ function OutputCard({
           <span
             className={`px-1.5 py-0.5 text-xs rounded ${
               output.type === "address"
-                ? "bg-green-500/20 text-green-400"
+                ? "bg-foreground/20 text-foreground"
                 : output.type === "nulldata"
-                ? "bg-blue-500/20 text-blue-400"
-                : "bg-yellow-500/20 text-yellow-400"
+                ? "bg-foreground/20 text-foreground"
+                : "bg-foreground/20 text-foreground"
             }`}
           >
             {output.type === "address"
@@ -351,9 +348,24 @@ function OutputCard({
       {/* Address/Script - more compact */}
       {output.address && (
         <div className="mb-2">
-          <div className="font-mono text-xs bg-foreground/10 p-1.5 rounded break-all text-accent-3">
-            {output.address}
-          </div>
+          {output.address === "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" ? (
+            <div className="font-mono text-xs bg-foreground/10 p-1.5 rounded break-all text-accent-3">
+              Block Miner's Address
+            </div>
+          ) : output.address === "bc1qkgef7pl8vdrtuc4wk8fssycz366xp5ukzsm8gp" ? (
+            <div className="space-y-1">
+              <div className="font-mono text-xs bg-foreground/10 p-1.5 rounded break-all text-accent-3">
+                {output.address}
+              </div>
+              <div className="text-xs text-foreground font-medium italic">
+                Lightning Payout Deposit Address
+              </div>
+            </div>
+          ) : (
+            <div className="font-mono text-xs bg-foreground/10 p-1.5 rounded break-all text-accent-3">
+              {output.address}
+            </div>
+          )}
         </div>
       )}
 
@@ -365,28 +377,34 @@ function OutputCard({
           </div>
           {output.decodedData.details && (
             <div className="text-xs space-y-0.5">
-              {Object.entries(output.decodedData.details).map(([key, value]) => (
-                <div key={key} className="flex gap-1.5">
-                  <span className="text-accent-3 capitalize min-w-0">
-                    {key.replace(/([A-Z])/g, " $1")}:
-                  </span>
-                  <span className="font-mono break-all text-accent-2">{String(value)}</span>
-                </div>
-              ))}
+              {Object.entries(output.decodedData.details).map(
+                ([key, value]) => (
+                  <div key={key} className="flex gap-1.5">
+                    <span className="text-accent-3 capitalize min-w-0">
+                      {key.replace(/([A-Z])/g, " $1")}:
+                    </span>
+                    <span className="font-mono break-all text-accent-2">
+                      {String(value)}
+                    </span>
+                  </div>
+                )
+              )}
             </div>
           )}
         </div>
       )}
 
       {/* ScriptPubKey - collapsible/minimal */}
-      <details className="text-xs">
-        <summary className="text-accent-3 cursor-pointer hover:text-accent-2">
-          ScriptPubKey ({output.hex?.length || 0} chars)
-        </summary>
-        <div className="font-mono text-xs text-accent-3 break-all bg-foreground/10 p-1.5 rounded mt-1">
-          {output.hex}
-        </div>
-      </details>
+      {output.address !== "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" && (
+        <details className="text-xs">
+          <summary className="text-accent-3 cursor-pointer hover:text-accent-2">
+            ScriptPubKey ({output.hex?.length || 0} chars)
+          </summary>
+          <div className="font-mono text-xs text-accent-3 break-all bg-foreground/10 p-1.5 rounded mt-1">
+            {output.hex}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

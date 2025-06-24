@@ -117,11 +117,11 @@ export default function BlockTemplatePage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-8">
+    <main className="flex min-h-screen flex-col items-center p-1 sm:p-4">
       <div className="w-full max-w-7xl">
         <div className="mb-4">
-          <div className="flex items-center gap-4 mb-4">
-            <h1 className="text-3xl font-bold mb-2">
+          <div className="flex items-center gap-4">
+            <h1 className="text-3xl font-bold">
               Parasite Block Template
             </h1>
             <div className="flex items-center gap-2">
@@ -139,11 +139,22 @@ export default function BlockTemplatePage() {
               </span>
             </div>
           </div>
-          {error && notification && (
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-3 mb-4">
+          <div className="text-sm text-accent-3">
+              Inspired by{" "}
+              <a
+                href="https://stratum.work"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent-2 hover:text-white underline transition-colors"
+              >
+                stratum.work
+              </a>
+            </div>
+          {/* {error && notification && (
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-3 my-4">
               <p className="text-yellow-400 text-sm">Warning: {error}</p>
             </div>
-          )}
+          )} */}
         </div>
 
         {notification ? (
