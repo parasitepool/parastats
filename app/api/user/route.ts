@@ -24,9 +24,37 @@ export async function POST(request: Request) {
     const now = Math.floor(Date.now() / 1000);
 
     // Check if user already exists
-    const existingUser = db.prepare('SELECT * FROM monitored_users WHERE address = ?').get(address);
+    interface MonitoredUser {
+      id: number;
+      address: string;
+      is_active: number;
+      is_public: number;
+      failed_attempts: number;
+      created_at: number;
+      updated_at: number;
+      authorised_at: number;
+    }
+
+    const existingUser = db.prepare('SELECT * FROM monitored_users WHERE address = ?').get(address) as MonitoredUser | undefined;
 
     if (existingUser) {
+      // If user exists but was inactive, reactivate them and reset failed attempts
+      if (!existingUser.is_active) {
+        db.prepare(`
+          UPDATE monitored_users 
+          SET 
+            is_active = 1,
+            failed_attempts = 0,
+            updated_at = ?
+          WHERE address = ?
+        `).run(now, address);
+
+        return NextResponse.json(
+          { message: 'Address reactivated' },
+          { status: 200 }
+        );
+      }
+
       return NextResponse.json(
         { message: 'Address already being monitored' },
         { status: 200 }
