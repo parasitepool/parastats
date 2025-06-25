@@ -40,6 +40,13 @@ interface MonitoredUser {
 let isCollectorRunning = false;
 let isUserCollectorRunning = false;
 
+// Configuration constants
+const CONFIG = {
+  MAX_FAILED_ATTEMPTS: parseInt(process.env.MAX_FAILED_ATTEMPTS || '10'),
+  BATCH_SIZE: parseInt(process.env.USER_BATCH_SIZE || '500'), // Process users in batches
+  FAILED_USER_BACKOFF_MINUTES: parseInt(process.env.FAILED_USER_BACKOFF_MINUTES || '2'), // Don't retry failed users for 2 minutes
+} as const;
+
 /**
  * Helper function to add delay between retries
  */
@@ -123,11 +130,13 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
       );
 
       // Update monitored_users with latest bestever and authorised_at if they're higher
+      // Also reset failed_attempts since we succeeded
       const updateStmt = db.prepare(`
         UPDATE monitored_users 
         SET 
           bestever = CASE WHEN bestever < ? THEN ? ELSE bestever END,
           authorised_at = CASE WHEN authorised_at < ? THEN ? ELSE authorised_at END,
+          failed_attempts = 0,
           updated_at = ?
         WHERE id = ?
       `);
@@ -144,6 +153,37 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
 
   } catch (error) {
     console.error(`Error collecting stats for user ${address}:`, error);
+    
+    // Increment failed attempts and deactivate if threshold reached
+    const db = getDb();
+    db.transaction(() => {
+      // First get the current failed attempts count
+      const user = db.prepare('SELECT failed_attempts FROM monitored_users WHERE id = ?').get(userId) as { failed_attempts: number };
+      const newFailedAttempts = (user?.failed_attempts ?? 0) + 1;
+      const now = Math.floor(Date.now() / 1000);
+
+      // Then update based on the new count
+      const updateStmt = db.prepare(`
+        UPDATE monitored_users 
+        SET 
+          failed_attempts = ?,
+          is_active = ?,
+          updated_at = ?
+        WHERE id = ?
+      `);
+
+      // If we hit max failures, deactivate and reset counter, otherwise just increment
+      updateStmt.run(
+        newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS ? 0 : newFailedAttempts,
+        newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS ? 0 : 1,
+        now,
+        userId
+      );
+
+      if (newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS) {
+        console.log(`Deactivating user ${address} after ${CONFIG.MAX_FAILED_ATTEMPTS} failed attempts`);
+      }
+    })();
   }
 }
 
@@ -156,14 +196,26 @@ export async function collectAllUserStats() {
   try {
     isUserCollectorRunning = true;
     const db = getDb();
+    const now = Math.floor(Date.now() / 1000);
+    const backoffThreshold = now - (CONFIG.FAILED_USER_BACKOFF_MINUTES * 60);
 
-    // Get all active monitored users
-    const users = db.prepare('SELECT id, address FROM monitored_users WHERE is_active = 1').all() as MonitoredUser[];
+    // Get all active monitored users, excluding those in backoff period
+    // Users with failed_attempts > 0 must wait for the backoff period before retry
+    const users = db.prepare(`
+      SELECT id, address 
+      FROM monitored_users 
+      WHERE is_active = 1 
+        AND (failed_attempts = 0 OR updated_at < ?)
+    `).all(backoffThreshold) as MonitoredUser[];
 
-    // Collect stats for all users in parallel
-    await Promise.allSettled(
-      users.map(user => collectUserStats(user.id, user.address))
-    );
+    // Process users in batches
+    for (let i = 0; i < users.length; i += CONFIG.BATCH_SIZE) {
+      const batch = users.slice(i, i + CONFIG.BATCH_SIZE);
+      await Promise.allSettled(
+        batch.map(user => collectUserStats(user.id, user.address))
+      );
+      console.log(`Processed batch ${Math.floor(i / CONFIG.BATCH_SIZE) + 1}/${Math.ceil(users.length / CONFIG.BATCH_SIZE)} (${batch.length} users)`);
+    }
 
     console.log(`Collected stats for ${users.length} users at ${new Date().toISOString()}`);
 
