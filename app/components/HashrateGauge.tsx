@@ -37,7 +37,7 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
             type: 'gauge',
             center: ['50%', '58%'],
             min: 0,
-            max: 69,
+            max: 699,
             splitNumber: 10,
             radius: '100%',
             axisLine: {
