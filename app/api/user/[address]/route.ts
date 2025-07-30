@@ -56,7 +56,7 @@ export async function GET(
     const { address } = await params;
     
     // Fetch user data from parasite.wtf
-    const response = await fetch(`https://fkb.parasite.xyz/aggregator/users/${address}`, {
+    const response = await fetch(`https://fkb.parasite.wtf/aggregator/users/${address}`, {
       next: { revalidate: 10 } // Cache for 10 seconds
     });
     
