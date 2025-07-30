@@ -85,7 +85,7 @@ async function withRetry<T>(
 async function collectUserStats(userId: number, address: string): Promise<void> {
   try {
     const response = await withRetry(async () => {
-      const res = await fetch(`https://parasite.wtf/users/${address}`);
+      const res = await fetch(`https://parasite.wtf/aggregator/users/${address}`);
       if (!res.ok) {
         throw new Error(`Failed to fetch user data: ${res.statusText}`);
       }
@@ -236,7 +236,7 @@ export async function collectPoolStats() {
     isCollectorRunning = true;
     
     const text = await withRetry(async () => {
-      const response = await fetch("https://parasite.wtf/pool/pool.status");
+      const response = await fetch("https://parasite.wtf/aggregator/pool/pool.status");
       return response.text();
     });
     
