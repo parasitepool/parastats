@@ -4,7 +4,7 @@ import { formatDifficulty, parseHashrate } from '../../utils/formatters';
 
 export async function GET() {
   try {
-    const response = await fetch("https://parasite.wtf/aggregator/pool/pool.status", {
+    const response = await fetch("https://fkb.parasite.xyz/aggregator/pool/pool.status", {
       next: { revalidate: 10 } // Cache for 10 seconds
     });
     const text = await response.text();
