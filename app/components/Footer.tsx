@@ -26,9 +26,15 @@ const Footer = () => {
     <footer className="pb-4">
       <div className="flex">
         <div className="w-4"></div>
-        <div className="flex-1 text-center italic break-all">
-          <span className="cursor-pointer" onClick={() => setShowHelpModal(true)}>Help</span>
-        </div>
+          <div className="flex-1 text-center italic break-all">
+              <a href={"https://github.com/parasitepool/para"}><span className="cursor-pointer">Github</span></a>
+          </div>
+          <div className="flex-1 text-center italic break-all">
+              <span className="cursor-pointer" onClick={() => setShowHelpModal(true)}>Help</span>
+          </div>
+          {/**<div className="flex-1 text-center italic break-all">
+           <a href={"https://docs.parasite.xyz"}><span className="cursor-pointer">Docs</span></a>
+          </div>*/}
         <div
           className="text-foreground/5 cursor-pointer hover:text-foreground/50 transition-colors w-4 text-center"
           onClick={() => setShowTerminal(true)}
