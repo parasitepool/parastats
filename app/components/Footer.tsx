@@ -1,36 +1,87 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import { Terminal } from "./eastereggs/Terminal";
 import HelpModal from "./modals/HelpModal";
+import { useRouter, useSearchParams } from "next/navigation";
 
-const Footer = () => {
-  const [showTerminal, setShowTerminal] = useState(false);
-  const [showHelpModal, setShowHelpModal] = useState(false);
+const FooterWithSearchParams = () => {
+    const [showTerminal, setShowTerminal] = useState(false);
+    const [showHelpModal, setShowHelpModal] = useState(false);
+    const searchParams = useSearchParams();
+    const router = useRouter();
 
-  return (
-    <footer className="pb-4">
-      <div className="flex">
+    useEffect(() => {
+        if (searchParams.has('help')) {
+            setShowHelpModal(true);
+
+            const newSearchParams = new URLSearchParams(searchParams);
+            newSearchParams.delete('help');
+            const newUrl = `${window.location.pathname}${newSearchParams.toString() ? '?' + newSearchParams.toString() : ''}`;
+            router.replace(newUrl, { scroll: false });
+        }
+    }, [searchParams, router]);
+
+    return (
+        <>
+            <div className="flex">
+                <div className="w-4"></div>
+                <div className="flex-1 text-center italic break-all">
+                    <a href={"https://github.com/parasitepool/para"}>
+                        <span className="cursor-pointer">Github</span>
+                    </a>
+                </div>
+                <div className="flex-1 text-center italic break-all">
+          <span className="cursor-pointer" onClick={() => setShowHelpModal(true)}>
+            Help
+          </span>
+                </div>
+                {/*<div className="flex-1 text-center italic break-all">
+                 <a href={"https://docs.parasite.xyz"}><span className="cursor-pointer">Docs</span></a>
+                 </div>*/}
+                <div
+                    className="text-foreground/5 cursor-pointer hover:text-foreground/50 transition-colors w-4 text-center"
+                    onClick={() => setShowTerminal(true)}
+                >
+                    ₿
+                </div>
+            </div>
+
+            {showTerminal && <Terminal onClose={() => setShowTerminal(false)} />}
+            {/* Help Modal */}
+            <HelpModal
+                isOpen={showHelpModal}
+                onClose={() => setShowHelpModal(false)}
+            />
+        </>
+    );
+};
+
+const FooterFallback = () => (
+    <div className="flex">
         <div className="w-4"></div>
         <div className="flex-1 text-center italic break-all">
-          <span className="cursor-pointer" onClick={() => setShowHelpModal(true)}>Help</span>
+            <a href={"https://github.com/parasitepool/para"}>
+                <span className="cursor-pointer">Github</span>
+            </a>
         </div>
-        <div
-          className="text-foreground/5 cursor-pointer hover:text-foreground/50 transition-colors w-4 text-center"
-          onClick={() => setShowTerminal(true)}
-        >
-          ₿
+        <div className="flex-1 text-center italic break-all">
+            <span className="cursor-pointer">Help</span>
         </div>
-      </div>
+        <div className="text-foreground/5 cursor-pointer hover:text-foreground/50 transition-colors w-4 text-center">
+            ₿
+        </div>
+    </div>
+);
 
-      {showTerminal && <Terminal onClose={() => setShowTerminal(false)} />}
-        {/* Help Modal */}
-      <HelpModal
-        isOpen={showHelpModal}
-        onClose={() => setShowHelpModal(false)}
-      />
-    </footer>
-  );
+const Footer = () => {
+    return (
+        <footer className="pb-4">
+            <Suspense fallback={<FooterFallback />}>
+                <FooterWithSearchParams />
+            </Suspense>
+        </footer>
+    );
 };
 
 export default Footer;
