@@ -15,8 +15,12 @@ export async function GET() {
     // Combine the data from all three objects
     const [statsData, hashrateData, diffData] = jsonLines;
 
+    const startTime = new Date('2025-04-20T16:20:00-04:00');
+    const currentTime = new Date();
+    const uptimeSeconds = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
+
     const poolStats: PoolStats = {
-      uptime: formatUptime(statsData.runtime),
+      uptime: formatUptime(uptimeSeconds),
       lastBlockTime: "N/A", // Not sure if this will be available
       highestDifficulty: formatDifficulty(diffData.bestshare),
       hashrate: parseHashrate(hashrateData.hashrate15m),
