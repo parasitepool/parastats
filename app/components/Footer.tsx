@@ -1,12 +1,26 @@
 "use client";
 
-import React, { useState } from "react";
+import React, {useEffect, useState} from "react";
 import { Terminal } from "./eastereggs/Terminal";
 import HelpModal from "./modals/HelpModal";
+import {useRouter, useSearchParams} from "next/navigation";
 
 const Footer = () => {
   const [showTerminal, setShowTerminal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+      if (searchParams.has('help')) {
+          setShowHelpModal(true);
+
+          const newSearchParams = new URLSearchParams(searchParams);
+          newSearchParams.delete('help');
+          const newUrl = `${window.location.pathname}${newSearchParams.toString() ? '?' + newSearchParams.toString() : ''}`;
+          router.replace(newUrl, { scroll: false });
+      }
+      }, [searchParams, router]);
 
   return (
     <footer className="pb-4">
