@@ -88,7 +88,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
       const apiUrl = process.env.API_URL;
       if (!apiUrl) {
         console.error("Failed to fetch user data: No API_URL defined in env");
-        throw new Error(`Failed to fetch user data: `);
+        throw new Error(`Failed to fetch user data: No API_URL defined in env`);
       }
 
       const headers: Record<string, string> = {};
