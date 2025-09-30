@@ -85,7 +85,20 @@ async function withRetry<T>(
 async function collectUserStats(userId: number, address: string): Promise<void> {
   try {
     const response = await withRetry(async () => {
-      const res = await fetch(`https://alpha.parasite.dev/aggregator/users/${address}`);
+      const apiUrl = process.env.API_URL;
+      if (!apiUrl) {
+        console.error("Failed to fetch user data: No API_URL defined in env");
+        throw new Error(`Failed to fetch user data: No API_URL defined in env`);
+      }
+
+      const headers: Record<string, string> = {};
+      if (process.env.API_TOKEN) {
+        headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+      }
+
+      const res = await fetch(`${apiUrl}/users/${address}`, {
+        headers,
+      });
       if (!res.ok) {
         throw new Error(`Failed to fetch user data: ${res.statusText}`);
       }
@@ -236,7 +249,20 @@ export async function collectPoolStats() {
     isCollectorRunning = true;
     
     const text = await withRetry(async () => {
-      const response = await fetch("https://alpha.parasite.dev/aggregator/pool/pool.status");
+      const apiUrl = process.env.API_URL;
+      if (!apiUrl) {
+        console.error("Error fetching pool stats: No API_URL defined in env");
+        throw new Error('API_URL is not defined in environment variables');
+      }
+
+      const headers: Record<string, string> = {};
+      if (process.env.API_TOKEN) {
+        headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+      }
+
+      const response = await fetch(`${apiUrl}/pool/pool.status`, {
+        headers,
+      });
       return response.text();
     });
     

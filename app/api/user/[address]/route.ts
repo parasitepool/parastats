@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { formatDifficulty, parseHashrate } from '../../../utils/formatters';
-import { formatRelativeTime } from '../../../utils/formatters';
+import { formatDifficulty, parseHashrate } from '@/app/utils/formatters';
+import { formatRelativeTime } from '@/app/utils/formatters';
 
 export interface WorkerData {
   workername: string;
@@ -54,9 +54,19 @@ export async function GET(
 ) {
   try {
     const { address } = await params;
-    
-    // Fetch user data from parasite.wtf
-    const response = await fetch(`https://alpha.parasite.dev/aggregator/users/${address}`, {
+    const apiUrl = process.env.API_URL;
+    if (!apiUrl) {
+      console.error("Failed to fetch user data: No API_URL defined in env");
+      return NextResponse.json({ error: "Failed to fetch user data" }, { status: 500 });
+    }
+
+    const headers: Record<string, string> = {};
+    if (process.env.API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+    }
+
+    const response = await fetch(`${apiUrl}/users/${address}`, {
+      headers,
       next: { revalidate: 10 } // Cache for 10 seconds
     });
     

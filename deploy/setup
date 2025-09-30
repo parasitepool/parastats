@@ -51,6 +51,9 @@ pnpm install
 
 pnpm build
 
+export API_URL="https://alpha.parasite.dev/aggregator"
+echo API_URL="https://alpha.parasite.dev/aggregator" >> .env
+
 pm2 restart parastats-collector --update-env || pm2 start pnpm --name "parastats-collector" -- collect-stats
 pm2 restart parastats --update-env || pm2 start pnpm --name "parastats" -- start --hostname 0.0.0.0 --port 80
 pm2 save
