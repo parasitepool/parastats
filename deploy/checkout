@@ -6,6 +6,8 @@ BRANCH=$1
 REMOTE=$2
 CHAIN=$3
 DOMAIN=$4
+API_URL=$5
+API_TOKEN=$6
 
 if [[ ! -d $REMOTE ]]; then
   mkdir -p $REMOTE
@@ -20,4 +22,4 @@ git reset --hard origin/$BRANCH
 
 COMMIT=$(git rev-parse --short HEAD)
 
-./deploy/setup $CHAIN $DOMAIN
+./deploy/setup $CHAIN $DOMAIN $API_URL $API_TOKEN
