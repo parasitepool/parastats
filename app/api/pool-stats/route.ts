@@ -4,7 +4,18 @@ import { formatDifficulty, parseHashrate } from '../../utils/formatters';
 
 export async function GET() {
   try {
-    const response = await fetch("https://alpha.parasite.dev/aggregator/pool/pool.status", {
+    const apiUrl = process.env.API_URL;
+    if (!apiUrl) {
+      console.error("Error fetching pool stats: No API_URL defined in env");
+      return NextResponse.json({ error: "Failed to fetch pool stats" }, { status: 500 });
+    }
+
+    const headers: Record<string, string> = {};
+    if (process.env.API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+    }
+    const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
+      headers,
       next: { revalidate: 10 } // Cache for 10 seconds
     });
     const text = await response.text();
