@@ -1,4 +1,4 @@
-deploy branch remote chain domain apiurl="https://alpha.parasite.dev" apitoken="":
+deploy branch remote chain domain:
   ssh root@{{domain}} '\
     export DEBIAN_FRONTEND=noninteractive \
     && mkdir -p deploy \
@@ -6,4 +6,4 @@ deploy branch remote chain domain apiurl="https://alpha.parasite.dev" apitoken="
     && apt-get upgrade --yes \
     && apt-get install --yes git rsync'
   rsync -avz deploy/checkout root@{{domain}}:deploy/checkout
-  ssh root@{{domain}} 'cd deploy && ./checkout {{branch}} {{remote}} {{chain}} {{domain}} {{apiurl}}'
+  ssh root@{{domain}} 'cd deploy && ./checkout {{branch}} {{remote}} {{chain}} {{domain}}'

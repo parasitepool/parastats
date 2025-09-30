@@ -6,11 +6,8 @@ set -euxo pipefail
 
 CHAIN=$1
 DOMAIN=$2
-API_URL=$3
-API_TOKEN=${4:-}
 
 export DEBIAN_FRONTEND=noninteractive
-export API_URL=$API_URL
 
 if [[ -n "$API_TOKEN" ]]; then
   export API_TOKEN=$API_TOKEN
@@ -57,6 +54,9 @@ npm install pm2@latest -g
 pnpm install
 
 pnpm build
+
+export API_URL="https://alpha.parasite.dev/aggregator"
+echo API_URL="https://alpha.parasite.dev/aggregator" >> .env
 
 pm2 restart parastats-collector --update-env || pm2 start pnpm --name "parastats-collector" -- collect-stats
 pm2 restart parastats --update-env || pm2 start pnpm --name "parastats" -- start --hostname 0.0.0.0 --port 80
