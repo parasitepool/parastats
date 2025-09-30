@@ -9,10 +9,6 @@ DOMAIN=$2
 
 export DEBIAN_FRONTEND=noninteractive
 
-if [[ -n "$API_TOKEN" ]]; then
-  export API_TOKEN=$API_TOKEN
-fi
-
 touch ~/.hushlogin
 
 hostnamectl set-hostname $DOMAIN
