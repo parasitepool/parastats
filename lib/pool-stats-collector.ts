@@ -96,7 +96,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
       }
 
-      const res = await fetch(`${apiUrl}/aggregator/users/${address}`, {
+      const res = await fetch(`${apiUrl}/users/${address}`, {
         headers,
       });
       if (!res.ok) {
@@ -260,7 +260,7 @@ export async function collectPoolStats() {
         headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
       }
 
-      const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
+      const response = await fetch(`${apiUrl}/pool/pool.status`, {
         headers,
       });
       return response.text();
