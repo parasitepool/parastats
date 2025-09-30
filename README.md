@@ -7,7 +7,9 @@ A mining pool frontend for parasite
 - **Real-time Statistics**: Monitor pool and individual miner statistics with automatic updates
 - **Historical Data**: Track performance over time with detailed charts
 - **User Dashboard**: Personal dashboard for miners
-- **Automated Data Collection**: Background service collecting pool statistics every minute
+- **Automated Data Collection**: Background service collecting pool and user statistics every minute
+- **Stratum Pool Integration**: Real-time connection to Parasite stratum pool for block template notifications
+- **Automated Data Retention**: Automatic cleanup of old data (30-day retention) with daily maintenance
 
 ## Tech Stack
 
@@ -34,6 +36,12 @@ pnpm dev
 pnpm collect-stats
 ```
 
+This will start:
+- **Pool Stats Collector**: Fetches pool statistics every minute
+- **User Stats Collector**: Fetches individual miner statistics every minute
+- **Stratum Collector**: Connects to the Parasite stratum pool for real-time block template notifications
+- **Data Maintenance**: Runs daily cleanup at midnight to purge data older than 30 days
+
 The application will be available at [http://localhost:3000](http://localhost:3000).
 
 ## Development
@@ -55,6 +63,20 @@ The application will be available at [http://localhost:3000](http://localhost:30
 - `/lib` - Shared utilities and database code
 - `/scripts` - Background jobs and utilities
 - `/data` - SQLite database and other data files
+
+## Configuration
+
+The stats collector can be configured using environment variables:
+
+- `PARASTATS_DATA_DIR` - Database location (default: `./data`)
+- `MAX_FAILED_ATTEMPTS` - Number of failed fetch attempts before deactivating a user (default: `10`)
+- `USER_BATCH_SIZE` - Number of users to process in parallel (default: `500`)
+- `FAILED_USER_BACKOFF_MINUTES` - Minutes to wait before retrying failed users (default: `2`)
+
+Example:
+```bash
+PARASTATS_DATA_DIR=/path/to/data MAX_FAILED_ATTEMPTS=5 pnpm collect-stats
+```
 
 ## Contributing
 
