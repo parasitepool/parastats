@@ -26,11 +26,14 @@ export default function ConnectButton() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  const handleButtonClick = () => {
+  const handleButtonClick = async () => {
     if (isConnected) {
       setShowDropdown(!showDropdown);
     } else {
-      connect();
+      const addr = await connect();
+      if (addr) {
+        router.push(`/user/${addr}`);
+      }
     }
   };
 
@@ -50,7 +53,7 @@ export default function ConnectButton() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={handleButtonClick}
-        className="px-4 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium"
+        className="cursor-pointer px-4 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium"
       >
         {isConnected && address ? shortenAddress(address) : 'Connect'}
       </button>

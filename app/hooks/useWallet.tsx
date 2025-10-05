@@ -6,7 +6,7 @@ import { AddressPurpose, request } from '@sats-connect/core';
 interface WalletContextType {
   address: string | null;
   isConnected: boolean;
-  connect: () => Promise<void>;
+  connect: () => Promise<string | null>;
   disconnect: () => void;
 }
 
@@ -50,7 +50,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const connect = useCallback(async () => {
+  const connect = useCallback(async (): Promise<string | null> => {
     try {
       const response = await request('getAccounts', {
         purposes: [AddressPurpose.Payment],
@@ -68,10 +68,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(WALLET_ADDRESS_KEY, paymentAddress.address);
           // Add address to monitoring when connecting
           await addAddressToMonitoring(paymentAddress.address);
+          // Return address for further use if needed
+          return paymentAddress.address;
         }
       }
+      return null;
     } catch (error) {
       console.error('Failed to connect wallet:', error);
+      return null;
     }
   }, [addAddressToMonitoring]);
 
