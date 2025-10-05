@@ -64,7 +64,7 @@ export default function ConnectButton() {
             onClick={handleGoToProfile}
             className="w-full text-left px-4 py-2 hover:bg-gray-100 hover:text-black text-xs sm:text-sm transition-colors"
           >
-            View
+            Profile
           </button>
           <button
             onClick={handleDisconnect}
