@@ -194,6 +194,9 @@ export default function UserDashboard() {
         <Link href="/" className="mt-4 text-accent-3 hover:underline">
           Return to Home
         </Link>
+        <Link href="/?help" className="mt-4 text-accent-3 hover:underline">
+          Go to Help
+        </Link>
       </div>
     );
   }
