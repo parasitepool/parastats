@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import NavigationWrapper from "./components/NavigationWrapper";
 import Footer from "./components/Footer";
+import { WalletProvider } from "./hooks/useWallet";
 
 export const metadata: Metadata = {
   title: "Parasite",
@@ -44,11 +45,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`antialiased`}>
-        <div className="min-h-screen flex flex-col container mx-auto">
-          <NavigationWrapper />
-          {children}
-          <Footer />
-        </div>
+        <WalletProvider>
+          <div className="min-h-screen flex flex-col container mx-auto">
+            <NavigationWrapper />
+            {children}
+            <Footer />
+          </div>
+        </WalletProvider>
       </body>
     </html>
   );
