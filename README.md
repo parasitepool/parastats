@@ -67,15 +67,22 @@ The application will be available at [http://localhost:3000](http://localhost:30
 ## Configuration
 
 The stats collector can be configured using environment variables:
-
+- `API_URL` - URL of server to fetch statistics from (example: https://example.com/api)
+- `API_TOKEN` - Bearer access token (example: supersecrettoken)
 - `PARASTATS_DATA_DIR` - Database location (default: `./data`)
 - `MAX_FAILED_ATTEMPTS` - Number of failed fetch attempts before deactivating a user (default: `10`)
 - `USER_BATCH_SIZE` - Number of users to process in parallel (default: `500`)
 - `FAILED_USER_BACKOFF_MINUTES` - Minutes to wait before retrying failed users (default: `2`)
 
-Example:
+Examples:
+
 ```bash
 PARASTATS_DATA_DIR=/path/to/data MAX_FAILED_ATTEMPTS=5 pnpm collect-stats
+```
+
+```bash
+API_URL=https://example.com/api API_TOKEN=supersecrettoken pnpm collect-stats
+API_URL=https://example.com/api API_TOKEN=supersecrettoken pnpm dev
 ```
 
 ## Contributing
