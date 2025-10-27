@@ -205,13 +205,19 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         now
       );
 
-      // Update monitored_users with latest bestever and authorised_at if they're higher
+      // Update monitored_users with latest bestever and earliest authorised_at
+      // bestever: only increase (higher is better)
+      // authorised_at: only decrease to earlier timestamp (earlier = more loyal), but never to 0
       // Also reset failed_attempts since we succeeded
       const updateStmt = db.prepare(`
-        UPDATE monitored_users 
-        SET 
+        UPDATE monitored_users
+        SET
           bestever = CASE WHEN bestever < ? THEN ? ELSE bestever END,
-          authorised_at = CASE WHEN authorised_at < ? THEN ? ELSE authorised_at END,
+          authorised_at = CASE
+            WHEN ? > 0 AND (authorised_at = 0 OR authorised_at > ?)
+            THEN ?
+            ELSE authorised_at
+          END,
           failed_attempts = 0,
           updated_at = ?
         WHERE id = ?
@@ -220,8 +226,9 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
       updateStmt.run(
         userData.bestever,
         userData.bestever,
-        userData.authorised,
-        userData.authorised,
+        userData.authorised,     // Check if API value is valid (> 0)
+        userData.authorised,     // Compare against existing value
+        userData.authorised,     // Set to this value if conditions met
         now,
         userId
       );
