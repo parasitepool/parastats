@@ -166,7 +166,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         }
         throw error;
       }
-    }, 5, 400, `GET /users/${address}`);
+    }, 5, 200, `GET /users/${address}`);
 
     const userData: UserData = await response.json();
     const now = Math.floor(Date.now() / 1000);
