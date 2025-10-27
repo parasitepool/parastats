@@ -374,7 +374,7 @@ export async function collectAllUserStats() {
 
         const insertTransaction = db.transaction(() => {
           for (const address of newAddresses) {
-            const result = insertStmt.run(address, 1, 0, now, now, 0);
+            const result = insertStmt.run(address, 1, 1, now, now, 0);
             addedCount++;
             // Add to allUsers array so they get processed in this cycle
             allUsers.push({
