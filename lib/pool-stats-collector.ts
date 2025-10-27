@@ -268,7 +268,10 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
  * Handles auto-discovery, deactivation, and reactivation of users
  */
 export async function collectAllUserStats() {
-  if (isUserCollectorRunning) return;
+  if (isUserCollectorRunning) {
+    console.warn('⚠️  User stats collection already running, skipping this cycle');
+    return;
+  }
 
   try {
     isUserCollectorRunning = true;
@@ -551,8 +554,8 @@ export function startPoolStatsCollector() {
     await collectPoolStats();
   });
 
-  // Run user stats collection every 5 minutes
-  const userJob = cron.schedule('*/5 * * * *', async () => {
+  // Run user stats collection every 1 minute
+  const userJob = cron.schedule('* * * * *', async () => {
     await collectAllUserStats();
   });
   
