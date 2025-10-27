@@ -110,7 +110,7 @@ function updateUsersInChunks(
   db: ReturnType<typeof getDb>,
   userIds: number[],
   sqlTemplate: string,
-  params: any[]
+  params: unknown[]
 ): number {
   let totalUpdated = 0;
 
