@@ -43,8 +43,11 @@ let isUserCollectorRunning = false;
 // Configuration constants
 const CONFIG = {
   MAX_FAILED_ATTEMPTS: parseInt(process.env.MAX_FAILED_ATTEMPTS || '10'),
-  BATCH_SIZE: parseInt(process.env.USER_BATCH_SIZE || '500'), // Process users in batches
+  BATCH_SIZE: parseInt(process.env.USER_BATCH_SIZE || '50'), // Process users in batches (concurrent API requests)
   FAILED_USER_BACKOFF_MINUTES: parseInt(process.env.FAILED_USER_BACKOFF_MINUTES || '2'), // Don't retry failed users for 2 minutes
+  AUTO_DISCOVER_USERS: process.env.AUTO_DISCOVER_USERS !== 'false', // Enable automatic user discovery (default: true)
+  AUTO_DISCOVER_BATCH_LIMIT: parseInt(process.env.AUTO_DISCOVER_BATCH_LIMIT || '100'), // Max new users to add per cycle
+  SQL_BATCH_SIZE: 500, // Max parameters per SQL statement (SQLite limit is 999)
 } as const;
 
 /**
@@ -53,12 +56,13 @@ const CONFIG = {
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Retry helper function with exponential backoff
+ * Retry helper function with backoff and jitter
  */
 async function withRetry<T>(
   operation: () => Promise<T>,
-  maxRetries = 3,
-  baseDelay = 1000
+  maxRetries = 4,
+  baseDelay = 500,
+  context?: string // Optional context for logging which operation is retrying
 ): Promise<T> {
   let lastError;
 
@@ -68,15 +72,60 @@ async function withRetry<T>(
     } catch (error) {
       lastError = error;
       if (attempt < maxRetries) {
-        const backoffDelay = baseDelay * Math.pow(2, attempt);
-        console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${backoffDelay}ms`);
-        await delay(backoffDelay);
+        const backoffDelay = baseDelay + (attempt * baseDelay);
+        // Add jitter: randomize delay between 50% and 150% of backoff delay
+        const jitter = Math.random() + 0.5; // Random value between 0.5 and 1.5
+        const delayWithJitter = Math.floor(backoffDelay * jitter);
+        const contextMsg = context ? ` [${context}]` : '';
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms${contextMsg} - Error: ${errorMsg}`);
+        await delay(delayWithJitter);
         continue;
       }
       throw error;
     }
   }
   throw lastError;
+}
+
+/**
+ * Process users in batches to avoid overwhelming the system
+ */
+async function processBatchedUserStats(users: MonitoredUser[]): Promise<number> {
+  for (let i = 0; i < users.length; i += CONFIG.BATCH_SIZE) {
+    const batch = users.slice(i, i + CONFIG.BATCH_SIZE);
+    await Promise.allSettled(
+      batch.map(user => collectUserStats(user.id, user.address))
+    );
+    console.log(`Processed batch ${Math.floor(i / CONFIG.BATCH_SIZE) + 1}/${Math.ceil(users.length / CONFIG.BATCH_SIZE)} (${batch.length} users)`);
+  }
+  return users.length;
+}
+
+/**
+ * Update users in chunks to respect SQLite's 999 parameter limit
+ * Executes UPDATE statements in batches for large user ID arrays
+ */
+function updateUsersInChunks(
+  db: ReturnType<typeof getDb>,
+  userIds: number[],
+  sqlTemplate: string,
+  params: any[]
+): number {
+  let totalUpdated = 0;
+
+  // Process in chunks to stay well below SQLite's 999 parameter limit
+  for (let i = 0; i < userIds.length; i += CONFIG.SQL_BATCH_SIZE) {
+    const chunk = userIds.slice(i, i + CONFIG.SQL_BATCH_SIZE);
+    const placeholders = chunk.map(() => '?').join(',');
+    const sql = sqlTemplate.replace('${placeholders}', placeholders);
+
+    // Run the update with params first, then the chunk IDs
+    const result = db.prepare(sql).run(...params, ...chunk);
+    totalUpdated += result.changes;
+  }
+
+  return totalUpdated;
 }
 
 /**
@@ -96,14 +145,28 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
       }
 
-      const res = await fetch(`${apiUrl}/users/${address}`, {
-        headers,
-      });
-      if (!res.ok) {
-        throw new Error(`Failed to fetch user data: ${res.statusText}`);
+      try {
+        const res = await fetch(`${apiUrl}/users/${address}`, {
+          headers,
+        });
+        if (!res.ok) {
+          // Try to get response body for more details
+          let errorDetail = res.statusText;
+          try {
+            const body = await res.text();
+            if (body) errorDetail += `: ${body}`;
+          } catch {}
+          throw new Error(`HTTP ${res.status} ${errorDetail}`);
+        }
+        return res;
+      } catch (error) {
+        // Re-throw with more context if it's a network error
+        if (error instanceof Error && error.message === 'fetch failed') {
+          throw new Error(`Network error: ${error.message} (${error.cause || 'unknown cause'})`);
+        }
+        throw error;
       }
-      return res;
-    });
+    }, 5, 400, `GET /users/${address}`);
 
     const userData: UserData = await response.json();
     const now = Math.floor(Date.now() / 1000);
@@ -201,7 +264,8 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
 }
 
 /**
- * Fetch stats for all monitored users
+ * Fetch stats for all monitored users and manage user lifecycle
+ * Handles auto-discovery, deactivation, and reactivation of users
  */
 export async function collectAllUserStats() {
   if (isUserCollectorRunning) return;
@@ -212,25 +276,189 @@ export async function collectAllUserStats() {
     const now = Math.floor(Date.now() / 1000);
     const backoffThreshold = now - (CONFIG.FAILED_USER_BACKOFF_MINUTES * 60);
 
-    // Get all active monitored users, excluding those in backoff period
-    // Users with failed_attempts > 0 must wait for the backoff period before retry
-    const users = db.prepare(`
-      SELECT id, address 
-      FROM monitored_users 
-      WHERE is_active = 1 
-        AND (failed_attempts = 0 OR updated_at < ?)
-    `).all(backoffThreshold) as MonitoredUser[];
+    // Fetch current pool users list directly from API
+    let poolUsers: Set<string>;
+    try {
+      poolUsers = await withRetry(async () => {
+        const apiUrl = process.env.API_URL;
+        if (!apiUrl) {
+          throw new Error('API_URL is not defined in environment variables');
+        }
 
-    // Process users in batches
-    for (let i = 0; i < users.length; i += CONFIG.BATCH_SIZE) {
-      const batch = users.slice(i, i + CONFIG.BATCH_SIZE);
-      await Promise.allSettled(
-        batch.map(user => collectUserStats(user.id, user.address))
-      );
-      console.log(`Processed batch ${Math.floor(i / CONFIG.BATCH_SIZE) + 1}/${Math.ceil(users.length / CONFIG.BATCH_SIZE)} (${batch.length} users)`);
+        const headers: Record<string, string> = {};
+        if (process.env.API_TOKEN) {
+          headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+        }
+
+        const response = await fetch(`${apiUrl}/users`, { headers });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch users: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        // API returns array of address strings
+        return new Set<string>(data as string[]);
+      }, 5, 250, 'GET /users');
+    } catch (error) {
+      console.error('Error fetching pool users:', error);
+      poolUsers = new Set<string>();
     }
 
-    console.log(`Collected stats for ${users.length} users at ${new Date().toISOString()}`);
+    if (poolUsers.size === 0) {
+      console.warn('⚠️  Pool users API returned empty - either API failed or pool is actually empty');
+      console.log('Skipping auto-discovery and lifecycle management, collecting stats for known active users only');
+
+      // Collect stats for existing active users even when API is down
+      const knownUsers = db.prepare(`
+        SELECT id, address, updated_at, failed_attempts
+        FROM monitored_users
+        WHERE is_active = 1
+      `).all() as Array<{ id: number; address: string; updated_at: number; failed_attempts: number }>;
+
+      // Apply backoff for users with recent failures
+      const usersToCollect = knownUsers.filter(user => {
+        return user.failed_attempts === 0 || user.updated_at < backoffThreshold;
+      });
+
+      const collectedCount = await processBatchedUserStats(usersToCollect);
+      console.log(`Collected stats for ${collectedCount} known users at ${new Date().toISOString()}`);
+      return;
+    }
+
+    // Track lifecycle changes for logging
+    let addedCount = 0;
+    let deactivatedCount = 0;
+    let reactivatedCount = 0;
+
+    // Get all monitored users (active and inactive) with all needed fields
+    // We fetch this once and reuse for both auto-discovery and lifecycle management
+    const allUsers = db.prepare(`
+      SELECT id, address, is_active, updated_at, failed_attempts
+      FROM monitored_users
+    `).all() as Array<{
+      id: number;
+      address: string;
+      is_active: number;
+      updated_at: number;
+      failed_attempts: number;
+    }>;
+
+    // Auto-discover new users if enabled
+    if (CONFIG.AUTO_DISCOVER_USERS) {
+      const existingAddresses = new Set(allUsers.map(u => u.address));
+      const newAddresses: string[] = [];
+
+      // Collect new addresses
+      for (const address of poolUsers) {
+        if (!existingAddresses.has(address)) {
+          newAddresses.push(address);
+          // Stop at batch limit to prevent overwhelming the database
+          if (newAddresses.length >= CONFIG.AUTO_DISCOVER_BATCH_LIMIT) {
+            break;
+          }
+        }
+      }
+
+      // Insert new users in a transaction for better performance
+      if (newAddresses.length > 0) {
+        const insertStmt = db.prepare(`
+          INSERT INTO monitored_users (
+            address,
+            is_active,
+            is_public,
+            created_at,
+            updated_at,
+            authorised_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `);
+
+        const insertTransaction = db.transaction(() => {
+          for (const address of newAddresses) {
+            const result = insertStmt.run(address, 1, 0, now, now, 0);
+            addedCount++;
+            // Add to allUsers array so they get processed in this cycle
+            allUsers.push({
+              id: result.lastInsertRowid as number,
+              address,
+              is_active: 1,
+              updated_at: now,
+              failed_attempts: 0
+            });
+          }
+        });
+
+        insertTransaction();
+
+        const totalNewUsers = Array.from(poolUsers).filter(addr => !existingAddresses.has(addr)).length;
+        if (totalNewUsers > CONFIG.AUTO_DISCOVER_BATCH_LIMIT) {
+          console.log(`⚠️  Found ${totalNewUsers} new users, added ${addedCount} (limited to ${CONFIG.AUTO_DISCOVER_BATCH_LIMIT} per cycle)`);
+        }
+      }
+    }
+
+    // Separate users by status and pool presence
+    const usersToCollect: MonitoredUser[] = [];
+    const usersToDeactivate: number[] = [];
+    const usersToReactivate: number[] = [];
+
+    for (const user of allUsers) {
+      const inPool = poolUsers.has(user.address);
+      const isActive = user.is_active === 1;
+
+      if (inPool && isActive) {
+        // Active user in pool - collect stats (with backoff check)
+        if (user.failed_attempts === 0 || user.updated_at < backoffThreshold) {
+          usersToCollect.push({ id: user.id, address: user.address });
+        }
+      } else if (inPool && !isActive) {
+        // User came back to pool - reactivate
+        usersToReactivate.push(user.id);
+      } else if (!inPool && isActive) {
+        // User left pool - deactivate
+        usersToDeactivate.push(user.id);
+      }
+    }
+
+    // Update user states in a single transaction for better performance
+    // Use chunked updates to respect SQLite's 999 parameter limit
+    if (usersToReactivate.length > 0 || usersToDeactivate.length > 0) {
+      const updateTransaction = db.transaction(() => {
+        // Reactivate users who came back
+        if (usersToReactivate.length > 0) {
+          reactivatedCount = updateUsersInChunks(
+            db,
+            usersToReactivate,
+            `UPDATE monitored_users
+             SET is_active = 1, failed_attempts = 0, updated_at = ?
+             WHERE id IN (\${placeholders})`,
+            [now]
+          );
+        }
+
+        // Deactivate users who left
+        if (usersToDeactivate.length > 0) {
+          deactivatedCount = updateUsersInChunks(
+            db,
+            usersToDeactivate,
+            `UPDATE monitored_users
+             SET is_active = 0, updated_at = ?
+             WHERE id IN (\${placeholders})`,
+            [now]
+          );
+        }
+      });
+
+      updateTransaction();
+    }
+
+    const collectedCount = await processBatchedUserStats(usersToCollect);
+
+    // Log summary
+    const lifecycleChanges = addedCount + deactivatedCount + reactivatedCount;
+    if (lifecycleChanges > 0) {
+      console.log(`User lifecycle: ${addedCount} added, ${deactivatedCount} deactivated, ${reactivatedCount} reactivated`);
+    }
+    console.log(`Collected stats for ${collectedCount} users at ${new Date().toISOString()}`);
 
   } catch (error) {
     console.error("Error collecting user stats:", error);
@@ -264,7 +492,7 @@ export async function collectPoolStats() {
         headers,
       });
       return response.text();
-    });
+    }, 4, 500, 'GET /pool/pool.status');
     
     // Split the response into lines and parse each JSON object
     const jsonLines = text.trim().split('\n').map(line => JSON.parse(line));
