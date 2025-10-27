@@ -551,8 +551,8 @@ export function startPoolStatsCollector() {
     await collectPoolStats();
   });
 
-  // Run user stats collection every minute
-  const userJob = cron.schedule('* * * * *', async () => {
+  // Run user stats collection every 5 minutes
+  const userJob = cron.schedule('*/5 * * * *', async () => {
     await collectAllUserStats();
   });
   
