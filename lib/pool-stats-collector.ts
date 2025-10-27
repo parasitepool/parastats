@@ -43,7 +43,7 @@ let isUserCollectorRunning = false;
 // Configuration constants
 const CONFIG = {
   MAX_FAILED_ATTEMPTS: parseInt(process.env.MAX_FAILED_ATTEMPTS || '10'),
-  BATCH_SIZE: parseInt(process.env.USER_BATCH_SIZE || '50'), // Process users in batches (concurrent API requests)
+  BATCH_SIZE: parseInt(process.env.USER_BATCH_SIZE || '100'), // Process users in batches (concurrent API requests)
   FAILED_USER_BACKOFF_MINUTES: parseInt(process.env.FAILED_USER_BACKOFF_MINUTES || '2'), // Don't retry failed users for 2 minutes
   AUTO_DISCOVER_USERS: process.env.AUTO_DISCOVER_USERS !== 'false', // Enable automatic user discovery (default: true)
   AUTO_DISCOVER_BATCH_LIMIT: parseInt(process.env.AUTO_DISCOVER_BATCH_LIMIT || '100'), // Max new users to add per cycle
