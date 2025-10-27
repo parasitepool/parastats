@@ -25,7 +25,7 @@ console.log("⚡ Stratum collector started");
 
 // Set up a job to purge old data daily at midnight
 let purgeJob = cron.schedule("0 0 * * *", () => {
-  purgeOldData(30); // Keep 30 days of data
+  purgeOldData(365); // Keep 365 days of data
   console.log("🧹 Purged old pool stats data");
 });
 
