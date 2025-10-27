@@ -61,13 +61,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check rate limiting (max 10 new users per 3 minutes)
-    const threeMinutesAgo = now - (3 * 60);
+    // Check rate limiting (max 10 new users per minute)
+    const oneMinuteAgo = now - (1 * 60);
     const recentUsersCount = db.prepare(
       'SELECT COUNT(*) as count FROM monitored_users WHERE created_at > ?'
-    ).get(threeMinutesAgo) as { count: number };
+    ).get(oneMinuteAgo) as { count: number };
+    let numMaxAdds = 10;
+    const autoDiscoverEnabled = process.env.AUTO_DISCOVER_USERS !== 'false';
+    if (autoDiscoverEnabled) {
+      numMaxAdds = 110; // Higher limit if auto-discovery is enabled
+    }
 
-    if (recentUsersCount.count >= 10) {
+    if (recentUsersCount.count >= numMaxAdds) {
       return NextResponse.json(
         { error: 'Too many addresses added recently, please try again later.' },
         { status: 429 }
