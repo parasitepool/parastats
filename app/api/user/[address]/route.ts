@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { formatDifficulty, parseHashrate } from '@/app/utils/formatters';
 import { formatRelativeTime } from '@/app/utils/formatters';
+import { fetch } from '@/lib/http-client';
 
 export interface WorkerData {
   workername: string;

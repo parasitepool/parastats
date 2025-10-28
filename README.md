@@ -17,6 +17,7 @@ A mining pool frontend for parasite
 - **Styling**: TailwindCSS 4.1
 - **Database**: SQLite (via better-sqlite3)
 - **Charts**: ECharts 5.6
+- **HTTP Client**: Undici with HTTP/2 support for optimized API requests
 - **Bitcoin Integration**: @mempool/mempool.js
 
 ## Getting Started
@@ -73,11 +74,22 @@ The stats collector can be configured using environment variables:
 - `API_TOKEN` - Bearer access token (example: supersecrettoken)
 
 ### Optional
+
+**Stats Collection:**
 - `PARASTATS_DATA_DIR` - Database location (default: `./data`)
-- `MAX_FAILED_ATTEMPTS` - Number of failed fetch attempts before deactivating a user (default: `10`)
-- `USER_BATCH_SIZE` - Number of users to process in parallel (default: `500`)
-- `FAILED_USER_BACKOFF_MINUTES` - Minutes to wait before retrying failed users (default: `2`)
-- `AUTO_DISCOVER_USERS` - Automatically discover and monitor new miners during stats collection (default: `true`; set to `false` to disable)
+- `MAX_FAILED_ATTEMPTS` - Failed fetch attempts before deactivating a user (default: `10`)
+- `USER_BATCH_SIZE` - Users to process concurrently (default: `500`)
+- `FAILED_USER_BACKOFF_MINUTES` - Wait time before retrying failed users (default: `2`)
+- `AUTO_DISCOVER_USERS` - Auto-discover and monitor new miners (default: `true`)
+- `AUTO_DISCOVER_BATCH_LIMIT` - Max new users to add per cycle (default: `100`)
+
+**HTTP/2 Client:**
+- `HTTP2_MAX_CONNECTIONS` - Max concurrent connections per origin (default: `30`)
+- `HTTP2_CLIENT_TTL` - Connection lifetime in ms (default: `120000`)
+- `HTTP2_CONNECT_TIMEOUT` - Connection timeout in ms (default: `1500`)
+- `HTTP2_HEADERS_TIMEOUT` - Response headers timeout in ms (default: `10000`)
+- `HTTP2_BODY_TIMEOUT` - Response body timeout in ms (default: `10000`)
+- `HTTP2_KEEPALIVE_TIMEOUT` - Keep-alive timeout in ms (default: `60000`)
 
 ### Examples
 

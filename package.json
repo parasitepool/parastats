@@ -25,7 +25,8 @@
     "react-dom": "19.1.1",
     "reflect-metadata": "0.2.2",
     "sharp": "0.34.4",
-    "typeorm": "0.3.27"
+    "typeorm": "0.3.27",
+    "undici": "^7.16.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
