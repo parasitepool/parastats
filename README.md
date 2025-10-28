@@ -85,8 +85,8 @@ The stats collector can be configured using environment variables:
 
 **HTTP/2 Client:**
 - `HTTP2_MAX_CONNECTIONS` - Max concurrent connections per origin (default: `30`)
-- `HTTP2_CLIENT_TTL` - Connection lifetime in ms (default: `90000`)
-- `HTTP2_CONNECT_TIMEOUT` - Connection timeout in ms (default: `5000`)
+- `HTTP2_CLIENT_TTL` - Connection lifetime in ms (default: `120000`)
+- `HTTP2_CONNECT_TIMEOUT` - Connection timeout in ms (default: `1500`)
 - `HTTP2_HEADERS_TIMEOUT` - Response headers timeout in ms (default: `10000`)
 - `HTTP2_BODY_TIMEOUT` - Response body timeout in ms (default: `10000`)
 - `HTTP2_KEEPALIVE_TIMEOUT` - Keep-alive timeout in ms (default: `60000`)

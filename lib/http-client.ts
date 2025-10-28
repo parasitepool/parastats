@@ -18,10 +18,10 @@ const CONFIG = {
   // Maximum number of concurrent connections per origin
   MAX_CONNECTIONS: parseInt(process.env.HTTP2_MAX_CONNECTIONS || '30'),
   // Time to live for connections in milliseconds (graceful shutdown after this time)
-  // Default: 90s to ensure connections survive between 1-minute cron cycles
-  CLIENT_TTL: parseInt(process.env.HTTP2_CLIENT_TTL || '90000'),
+  // Default: 120s to ensure connections survive between 1-minute cron cycles
+  CLIENT_TTL: parseInt(process.env.HTTP2_CLIENT_TTL || '120000'),
   // Connection timeout in milliseconds (time to establish initial connection)
-  CONNECT_TIMEOUT: parseInt(process.env.HTTP2_CONNECT_TIMEOUT || '5000'),
+  CONNECT_TIMEOUT: parseInt(process.env.HTTP2_CONNECT_TIMEOUT || '1500'),
   // Headers timeout in milliseconds (time to receive response headers)
   HEADERS_TIMEOUT: parseInt(process.env.HTTP2_HEADERS_TIMEOUT || '10000'),
   // Body timeout in milliseconds (time to receive response body)
