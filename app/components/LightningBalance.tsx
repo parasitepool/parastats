@@ -181,8 +181,14 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
 
       if (response.status === 'success') {
         // Extract signature from response
-        // The structure might be response.result.signature or response.result depending on the API
-        return response.result.signature || response.result;
+        // response.result can be either a string or an object with signature property
+        if (typeof response.result === 'string') {
+          return response.result;
+        } else if (response.result && typeof response.result === 'object' && 'signature' in response.result) {
+          return response.result.signature;
+        } else {
+          throw new Error('Unexpected response format');
+        }
       } else {
         throw new Error('User cancelled signing or signing failed');
       }
