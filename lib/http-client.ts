@@ -16,9 +16,18 @@ import { Agent, Pool, fetch as undiciFetch, type Dispatcher } from 'undici';
 // Configuration from environment variables with sensible defaults
 const CONFIG = {
   // Maximum number of concurrent connections per origin
-  MAX_CONNECTIONS: parseInt(process.env.HTTP2_MAX_CONNECTIONS || '20'),
+  MAX_CONNECTIONS: parseInt(process.env.HTTP2_MAX_CONNECTIONS || '30'),
   // Time to live for connections in milliseconds (graceful shutdown after this time)
-  CLIENT_TTL: parseInt(process.env.HTTP2_CLIENT_TTL || '60000'),
+  // Default: 90s to ensure connections survive between 1-minute cron cycles
+  CLIENT_TTL: parseInt(process.env.HTTP2_CLIENT_TTL || '90000'),
+  // Connection timeout in milliseconds (time to establish initial connection)
+  CONNECT_TIMEOUT: parseInt(process.env.HTTP2_CONNECT_TIMEOUT || '5000'),
+  // Headers timeout in milliseconds (time to receive response headers)
+  HEADERS_TIMEOUT: parseInt(process.env.HTTP2_HEADERS_TIMEOUT || '10000'),
+  // Body timeout in milliseconds (time to receive response body)
+  BODY_TIMEOUT: parseInt(process.env.HTTP2_BODY_TIMEOUT || '10000'),
+  // Keep-alive timeout in milliseconds (should match server's keep-alive setting)
+  KEEPALIVE_TIMEOUT: parseInt(process.env.HTTP2_KEEPALIVE_TIMEOUT || '60000'),
 } as const;
 
 /**
@@ -35,6 +44,18 @@ const http2Agent: Dispatcher = new Agent({
       allowH2: true,
       // Gracefully close connections after this time to avoid GOAWAY frames
       clientTtl: CONFIG.CLIENT_TTL,
+      // Connection timeout (time to establish initial connection)
+      connect: {
+        timeout: CONFIG.CONNECT_TIMEOUT,
+        keepAlive: true,
+        keepAliveInitialDelay: 1000,
+      },
+      // Server's keep-alive timeout (should match server setting)
+      keepAliveTimeout: CONFIG.KEEPALIVE_TIMEOUT,
+      // Timeout for receiving response headers
+      headersTimeout: CONFIG.HEADERS_TIMEOUT,
+      // Timeout for receiving response body
+      bodyTimeout: CONFIG.BODY_TIMEOUT,
     });
   },
 });
