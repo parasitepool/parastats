@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { request } from '@sats-connect/core';
 import { LightningIcon } from './icons';
 
@@ -39,15 +39,10 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
-  // Check if we have a valid stored token on mount
-  useEffect(() => {
-    checkStoredAuth();
-  }, [userAddress]);
-
   /**
    * Check if we have a valid stored authentication token
    */
-  const checkStoredAuth = async () => {
+  const checkStoredAuth = useCallback(async () => {
     const storedAuth = getStoredAuth();
     
     if (storedAuth && storedAuth.address === userAddress) {
@@ -61,11 +56,16 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
           // Token expired or invalid, clear it
           clearStoredAuth();
         }
-      } catch (err) {
+      } catch {
         clearStoredAuth();
       }
     }
-  };
+  }, [userAddress]);
+
+  // Check if we have a valid stored token on mount
+  useEffect(() => {
+    checkStoredAuth();
+  }, [checkStoredAuth]);
 
   /**
    * Get stored authentication from localStorage
@@ -131,15 +131,19 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
       });
       
       return response.ok;
-    } catch (err) {
+    } catch {
       return false;
     }
   };
 
   /**
    * Step 1: Request a nonce from the API
+   * NOTE: Documentation says GET, but server returns 405 for GET and only accepts POST
+   * Waiting for clarification from BitBit devs on correct method and required fields
    */
   const requestNonce = async (): Promise<string> => {
+    // Try POST first since GET returns 405
+    // TODO: Update this once BitBit devs clarify the correct endpoint
     const response = await fetch(
       `${API_BASE_URL}/login/string:${userAddress}/auth_sign/${API_TOKEN}`,
       {
@@ -147,7 +151,12 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({})
+        // Server says "Missing required fields" - need BitBit devs to clarify what's needed
+        body: JSON.stringify({
+          address: userAddress,
+          email: '',
+          public_key: ''
+        })
       }
     );
 
@@ -177,7 +186,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
       } else {
         throw new Error('User cancelled signing or signing failed');
       }
-    } catch (err) {
+    } catch {
       throw new Error('Failed to sign message');
     }
   };
