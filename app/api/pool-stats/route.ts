@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { type PoolStats } from '../../utils/api';
 import { formatDifficulty, parseHashrate } from '../../utils/formatters';
+import { fetch } from '@/lib/http-client';
 
 export async function GET() {
   try {

@@ -51,6 +51,9 @@ dependencies:
   typeorm:
     specifier: 0.3.27
     version: 0.3.27(better-sqlite3@11.10.0)(pg@8.15.6)(reflect-metadata@0.2.2)
+  undici:
+    specifier: ^7.16.0
+    version: 7.16.0
 
 devDependencies:
   '@eslint/eslintrc':
@@ -4367,6 +4370,11 @@ packages:
   /undici-types@6.19.8:
     resolution: {integrity: sha512-ve2KP6f/JnbPBFyobGHuerC9g1FYGn/F8n1LWTwNxCEzd6IfqTwUQcNXgEtmmQ6DlRrC1hrSrBnCZPokRrDHjw==}
     dev: true
+
+  /undici@7.16.0:
+    resolution: {integrity: sha512-QEg3HPMll0o3t2ourKwOeUAZ159Kn9mx5pnzHRQO8+Wixmh88YdZRiIwat0iNzNNXn0yoEtXJqFpyW7eM8BV7g==}
+    engines: {node: '>=20.18.1'}
+    dev: false
 
   /unrs-resolver@1.7.2:
     resolution: {integrity: sha512-BBKpaylOW8KbHsu378Zky/dGh4ckT/4NW/0SHRABdqRLcQJ2dAOjDo9g97p04sWflm0kqPqpUatxReNV/dqI5A==}

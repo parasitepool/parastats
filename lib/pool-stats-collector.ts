@@ -1,5 +1,51 @@
 import cron from 'node-cron';
 import { getDb } from './db';
+import { fetch } from './http-client';
+
+/**
+ * Custom error class for HTTP errors with status codes
+ */
+class HttpError extends Error {
+  constructor(
+    public status: number,
+    message: string
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
+/**
+ * Check if an error is retryable based on HTTP status code or error type
+ *
+ * Non-retryable errors (fail immediately):
+ * - 4xx client errors (400, 401, 403, 404, 409, 422, etc.) - won't change on retry
+ *
+ * Retryable errors (should retry with backoff):
+ * - 429 Too Many Requests - rate limiting
+ * - 5xx server errors (500, 502, 503, 504) - temporary server issues
+ * - Network errors (connection refused, timeout, DNS failures)
+ */
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof HttpError) {
+    const status = error.status;
+
+    // Rate limiting - should retry with backoff
+    if (status === 429) return true;
+
+    // Server errors - temporary issues, should retry
+    if (status >= 500 && status < 600) return true;
+
+    // Client errors - permanent failures, don't retry
+    if (status >= 400 && status < 500) return false;
+
+    // Shouldn't reach here, but default to retryable for unknown status codes
+    return true;
+  }
+
+  // Network errors and other non-HTTP errors - should retry
+  return true;
+}
 
 interface StatsData {
   runtime: number;
@@ -43,7 +89,7 @@ let isUserCollectorRunning = false;
 // Configuration constants
 const CONFIG = {
   MAX_FAILED_ATTEMPTS: parseInt(process.env.MAX_FAILED_ATTEMPTS || '10'),
-  BATCH_SIZE: parseInt(process.env.USER_BATCH_SIZE || '50'), // Process users in batches (concurrent API requests)
+  BATCH_SIZE: parseInt(process.env.USER_BATCH_SIZE || '200'), // Process users in batches (concurrent API requests)
   FAILED_USER_BACKOFF_MINUTES: parseInt(process.env.FAILED_USER_BACKOFF_MINUTES || '2'), // Don't retry failed users for 2 minutes
   AUTO_DISCOVER_USERS: process.env.AUTO_DISCOVER_USERS !== 'false', // Enable automatic user discovery (default: true)
   AUTO_DISCOVER_BATCH_LIMIT: parseInt(process.env.AUTO_DISCOVER_BATCH_LIMIT || '100'), // Max new users to add per cycle
@@ -57,6 +103,7 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Retry helper function with backoff and jitter
+ * Intelligently skips retries for non-retryable errors (4xx client errors)
  */
 async function withRetry<T>(
   operation: () => Promise<T>,
@@ -71,6 +118,18 @@ async function withRetry<T>(
       return await operation();
     } catch (error) {
       lastError = error;
+
+      // Check if error is retryable before attempting retry
+      const retryable = isRetryableError(error);
+
+      if (!retryable) {
+        // Non-retryable error (e.g., 404, 400, 403) - fail immediately
+        const contextMsg = context ? ` [${context}]` : '';
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.log(`Non-retryable error${contextMsg} - ${errorMsg}`);
+        throw error;
+      }
+
       if (attempt < maxRetries) {
         const backoffDelay = baseDelay + (attempt * baseDelay);
         // Add jitter: randomize delay between 50% and 150% of backoff delay
@@ -156,10 +215,15 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
             const body = await res.text();
             if (body) errorDetail += `: ${body}`;
           } catch {}
-          throw new Error(`HTTP ${res.status} ${errorDetail}`);
+          // Throw HttpError with status code so retry logic can determine if it's retryable
+          throw new HttpError(res.status, `HTTP ${res.status} ${errorDetail}`);
         }
         return res;
       } catch (error) {
+        // Re-throw HttpError as-is to preserve status code
+        if (error instanceof HttpError) {
+          throw error;
+        }
         // Re-throw with more context if it's a network error
         if (error instanceof Error && error.message === 'fetch failed') {
           throw new Error(`Network error: ${error.message} (${error.cause || 'unknown cause'})`);
@@ -302,7 +366,7 @@ export async function collectAllUserStats() {
 
         const response = await fetch(`${apiUrl}/users`, { headers });
         if (!response.ok) {
-          throw new Error(`Failed to fetch users: ${response.statusText}`);
+          throw new HttpError(response.status, `Failed to fetch users: ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -501,6 +565,9 @@ export async function collectPoolStats() {
       const response = await fetch(`${apiUrl}/pool/pool.status`, {
         headers,
       });
+      if (!response.ok) {
+        throw new HttpError(response.status, `Failed to fetch pool stats: ${response.statusText}`);
+      }
       return response.text();
     }, 4, 500, 'GET /pool/pool.status');
     
