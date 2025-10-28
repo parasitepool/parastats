@@ -85,6 +85,11 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_monitored_users_address ON monitored_users(address)
   `);
 
+  // Create index on is_active for efficient filtering during collection
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_monitored_users_active ON monitored_users(is_active)
+  `);
+
   // Create user stats history table
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_stats_history (
