@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import UserAddressHelp from '../../components/UserAddressHelp';
 import HashrateChart from '../../components/HashrateChart';
+import LightningBalance from '../../components/LightningBalance';
+import LightningBalanceDebug from '../../components/LightningBalanceDebug';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
@@ -283,6 +285,16 @@ export default function UserDashboard() {
         </div>
       </div>
 
+      {/* DEBUG COMPONENT - Remove this after testing! */}
+      <div className="w-full mb-6">
+        <LightningBalanceDebug />
+      </div>
+
+      {/* Lightning Balance - ACTUAL COMPONENT */}
+      <div className="w-full mb-6">
+        <LightningBalance userAddress={userId} />
+      </div>
+
       {/* Hashrate Chart */}
       <div className="w-full mb-6">
         <HashrateChart
@@ -384,4 +396,4 @@ export default function UserDashboard() {
       </div>
     </main>
   );
-} 
+}
