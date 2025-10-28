@@ -17,6 +17,7 @@ A mining pool frontend for parasite
 - **Styling**: TailwindCSS 4.1
 - **Database**: SQLite (via better-sqlite3)
 - **Charts**: ECharts 5.6
+- **HTTP Client**: Undici with HTTP/2 support for optimized API requests
 - **Bitcoin Integration**: @mempool/mempool.js
 
 ## Getting Started
@@ -78,6 +79,8 @@ The stats collector can be configured using environment variables:
 - `USER_BATCH_SIZE` - Number of users to process in parallel (default: `500`)
 - `FAILED_USER_BACKOFF_MINUTES` - Minutes to wait before retrying failed users (default: `2`)
 - `AUTO_DISCOVER_USERS` - Automatically discover and monitor new miners during stats collection (default: `true`; set to `false` to disable)
+- `HTTP2_MAX_CONNECTIONS` - Maximum HTTP/2 connections per origin for connection pooling (default: `10`)
+- `HTTP2_CLIENT_TTL` - Connection time-to-live in milliseconds (default: `60000`)
 
 ### Examples
 
