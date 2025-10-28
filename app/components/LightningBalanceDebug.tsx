@@ -187,7 +187,7 @@ export default function LightningBalanceDebug() {
             <li>Documentation says Step 1 should be GET</li>
             <li>Server returns 405 (Method Not Allowed) for GET</li>
             <li>Server only accepts POST and OPTIONS</li>
-            <li>POST with various field combinations returns "Missing required fields"</li>
+            <li>POST with various field combinations returns &quot;Missing required fields&quot;</li>
             <li>Need clarification on correct token and required fields</li>
           </ul>
           <h4 className="font-bold mb-2">Test Instructions:</h4>
