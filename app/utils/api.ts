@@ -161,3 +161,21 @@ export async function getHistoricalUserStats(address: string, period: string = "
     throw error;
   }
 }
+
+// Toggle user visibility API
+export async function toggleUserVisibility(address: string): Promise<{ isPublic: boolean }> {
+  try {
+    return await withRetry(async () => {
+      const response = await fetch(`/api/user/${address}`, {
+        method: 'PATCH',
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    });
+  } catch (error) {
+    console.error(`Error toggling visibility for user ${address}:`, error);
+    throw error;
+  }
+}

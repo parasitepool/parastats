@@ -37,6 +37,7 @@ export interface ProcessedUserData {
   lastSubmission: string;
   bestDifficulty: string;
   uptime: string;
+  isPublic: boolean;
   workerData: ProcessedWorkerData[];
 }
 
@@ -79,7 +80,13 @@ export async function GET(
     }
     
     const userData: UserData = await response.json();
-    
+
+    // Fetch isPublic from database
+    // We don't store live data in db, but we do store user preferences like is_public
+    const { getDb } = await import('@/lib/db');
+    const db = getDb();
+    const dbUser = db.prepare('SELECT is_public FROM monitored_users WHERE address = ?').get(address) as { is_public: number } | undefined;
+
     // Process the user data
     const processedData: ProcessedUserData = {
       hashrate: parseHashrate(userData.hashrate5m),
@@ -87,9 +94,10 @@ export async function GET(
       lastSubmission: formatRelativeTime(userData.lastshare),
       bestDifficulty: formatDifficulty(userData.bestever),
       uptime: calculateUptime(userData.authorised),
+      isPublic: dbUser ? Boolean(dbUser.is_public) : true, // Default to public if not in DB
       workerData: processWorkerData(userData.worker),
     };
-    
+
     return NextResponse.json(processedData);
   } catch (error) {
     console.error("Error fetching user data:", error);
@@ -119,9 +127,43 @@ function processWorkerData(workers: WorkerData[]): ProcessedWorkerData[] {
 function calculateUptime(authorisedTimestamp: number): string {
   const now = Math.floor(Date.now() / 1000); // Current time in Unix timestamp
   const uptimeSeconds = now - authorisedTimestamp;
-  
+
   const days = Math.floor(uptimeSeconds / (24 * 60 * 60));
   const hours = Math.floor((uptimeSeconds % (24 * 60 * 60)) / (60 * 60));
-  
+
   return `${days}d ${hours}h`;
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ address: string }> }
+) {
+  try {
+    const { address } = await params;
+    const { getDb } = await import('@/lib/db');
+    const db = getDb();
+
+    // Get current is_public value
+    const user = db.prepare('SELECT is_public FROM monitored_users WHERE address = ?').get(address) as { is_public: number } | undefined;
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
+    // Toggle the is_public value
+    const newValue = user.is_public ? 0 : 1;
+    db.prepare('UPDATE monitored_users SET is_public = ?, updated_at = ? WHERE address = ?')
+      .run(newValue, Math.floor(Date.now() / 1000), address);
+
+    return NextResponse.json({ isPublic: Boolean(newValue) });
+  } catch (error) {
+    console.error('Error toggling user visibility:', error);
+    return NextResponse.json(
+      { error: 'Failed to toggle visibility' },
+      { status: 500 }
+    );
+  }
 } 
