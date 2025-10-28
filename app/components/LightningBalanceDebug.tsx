@@ -47,14 +47,20 @@ export default function LightningBalanceDebug() {
     try {
       const url = `${API_BASE_URL}/login/string:${address}/auth_sign/${API_TOKEN}`;
       console.log('Fetching nonce from:', url);
+      console.log('NOTE: Docs say GET, but server returns 405 for GET. Trying POST...');
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
+      // Server returns 405 for GET, trying POST
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          address: address,
+          email: '',
+          public_key: ''
+        }),
         signal: controller.signal
       });
 
@@ -66,13 +72,15 @@ export default function LightningBalanceDebug() {
         console.log('Full response:', data);
       } else {
         const errorText = await response.text();
-        setTestResult(`❌ API returned error (${response.status}): ${errorText}`);
+        setTestResult(`❌ API returned error (${response.status}): ${errorText}\n\nNOTE: Waiting for BitBit devs to clarify correct endpoint format.`);
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
         setTestResult('❌ TIMEOUT: API took too long to respond (>10s). Check if api.bitbit.bot is accessible.');
-      } else {
+      } else if (error instanceof Error) {
         setTestResult(`❌ ERROR: ${error.message}`);
+      } else {
+        setTestResult('❌ ERROR: Unknown error occurred');
       }
       console.error('Full error:', error);
     } finally {
@@ -97,11 +105,13 @@ export default function LightningBalanceDebug() {
 
       clearTimeout(timeoutId);
       setTestResult(`✅ BitBit API is reachable (Status: ${response.status})`);
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
         setTestResult('❌ TIMEOUT: Cannot reach api.bitbit.bot. Network or CORS issue?');
-      } else {
+      } else if (error instanceof Error) {
         setTestResult(`❌ Cannot reach BitBit API: ${error.message}`);
+      } else {
+        setTestResult('❌ Cannot reach BitBit API: Unknown error');
       }
       console.error('Full error:', error);
     } finally {
@@ -172,16 +182,21 @@ export default function LightningBalanceDebug() {
 
         {/* Instructions */}
         <div className="bg-yellow-100 text-yellow-900 p-4 border border-yellow-400 text-sm">
-          <h4 className="font-bold mb-2">Instructions:</h4>
+          <h4 className="font-bold mb-2">⚠️ KNOWN ISSUE - Waiting for BitBit Devs:</h4>
+          <ul className="list-disc list-inside space-y-1 mb-3">
+            <li>Documentation says Step 1 should be GET</li>
+            <li>Server returns 405 (Method Not Allowed) for GET</li>
+            <li>Server only accepts POST and OPTIONS</li>
+            <li>POST with various field combinations returns "Missing required fields"</li>
+            <li>Need clarification on correct token and required fields</li>
+          </ul>
+          <h4 className="font-bold mb-2">Test Instructions:</h4>
           <ol className="list-decimal list-inside space-y-1">
             <li>Run Test 1 to verify your API token is set</li>
             <li>Run Test 2 to verify your wallet is connected</li>
             <li>Run Test 3 to check if BitBit API is reachable</li>
-            <li>Run Test 4 to test the full authentication flow</li>
+            <li>Run Test 4 to test with current best guess (will likely fail until devs respond)</li>
           </ol>
-          <p className="mt-2 font-semibold text-red-600">
-            NOTE: The API documentation says to use GET, but the server requires POST!
-          </p>
           <p className="mt-2 font-semibold">
             Check your browser console (F12) for detailed error messages!
           </p>
