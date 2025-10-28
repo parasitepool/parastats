@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import UserAddressHelp from '../../components/UserAddressHelp';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -17,6 +17,7 @@ import { parseHashrate } from '@/app/utils/formatters';
 export default function UserDashboard() {
   const params = useParams();
   const userId = params.id as string;
+  // const { address: connectedAddress } = useWallet();
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
@@ -24,6 +25,7 @@ export default function UserDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [hashrate, setHashrate] = useState<Hashrate>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
 
   // Function to check if the address is valid and fetch user data
   useEffect(() => {
@@ -113,6 +115,26 @@ export default function UserDashboard() {
       clearInterval(intervalId);
     };
   }, [userId, isValidAddress]);
+
+  // Handle visibility toggle
+  const handleToggleVisibility = async () => {
+    if (!userData) return;
+
+    setIsTogglingVisibility(true);
+    try {
+      const result = await toggleUserVisibility(userId);
+      setUserData({ ...userData, isPublic: result.isPublic });
+    } catch (error) {
+      console.error('Failed to toggle visibility:', error);
+      alert('Failed to toggle visibility. Please try again.');
+    } finally {
+      setIsTogglingVisibility(false);
+    }
+  };
+
+  // TODO: Left for future - determine if the current user is the owner of the dashboard
+  // Check if current user is the owner
+  // const isOwner = connectedAddress && connectedAddress === userId;
 
   // Stat cards configuration
   const statCards = [
@@ -210,8 +232,37 @@ export default function UserDashboard() {
   return (
     <main className="flex min-h-screen flex-col items-start py-8">
       <div className="w-full mb-2">
-        <h1 className="text-2xl lg:text-3xl font-bold mb-4 wrap-anywhere text-ellipsis line-clamp-1">{userId}</h1>
-        
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl lg:text-3xl font-bold wrap-anywhere text-ellipsis line-clamp-1">{userId}</h1>
+
+          {/* Visibility Toggle Button */}
+          {userData && (
+            <button
+              onClick={handleToggleVisibility}
+              disabled={isTogglingVisibility}
+              className="flex items-center gap-2 px-4 py-2 bg-background border border-border hover:bg-accent-1/10 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors"
+            >
+              {userData.isPublic ? (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm font-medium">Public</span>
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                    <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                  </svg>
+                  <span className="text-sm font-medium">Private</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
         {/* Stats Cards */}
         <div className="w-full">
           <div className="flex flex-wrap -mx-2">
