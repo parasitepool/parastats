@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { request } from '@sats-connect/core';
 import { LightningIcon } from './icons';
+import { useWallet } from '../hooks/useWallet';
 
 interface LightningBalanceProps {
   userAddress: string;
@@ -27,11 +28,11 @@ interface BalanceResponse {
   balance: number;
 }
 
-// Replace with your actual API token from environment variable
-const API_TOKEN = process.env.NEXT_PUBLIC_BITBIT_API_TOKEN || 'TOKEN_REDACTED';
+const IDENTIFIER = "de01d4ad-c24a-46fb-a5e8-755f3b7b7ab5";
 const API_BASE_URL = 'https://api.bitbit.bot';
 
 export default function LightningBalance({ userAddress, className = '' }: LightningBalanceProps) {
+  const { addressPublicKey } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -145,18 +146,18 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     // Try POST first since GET returns 405
     // TODO: Update this once BitBit devs clarify the correct endpoint
     const response = await fetch(
-      `${API_BASE_URL}/login/string:${userAddress}/auth_sign/${API_TOKEN}`,
+      `${API_BASE_URL}/login/${userAddress}/auth_nonce/${IDENTIFIER}`,
       {
-        method: 'POST',
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json'
         },
         // Server says "Missing required fields" - need BitBit devs to clarify what's needed
-        body: JSON.stringify({
-          address: userAddress,
-          email: '',
-          public_key: ''
-        })
+        // body: JSON.stringify({
+          // address: userAddress,
+          // email: '',
+          // public_key: ''
+        // })
       }
     );
 
@@ -205,7 +206,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     nonce: string
   ): Promise<string> => {
     const response = await fetch(
-      `${API_BASE_URL}/login/string:${userAddress}/auth_sign/${API_TOKEN}`,
+      `${API_BASE_URL}/login/${userAddress}/auth_sign/${IDENTIFIER}`,
       {
         method: 'POST',
         headers: {
@@ -215,7 +216,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
           signature,
           nonce,
           address: userAddress,
-          public_key: '', // May not be needed or can be extracted from wallet
+          public_key: addressPublicKey,
           email: ''
         })
       }

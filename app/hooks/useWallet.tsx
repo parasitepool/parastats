@@ -5,6 +5,7 @@ import { AddressPurpose, request } from '@sats-connect/core';
 
 interface WalletContextType {
   address: string | null;
+  addressPublicKey: string | null;
   isConnected: boolean;
   connect: () => Promise<string | null>;
   disconnect: () => void;
@@ -13,16 +14,20 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 const WALLET_ADDRESS_KEY = 'parasite_wallet_address';
+const WALLET_ADDRESS_PUBLIC_KEY = 'parasite_wallet_address_public_key';
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
+  const [addressPublicKey, setAddressPublicKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   // Restore wallet connection from localStorage on mount
   useEffect(() => {
     const savedAddress = localStorage.getItem(WALLET_ADDRESS_KEY);
+    const savePublicKey = localStorage.getItem(WALLET_ADDRESS_PUBLIC_KEY);
     if (savedAddress) {
       setAddress(savedAddress);
+      setAddressPublicKey(savePublicKey);
       setIsConnected(true);
     }
   }, []);
@@ -61,11 +66,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const paymentAddress = response.result.find(
           (addr) => addr.purpose === AddressPurpose.Payment
         );
+
         if (paymentAddress) {
           setAddress(paymentAddress.address);
+          setAddressPublicKey(paymentAddress.publicKey);
           setIsConnected(true);
           // Save to localStorage for persistence
           localStorage.setItem(WALLET_ADDRESS_KEY, paymentAddress.address);
+          localStorage.setItem(WALLET_ADDRESS_PUBLIC_KEY, paymentAddress.publicKey);
           // Add address to monitoring when connecting
           await addAddressToMonitoring(paymentAddress.address);
           // Return address for further use if needed
@@ -84,10 +92,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsConnected(false);
     // Clear localStorage on disconnect
     localStorage.removeItem(WALLET_ADDRESS_KEY);
+    localStorage.removeItem(WALLET_ADDRESS_PUBLIC_KEY);
   }, []);
 
   return (
-    <WalletContext.Provider value={{ address, isConnected, connect, disconnect }}>
+    <WalletContext.Provider value={{ address, addressPublicKey, isConnected, connect, disconnect }}>
       {children}
     </WalletContext.Provider>
   );
