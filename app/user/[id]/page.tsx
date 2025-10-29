@@ -284,9 +284,8 @@ export default function UserDashboard() {
         </div>
       </div>
 
-      {/* Lightning Balance - ACTUAL COMPONENT */}
       <div className="w-full mb-6">
-        <LightningBalance userAddress={userId} />
+        <LightningBalance/>
       </div>
 
       {/* Hashrate Chart */}

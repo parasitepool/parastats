@@ -6,7 +6,6 @@ import { LightningIcon } from './icons';
 import { useWallet } from '../hooks/useWallet';
 
 interface LightningBalanceProps {
-  userAddress: string;
   className?: string;
 }
 
@@ -31,8 +30,8 @@ interface BalanceResponse {
 const IDENTIFIER = "de01d4ad-c24a-46fb-a5e8-755f3b7b7ab5";
 const API_BASE_URL = 'https://api.bitbit.bot';
 
-export default function LightningBalance({ userAddress, className = '' }: LightningBalanceProps) {
-  const { addressPublicKey } = useWallet();
+export default function LightningBalance({ className = '' }: LightningBalanceProps) {
+  const { address, addressPublicKey } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -42,8 +41,8 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
 
   const checkStoredAuth = useCallback(async () => {
     const storedAuth = getStoredAuth();
-    
-    if (storedAuth && storedAuth.address === userAddress) {
+
+    if (storedAuth && storedAuth.address === address) {
       try {
         const isValid = await validateToken(storedAuth.token);
         if (isValid) {
@@ -56,7 +55,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
         clearStoredAuth();
       }
     }
-  }, [userAddress]);
+  }, [address]);
 
   useEffect(() => {
     checkStoredAuth();
@@ -64,7 +63,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
 
   const getStoredAuth = (): AuthToken | null => {
     if (typeof window === 'undefined') return null;
-    
+
     try {
       const stored = localStorage.getItem('lightning_auth');
       if (stored) {
@@ -72,7 +71,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
         const now = Date.now();
         const tokenAge = now - auth.timestamp;
         const twentyFourHours = 24 * 60 * 60 * 1000;
-        
+
         if (tokenAge < twentyFourHours) {
           return auth;
         }
@@ -80,19 +79,19 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     } catch (err) {
       console.error('Error reading stored auth:', err);
     }
-    
+
     return null;
   };
 
   const storeAuth = (token: string, address: string) => {
     if (typeof window === 'undefined') return;
-    
+
     const auth: AuthToken = {
       token,
       address,
       timestamp: Date.now()
     };
-    
+
     localStorage.setItem('lightning_auth', JSON.stringify(auth));
   };
 
@@ -111,7 +110,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       return response.ok;
     } catch {
       return false;
@@ -120,7 +119,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
 
   const requestNonce = async (): Promise<string> => {
     const response = await fetch(
-      `${API_BASE_URL}/login/${userAddress}/auth_nonce/${IDENTIFIER}`,
+      `${API_BASE_URL}/login/${address}/auth_nonce/${IDENTIFIER}`,
       {
         method: 'GET',
         headers: {
@@ -140,7 +139,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
   const signNonce = async (message: string): Promise<string> => {
     try {
       const response = await request('signMessage', {
-        address: userAddress,
+        address: address!,
         message: message
       });
 
@@ -165,7 +164,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     nonce: string
   ): Promise<string> => {
     const response = await fetch(
-      `${API_BASE_URL}/login/${userAddress}/auth_sign/${IDENTIFIER}`,
+      `${API_BASE_URL}/login/${address}/auth_sign/${IDENTIFIER}`,
       {
         method: 'POST',
         headers: {
@@ -174,7 +173,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
         body: JSON.stringify({
           signature,
           nonce,
-          address: userAddress,
+          address,
           public_key: addressPublicKey,
           email: ''
         })
@@ -233,7 +232,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
 
       const token = await loginWithSignature(signature, nonce);
 
-      storeAuth(token, userAddress);
+      storeAuth(token, address!);
 
       await fetchUserData(token);
 
@@ -249,7 +248,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
 
   const handleRefresh = async () => {
     const storedAuth = getStoredAuth();
-    
+
     if (!storedAuth) {
       setError('No authentication found. Please connect your wallet.');
       return;
@@ -283,7 +282,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
           </div>
           <h3 className="text-lg font-semibold">Lightning Balance</h3>
         </div>
-        
+
         {isConnected && (
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -299,7 +298,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
           <p className="text-sm text-foreground/70">
             Connect your Xverse wallet to view your Lightning balance
           </p>
-          
+
           <button
             onClick={handleConnect}
             disabled={isLoading}
@@ -331,7 +330,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
                   <span className="font-medium">{walletInfo.username}</span>
                 </div>
               )}
-              
+
               {walletInfo.lightning_ln_url && (
                 <div className="flex flex-col">
                   <span className="text-foreground/70 mb-1">Lightning URL:</span>
@@ -351,7 +350,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
             >
               {isLoading ? 'Refreshing...' : 'Refresh'}
             </button>
-            
+
             <button
               onClick={handleDisconnect}
               className="flex-1 bg-secondary text-secondary-foreground px-3 py-2 hover:bg-secondary/80 transition-colors text-sm font-medium"
