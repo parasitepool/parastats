@@ -40,21 +40,16 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
-  /**
-   * Check if we have a valid stored authentication token
-   */
   const checkStoredAuth = useCallback(async () => {
     const storedAuth = getStoredAuth();
     
     if (storedAuth && storedAuth.address === userAddress) {
-      // Check if token is still valid by trying to fetch balance
       try {
         const isValid = await validateToken(storedAuth.token);
         if (isValid) {
           setIsConnected(true);
           await fetchUserData(storedAuth.token);
         } else {
-          // Token expired or invalid, clear it
           clearStoredAuth();
         }
       } catch {
@@ -63,14 +58,10 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     }
   }, [userAddress]);
 
-  // Check if we have a valid stored token on mount
   useEffect(() => {
     checkStoredAuth();
   }, [checkStoredAuth]);
 
-  /**
-   * Get stored authentication from localStorage
-   */
   const getStoredAuth = (): AuthToken | null => {
     if (typeof window === 'undefined') return null;
     
@@ -78,7 +69,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
       const stored = localStorage.getItem('lightning_auth');
       if (stored) {
         const auth = JSON.parse(stored) as AuthToken;
-        // Check if token is less than 24 hours old
         const now = Date.now();
         const tokenAge = now - auth.timestamp;
         const twentyFourHours = 24 * 60 * 60 * 1000;
@@ -94,9 +84,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     return null;
   };
 
-  /**
-   * Store authentication in localStorage
-   */
   const storeAuth = (token: string, address: string) => {
     if (typeof window === 'undefined') return;
     
@@ -109,9 +96,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     localStorage.setItem('lightning_auth', JSON.stringify(auth));
   };
 
-  /**
-   * Clear stored authentication
-   */
   const clearStoredAuth = () => {
     if (typeof window === 'undefined') return;
     localStorage.removeItem('lightning_auth');
@@ -120,9 +104,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     setWalletInfo(null);
   };
 
-  /**
-   * Validate token by attempting to fetch balance
-   */
   const validateToken = async (token: string): Promise<boolean> => {
     try {
       const response = await fetch(`${API_BASE_URL}/wallet_user/balance`, {
@@ -137,14 +118,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     }
   };
 
-  /**
-   * Step 1: Request a nonce from the API
-   * NOTE: Documentation says GET, but server returns 405 for GET and only accepts POST
-   * Waiting for clarification from BitBit devs on correct method and required fields
-   */
   const requestNonce = async (): Promise<string> => {
-    // Try POST first since GET returns 405
-    // TODO: Update this once BitBit devs clarify the correct endpoint
     const response = await fetch(
       `${API_BASE_URL}/login/${userAddress}/auth_nonce/${IDENTIFIER}`,
       {
@@ -152,12 +126,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
         headers: {
           'Content-Type': 'application/json'
         },
-        // Server says "Missing required fields" - need BitBit devs to clarify what's needed
-        // body: JSON.stringify({
-          // address: userAddress,
-          // email: '',
-          // public_key: ''
-        // })
       }
     );
 
@@ -169,10 +137,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     return data.nonce;
   };
 
-  /**
-   * Step 2: Sign the nonce using @sats-connect/core
-   * Using the same pattern as your useWallet.tsx
-   */
   const signNonce = async (message: string): Promise<string> => {
     try {
       const response = await request('signMessage', {
@@ -181,8 +145,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
       });
 
       if (response.status === 'success') {
-        // Extract signature from response
-        // response.result can be either a string or an object with signature property
         if (typeof response.result === 'string') {
           return response.result;
         } else if (response.result && typeof response.result === 'object' && 'signature' in response.result) {
@@ -198,9 +160,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     }
   };
 
-  /**
-   * Step 3: Login with the signature
-   */
   const loginWithSignature = async (
     signature: string,
     nonce: string
@@ -231,12 +190,8 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     return data.token;
   };
 
-  /**
-   * Step 5: Fetch wallet info and balance
-   */
   const fetchUserData = async (token: string) => {
     try {
-      // Fetch user info
       const userResponse = await fetch(`${API_BASE_URL}/wallet_user`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -250,7 +205,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
       const userData: WalletInfo = await userResponse.json();
       setWalletInfo(userData);
 
-      // Fetch balance
       const balanceResponse = await fetch(`${API_BASE_URL}/wallet_user/balance`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -268,27 +222,19 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     }
   };
 
-  /**
-   * Main connection flow - Steps 1-5
-   */
   const handleConnect = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Step 1: Request nonce
       const nonce = await requestNonce();
 
-      // Step 2: Sign the nonce using @sats-connect/core
       const signature = await signNonce(nonce);
 
-      // Step 3: Login with signature
       const token = await loginWithSignature(signature, nonce);
 
-      // Step 4: Store the token
       storeAuth(token, userAddress);
 
-      // Step 5: Fetch user data
       await fetchUserData(token);
 
       setIsConnected(true);
@@ -301,9 +247,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     }
   };
 
-  /**
-   * Refresh balance
-   */
   const handleRefresh = async () => {
     const storedAuth = getStoredAuth();
     
@@ -319,7 +262,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
       await fetchUserData(storedAuth.token);
     } catch (err) {
       console.error('Refresh error:', err);
-      // Token might be invalid, clear it
       clearStoredAuth();
       setError('Session expired. Please reconnect your wallet.');
     } finally {
@@ -327,9 +269,6 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     }
   };
 
-  /**
-   * Disconnect wallet
-   */
   const handleDisconnect = () => {
     clearStoredAuth();
     setError(null);
