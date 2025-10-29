@@ -14,11 +14,12 @@ import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty'
 import SortableTable from '../../components/SortableTable';
 import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/utils/formatters';
 import { parseHashrate } from '@/app/utils/formatters';
+import { useWallet } from '@/app/hooks/useWallet';
 
 export default function UserDashboard() {
   const params = useParams();
   const userId = params.id as string;
-  // const { address: connectedAddress } = useWallet();
+  const { isConnected } = useWallet();
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
@@ -284,9 +285,12 @@ export default function UserDashboard() {
         </div>
       </div>
 
-      <div className="w-full mb-6">
-        <LightningBalance/>
-      </div>
+      {/* Lightning Balance - ACTUAL COMPONENT */}
+      {isConnected && (
+        <div className="w-full mb-6">
+          <LightningBalance userAddress={userId} />
+        </div>
+      )}
 
       {/* Hashrate Chart */}
       <div className="w-full mb-6">
