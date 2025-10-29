@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { request } from '@sats-connect/core';
-import { LightningIcon } from './icons';
-import { useWallet } from '../hooks/useWallet';
+import { LightningIcon } from '@/app/components/icons';
+import { useWallet } from '@/app/hooks/useWallet';
 
 interface LightningBalanceProps {
+  userAddress: string;
   className?: string;
 }
 
@@ -30,40 +31,19 @@ interface BalanceResponse {
 const IDENTIFIER = "de01d4ad-c24a-46fb-a5e8-755f3b7b7ab5";
 const API_BASE_URL = 'https://api.bitbit.bot';
 
-export default function LightningBalance({ className = '' }: LightningBalanceProps) {
-  const { address, addressPublicKey } = useWallet();
+export default function LightningBalance({ userAddress, className = '' }: LightningBalanceProps) {
+  const { addressPublicKey, disconnect: walletDisconnect } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const hasInitiatedAuth = useRef<boolean>(false);
 
-  const checkStoredAuth = useCallback(async () => {
-    const storedAuth = getStoredAuth();
-
-    if (storedAuth && storedAuth.address === address) {
-      try {
-        const isValid = await validateToken(storedAuth.token);
-        if (isValid) {
-          setIsConnected(true);
-          await fetchUserData(storedAuth.token);
-        } else {
-          clearStoredAuth();
-        }
-      } catch {
-        clearStoredAuth();
-      }
-    }
-  }, [address]);
-
-  useEffect(() => {
-    checkStoredAuth();
-  }, [checkStoredAuth]);
-
-  const getStoredAuth = (): AuthToken | null => {
+  const getStoredAuth = useCallback((): AuthToken | null => {
     if (typeof window === 'undefined') return null;
-
+    
     try {
       const stored = localStorage.getItem('lightning_auth');
       if (stored) {
@@ -71,7 +51,7 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
         const now = Date.now();
         const tokenAge = now - auth.timestamp;
         const twentyFourHours = 24 * 60 * 60 * 1000;
-
+        
         if (tokenAge < twentyFourHours) {
           return auth;
         }
@@ -79,47 +59,48 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
     } catch (err) {
       console.error('Error reading stored auth:', err);
     }
-
+    
     return null;
-  };
+  }, []);
 
-  const storeAuth = (token: string, address: string) => {
+  const storeAuth = useCallback((token: string, address: string) => {
     if (typeof window === 'undefined') return;
-
+    
     const auth: AuthToken = {
       token,
       address,
       timestamp: Date.now()
     };
-
+    
     localStorage.setItem('lightning_auth', JSON.stringify(auth));
-  };
+  }, []);
 
-  const clearStoredAuth = () => {
+  const clearStoredAuth = useCallback(() => {
     if (typeof window === 'undefined') return;
     localStorage.removeItem('lightning_auth');
     setIsConnected(false);
     setBalance(null);
     setWalletInfo(null);
-  };
+    hasInitiatedAuth.current = false;
+  }, []);
 
-  const validateToken = async (token: string): Promise<boolean> => {
+  const validateToken = useCallback(async (token: string): Promise<boolean> => {
     try {
       const response = await fetch(`${API_BASE_URL}/wallet_user/balance`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-
+      
       return response.ok;
     } catch {
       return false;
     }
-  };
+  }, []);
 
-  const requestNonce = async (): Promise<string> => {
+  const requestNonce = useCallback(async (): Promise<string> => {
     const response = await fetch(
-      `${API_BASE_URL}/login/${address}/auth_nonce/${IDENTIFIER}`,
+      `${API_BASE_URL}/login/${userAddress}/auth_nonce/${IDENTIFIER}`,
       {
         method: 'GET',
         headers: {
@@ -134,12 +115,12 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
 
     const data = await response.json();
     return data.nonce;
-  };
+  }, [userAddress]);
 
-  const signNonce = async (message: string): Promise<string> => {
+  const signNonce = useCallback(async (message: string): Promise<string> => {
     try {
       const response = await request('signMessage', {
-        address: address!,
+        address: userAddress,
         message: message
       });
 
@@ -157,14 +138,14 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
     } catch {
       throw new Error('Failed to sign message');
     }
-  };
+  }, [userAddress]);
 
-  const loginWithSignature = async (
+  const loginWithSignature = useCallback(async (
     signature: string,
     nonce: string
   ): Promise<string> => {
     const response = await fetch(
-      `${API_BASE_URL}/login/${address}/auth_sign/${IDENTIFIER}`,
+      `${API_BASE_URL}/login/${userAddress}/auth_sign/${IDENTIFIER}`,
       {
         method: 'POST',
         headers: {
@@ -173,7 +154,7 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
         body: JSON.stringify({
           signature,
           nonce,
-          address,
+          address: userAddress,
           public_key: addressPublicKey,
           email: ''
         })
@@ -187,9 +168,9 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
 
     const data = await response.json();
     return data.token;
-  };
+  }, [userAddress, addressPublicKey]);
 
-  const fetchUserData = async (token: string) => {
+  const fetchUserData = useCallback(async (token: string) => {
     try {
       const userResponse = await fetch(`${API_BASE_URL}/wallet_user`, {
         headers: {
@@ -219,9 +200,14 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
     } catch (err) {
       throw err;
     }
-  };
+  }, []);
 
-  const handleConnect = async () => {
+  const handleConnect = useCallback(async () => {
+    if (isLoading || isConnected || hasInitiatedAuth.current) {
+      return;
+    }
+
+    hasInitiatedAuth.current = true;
     setIsLoading(true);
     setError(null);
 
@@ -232,7 +218,7 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
 
       const token = await loginWithSignature(signature, nonce);
 
-      storeAuth(token, address!);
+      storeAuth(token, userAddress);
 
       await fetchUserData(token);
 
@@ -241,14 +227,46 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
       console.error('Connection error:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect wallet');
       setIsConnected(false);
+      hasInitiatedAuth.current = false;
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userAddress, isLoading, isConnected, requestNonce, signNonce, loginWithSignature, storeAuth, fetchUserData]);
 
-  const handleRefresh = async () => {
+  const checkStoredAuth = useCallback(async () => {
+    if (isLoading || isConnected || hasInitiatedAuth.current) {
+      return;
+    }
+
     const storedAuth = getStoredAuth();
+    
+    if (storedAuth && storedAuth.address === userAddress) {
+      try {
+        const isValid = await validateToken(storedAuth.token);
+        if (isValid) {
+          setIsConnected(true);
+          await fetchUserData(storedAuth.token);
+          hasInitiatedAuth.current = true;
+        } else {
+          clearStoredAuth();
+          await handleConnect();
+        }
+      } catch {
+        clearStoredAuth();
+        await handleConnect();
+      }
+    } else {
+      await handleConnect();
+    }
+  }, [userAddress, handleConnect, isLoading, isConnected, getStoredAuth, validateToken, fetchUserData, clearStoredAuth]);
 
+  useEffect(() => {
+    checkStoredAuth();
+  }, [checkStoredAuth]);
+
+  const handleRefresh = useCallback(async () => {
+    const storedAuth = getStoredAuth();
+    
     if (!storedAuth) {
       setError('No authentication found. Please connect your wallet.');
       return;
@@ -266,12 +284,14 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [getStoredAuth, fetchUserData, clearStoredAuth]);
 
-  const handleDisconnect = () => {
+  const handleDisconnect = useCallback(() => {
     clearStoredAuth();
+    walletDisconnect();
     setError(null);
-  };
+    hasInitiatedAuth.current = false;
+  }, [clearStoredAuth, walletDisconnect]);
 
   return (
     <div className={`bg-background p-4 shadow-md border border-border ${className}`}>
@@ -282,7 +302,7 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
           </div>
           <h3 className="text-lg font-semibold">Lightning Balance</h3>
         </div>
-
+        
         {isConnected && (
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -295,22 +315,23 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
 
       {!isConnected ? (
         <div className="space-y-3">
-          <p className="text-sm text-foreground/70">
-            Connect your Xverse wallet to view your Lightning balance
-          </p>
-
-          <button
-            onClick={handleConnect}
-            disabled={isLoading}
-            className="w-full bg-primary text-primary-foreground px-4 py-2 hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-          >
-            {isLoading ? 'Connecting...' : 'Connect Wallet'}
-          </button>
-
-          {error && (
-            <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
-              {error}
-            </div>
+          {isLoading ? (
+            <>
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
+              </div>
+              <p className="text-sm text-center text-foreground/70">
+                Connecting to Lightning wallet...
+              </p>
+            </>
+          ) : (
+            <>
+              {error && (
+                <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
+                  {error}
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : (
@@ -330,7 +351,7 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
                   <span className="font-medium">{walletInfo.username}</span>
                 </div>
               )}
-
+              
               {walletInfo.lightning_ln_url && (
                 <div className="flex flex-col">
                   <span className="text-foreground/70 mb-1">Lightning URL:</span>
@@ -350,7 +371,7 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
             >
               {isLoading ? 'Refreshing...' : 'Refresh'}
             </button>
-
+            
             <button
               onClick={handleDisconnect}
               className="flex-1 bg-secondary text-secondary-foreground px-3 py-2 hover:bg-secondary/80 transition-colors text-sm font-medium"
