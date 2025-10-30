@@ -205,7 +205,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
       }
 
       try {
-        const res = await fetch(`${apiUrl}/users/${address}`, {
+        const res = await fetch(`${apiUrl}/aggregator/users/${address}`, {
           headers,
         });
         if (!res.ok) {
@@ -364,7 +364,7 @@ export async function collectAllUserStats() {
           headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
         }
 
-        const response = await fetch(`${apiUrl}/users`, { headers });
+        const response = await fetch(`${apiUrl}/aggregator/users`, { headers });
         if (!response.ok) {
           throw new HttpError(response.status, `Failed to fetch users: ${response.statusText}`);
         }
@@ -562,7 +562,7 @@ export async function collectPoolStats() {
         headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
       }
 
-      const response = await fetch(`${apiUrl}/pool/pool.status`, {
+      const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
         headers,
       });
       if (!response.ok) {

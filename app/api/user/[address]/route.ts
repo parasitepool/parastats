@@ -67,7 +67,7 @@ export async function GET(
       headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
     }
 
-    const response = await fetch(`${apiUrl}/users/${address}`, {
+    const response = await fetch(`${apiUrl}/aggregator/users/${address}`, {
       headers,
       next: { revalidate: 10 } // Cache for 10 seconds
     });
