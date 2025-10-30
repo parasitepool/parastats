@@ -27,7 +27,7 @@ export async function GET(
         { status: 400 }
       );
     }
-   
+
     const apiUrl = process.env.API_URL;
     if (!apiUrl) {
       console.error("Failed to fetch user data: No API_URL defined in env");
@@ -43,14 +43,22 @@ export async function GET(
       headers,
       next: { revalidate: 10 } // Cache for 10 seconds
     });
-    
+
     if (!response.ok) {
       return NextResponse.json(
         { error: `Failed to fetch user data: ${response.statusText}` },
         { status: response.status }
       );
     }
-    
+
     const accountData: AccountData = await response.json();
-     
-} 
+
+    return NextResponse.json(accountData);
+  } catch (error) {
+    console.error("Error fetching user account:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch user account" },
+      { status: 500 }
+    );
+  }
+}
