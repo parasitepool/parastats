@@ -30,8 +30,8 @@ export async function GET(
 
     const apiUrl = process.env.API_URL;
     if (!apiUrl) {
-      console.error("Failed to fetch user data: No API_URL defined in env");
-      return NextResponse.json({ error: "Failed to fetch user data" }, { status: 500 });
+      console.error("Failed to fetch user account: No API_URL defined in env");
+      return NextResponse.json({ error: "Failed to fetch user account" }, { status: 500 });
     }
 
     const headers: Record<string, string> = {};
@@ -46,7 +46,7 @@ export async function GET(
 
     if (!response.ok) {
       return NextResponse.json(
-        { error: `Failed to fetch user data: ${response.statusText}` },
+        { error: `Failed to fetch user account: ${response.statusText}` },
         { status: response.status }
       );
     }
