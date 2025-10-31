@@ -30,6 +30,52 @@ interface BalanceResponse {
 
 const IDENTIFIER = "de01d4ad-c24a-46fb-a5e8-755f3b7b7ab5";
 const API_BASE_URL = 'https://api.bitbit.bot';
+const AUTH_STORAGE_KEY = 'lightning_auth';
+const TOKEN_VALIDITY_HOURS = 24;
+
+const authStorage = {
+  load: (): AuthToken | null => {
+    if (typeof window === 'undefined') return null;
+    
+    try {
+      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (!stored) return null;
+      
+      const auth = JSON.parse(stored) as AuthToken;
+      const now = Date.now();
+      const tokenAge = now - auth.timestamp;
+      const validityMs = TOKEN_VALIDITY_HOURS * 60 * 60 * 1000;
+      
+      if (tokenAge < validityMs) {
+        return auth;
+      }
+      
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      return null;
+    } catch (err) {
+      console.error('Error reading stored auth:', err);
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      return null;
+    }
+  },
+  
+  save: (token: string, address: string) => {
+    if (typeof window === 'undefined') return;
+    
+    const auth: AuthToken = {
+      token,
+      address,
+      timestamp: Date.now()
+    };
+    
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+  },
+  
+  clear: () => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
+};
 
 export default function LightningBalance({ userAddress, className = '' }: LightningBalanceProps) {
   const { addressPublicKey, disconnect: walletDisconnect } = useWallet();
@@ -41,43 +87,8 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const hasInitiatedAuth = useRef<boolean>(false);
 
-  const getStoredAuth = useCallback((): AuthToken | null => {
-    if (typeof window === 'undefined') return null;
-    
-    try {
-      const stored = localStorage.getItem('lightning_auth');
-      if (stored) {
-        const auth = JSON.parse(stored) as AuthToken;
-        const now = Date.now();
-        const tokenAge = now - auth.timestamp;
-        const twentyFourHours = 24 * 60 * 60 * 1000;
-        
-        if (tokenAge < twentyFourHours) {
-          return auth;
-        }
-      }
-    } catch (err) {
-      console.error('Error reading stored auth:', err);
-    }
-    
-    return null;
-  }, []);
-
-  const storeAuth = useCallback((token: string, address: string) => {
-    if (typeof window === 'undefined') return;
-    
-    const auth: AuthToken = {
-      token,
-      address,
-      timestamp: Date.now()
-    };
-    
-    localStorage.setItem('lightning_auth', JSON.stringify(auth));
-  }, []);
-
-  const clearStoredAuth = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem('lightning_auth');
+  const clearAuth = useCallback(() => {
+    authStorage.clear();
     setIsConnected(false);
     setBalance(null);
     setWalletInfo(null);
@@ -213,15 +224,12 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
 
     try {
       const nonce = await requestNonce();
-
       const signature = await signNonce(nonce);
-
       const token = await loginWithSignature(signature, nonce);
-
-      storeAuth(token, userAddress);
-
+      
+      authStorage.save(token, userAddress);
+      
       await fetchUserData(token);
-
       setIsConnected(true);
     } catch (err) {
       console.error('Connection error:', err);
@@ -231,14 +239,14 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     } finally {
       setIsLoading(false);
     }
-  }, [userAddress, isLoading, isConnected, requestNonce, signNonce, loginWithSignature, storeAuth, fetchUserData]);
+  }, [userAddress, isLoading, isConnected, requestNonce, signNonce, loginWithSignature, fetchUserData]);
 
   const checkStoredAuth = useCallback(async () => {
     if (isLoading || isConnected || hasInitiatedAuth.current) {
       return;
     }
 
-    const storedAuth = getStoredAuth();
+    const storedAuth = authStorage.load();
     
     if (storedAuth && storedAuth.address === userAddress) {
       try {
@@ -248,24 +256,24 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
           await fetchUserData(storedAuth.token);
           hasInitiatedAuth.current = true;
         } else {
-          clearStoredAuth();
+          authStorage.clear();
           await handleConnect();
         }
       } catch {
-        clearStoredAuth();
+        authStorage.clear();
         await handleConnect();
       }
     } else {
       await handleConnect();
     }
-  }, [userAddress, handleConnect, isLoading, isConnected, getStoredAuth, validateToken, fetchUserData, clearStoredAuth]);
+  }, [userAddress, handleConnect, isLoading, isConnected, validateToken, fetchUserData]);
 
   useEffect(() => {
     checkStoredAuth();
   }, [checkStoredAuth]);
 
   const handleRefresh = useCallback(async () => {
-    const storedAuth = getStoredAuth();
+    const storedAuth = authStorage.load();
     
     if (!storedAuth) {
       setError('No authentication found. Please connect your wallet.');
@@ -279,19 +287,18 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
       await fetchUserData(storedAuth.token);
     } catch (err) {
       console.error('Refresh error:', err);
-      clearStoredAuth();
+      clearAuth();
       setError('Session expired. Please reconnect your wallet.');
     } finally {
       setIsLoading(false);
     }
-  }, [getStoredAuth, fetchUserData, clearStoredAuth]);
+  }, [fetchUserData, clearAuth]);
 
   const handleDisconnect = useCallback(() => {
-    clearStoredAuth();
+    clearAuth();
     walletDisconnect();
     setError(null);
-    hasInitiatedAuth.current = false;
-  }, [clearStoredAuth, walletDisconnect]);
+  }, [clearAuth, walletDisconnect]);
 
   return (
     <div className={`bg-background p-4 shadow-md border border-border ${className}`}>
