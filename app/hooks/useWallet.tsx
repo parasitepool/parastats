@@ -5,6 +5,7 @@ import { AddressPurpose, request } from '@sats-connect/core';
 
 interface WalletContextType {
   address: string | null;
+  addressPublicKey: string | null;
   isConnected: boolean;
   connect: () => Promise<string | null>;
   disconnect: () => void;
@@ -13,16 +14,37 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 const WALLET_ADDRESS_KEY = 'parasite_wallet_address';
+const WALLET_ADDRESS_PUBLIC_KEY = 'parasite_wallet_address_public_key';
+
+const walletStorage = {
+  load: () => {
+    const savedAddress = localStorage.getItem(WALLET_ADDRESS_KEY);
+    const savedPublicKey = localStorage.getItem(WALLET_ADDRESS_PUBLIC_KEY);
+    return { address: savedAddress, publicKey: savedPublicKey };
+  },
+  
+  save: (address: string, publicKey: string) => {
+    localStorage.setItem(WALLET_ADDRESS_KEY, address);
+    localStorage.setItem(WALLET_ADDRESS_PUBLIC_KEY, publicKey);
+  },
+  
+  clear: () => {
+    localStorage.removeItem(WALLET_ADDRESS_KEY);
+    localStorage.removeItem(WALLET_ADDRESS_PUBLIC_KEY);
+  }
+};
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
+  const [addressPublicKey, setAddressPublicKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
-  // Restore wallet connection from localStorage on mount
   useEffect(() => {
-    const savedAddress = localStorage.getItem(WALLET_ADDRESS_KEY);
+    const { address: savedAddress, publicKey: savedPublicKey } = walletStorage.load();
+    
     if (savedAddress) {
       setAddress(savedAddress);
+      setAddressPublicKey(savedPublicKey);
       setIsConnected(true);
     }
   }, []);
@@ -61,14 +83,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         const paymentAddress = response.result.find(
           (addr) => addr.purpose === AddressPurpose.Payment
         );
+
         if (paymentAddress) {
+          walletStorage.save(paymentAddress.address, paymentAddress.publicKey);
+          
           setAddress(paymentAddress.address);
+          setAddressPublicKey(paymentAddress.publicKey);
           setIsConnected(true);
-          // Save to localStorage for persistence
-          localStorage.setItem(WALLET_ADDRESS_KEY, paymentAddress.address);
-          // Add address to monitoring when connecting
+          
           await addAddressToMonitoring(paymentAddress.address);
-          // Return address for further use if needed
+          
           return paymentAddress.address;
         }
       }
@@ -80,14 +104,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [addAddressToMonitoring]);
 
   const disconnect = useCallback(() => {
+    walletStorage.clear();
+    
     setAddress(null);
     setIsConnected(false);
-    // Clear localStorage on disconnect
-    localStorage.removeItem(WALLET_ADDRESS_KEY);
   }, []);
 
   return (
-    <WalletContext.Provider value={{ address, isConnected, connect, disconnect }}>
+    <WalletContext.Provider value={{ address, addressPublicKey, isConnected, connect, disconnect }}>
       {children}
     </WalletContext.Provider>
   );
