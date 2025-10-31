@@ -285,7 +285,7 @@ export default function UserDashboard() {
         </div>
       </div>
 
-      {/* Lightning Balance - ACTUAL COMPONENT */}
+      {/* Lightning Balance */}
       {isConnected && (
         <div className="w-full mb-6">
           <LightningBalance userAddress={userId} />
