@@ -79,7 +79,11 @@ export function formatRelativeTime(timestamp: number): string {
   let monthDiff = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
 
   // Adjust if we haven't reached the same day of the month yet
-  if (now.getDate() < date.getDate()) {
+  // For months with fewer days, use the last day of the current month as the anniversary
+  const lastDayOfCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const effectiveAnniversaryDay = Math.min(date.getDate(), lastDayOfCurrentMonth);
+
+  if (now.getDate() < effectiveAnniversaryDay) {
     monthDiff--;
   }
 
