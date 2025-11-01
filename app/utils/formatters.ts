@@ -68,29 +68,25 @@ export function formatAddress(address: string): string {
 export function formatRelativeTime(timestamp: number): string {
   const now = new Date();
   const date = new Date(timestamp * 1000); // Convert Unix timestamp to milliseconds
-  
+
   const diffMs = now.getTime() - date.getTime();
   const diffSeconds = Math.floor(diffMs / 1000);
   const diffMinutes = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffMinutes / 60);
-  
-  // Calculate days between dates, accounting for DST
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-  
-  // Calculate months by comparing year/month combinations
-  const monthDiff = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
-  
-  // Calculate years using full date comparison
-  const yearDiff = now.getFullYear() - date.getFullYear();
-  
-  // Adjust for cases where we haven't quite reached the anniversary
-  const hasReachedAnniversary = (
-    now.getMonth() > date.getMonth() ||
-    (now.getMonth() === date.getMonth() && now.getDate() >= date.getDate())
-  );
-  const adjustedYearDiff = yearDiff - (hasReachedAnniversary ? 0 : 1);
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (adjustedYearDiff > 0) return `${adjustedYearDiff}y ago`;
+  // Calculate actual month difference, accounting for day of month
+  let monthDiff = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
+
+  // Adjust if we haven't reached the same day of the month yet
+  if (now.getDate() < date.getDate()) {
+    monthDiff--;
+  }
+
+  // Calculate years from months
+  const yearDiff = Math.floor(monthDiff / 12);
+
+  if (yearDiff > 0) return `${yearDiff}y ago`;
   if (monthDiff > 0) return `${monthDiff}mo ago`;
   if (diffDays > 6) return `${Math.floor(diffDays / 7)}w ago`;
   if (diffDays > 0) return `${diffDays}d ago`;
