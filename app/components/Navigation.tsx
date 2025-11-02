@@ -7,8 +7,8 @@ import { useRef, KeyboardEvent, Dispatch, SetStateAction, useEffect } from 'reac
 import parasiteLogo from '@/public/parasite-white.png';
 import parasiteBug from '@/public/bug.png';
 import ErrorModal from './modals/ErrorModal';
-import ConnectButton from './ConnectButton';
-// import Counter from './Counter';
+// import ConnectButton from './ConnectButton';
+import Counter from './Counter';
 
 interface NavigationProps {
   address?: string;
@@ -88,10 +88,9 @@ export default function Navigation({
         {/* Right: Connect Button */}
         <div className="flex-shrink-0 flex items-center space-x-4 w-auto sm:w-[200px] lg:w-[300px] justify-end">
           {/* <Counter value={0} /> */}
-          <ConnectButton />
-          {/* <Link href="/" className="hidden sm:block">
+          { <Link href="/" className="hidden sm:block">
             <Image src={parasiteBug} alt="Parasite Bug" height={64} className='h-10 sm:h-12 w-auto' />
-          </Link> */}
+          </Link>}
         </div>
 
         {/* Right: Pool status */}
