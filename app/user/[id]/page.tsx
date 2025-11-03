@@ -383,7 +383,7 @@ export default function UserDashboard() {
           <div className="flex flex-wrap -mx-2">
             {statCards.map((card, index) => (
               <div key={index} className="w-1/5 p-1 lg:p-2">
-                <div className="bg-background p-3 sm:p-4 shadow-md border border-border h-full">
+                <div className="bg-background p-3 sm:p-4 shadow-md border border-border">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center min-w-0">
                       <div className="mr-1 sm:mr-2 text-accent-3 flex-shrink-0">
