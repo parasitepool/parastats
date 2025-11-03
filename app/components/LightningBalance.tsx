@@ -1,19 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { request } from '@sats-connect/core';
+import { useState, useEffect, useCallback } from 'react';
 import { LightningIcon } from '@/app/components/icons';
 import { useWallet } from '@/app/hooks/useWallet';
 
 interface LightningBalanceProps {
-  userAddress: string;
   className?: string;
-}
-
-interface AuthToken {
-  token: string;
-  address: string;
-  timestamp: number;
 }
 
 interface WalletInfo {
@@ -28,254 +20,80 @@ interface BalanceResponse {
   balance: number;
 }
 
-const IDENTIFIER = "de01d4ad-c24a-46fb-a5e8-755f3b7b7ab5";
 const API_BASE_URL = 'https://api.bitbit.bot';
-const AUTH_STORAGE_KEY = 'lightning_auth';
-const TOKEN_VALIDITY_HOURS = 24;
 
-const authStorage = {
-  load: (): AuthToken | null => {
-    if (typeof window === 'undefined') return null;
-    
-    try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (!stored) return null;
-      
-      const auth = JSON.parse(stored) as AuthToken;
-      const now = Date.now();
-      const tokenAge = now - auth.timestamp;
-      const validityMs = TOKEN_VALIDITY_HOURS * 60 * 60 * 1000;
-      
-      if (tokenAge < validityMs) {
-        return auth;
-      }
-      
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      return null;
-    } catch (err) {
-      console.error('Error reading stored auth:', err);
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      return null;
-    }
-  },
-  
-  save: (token: string, address: string) => {
-    if (typeof window === 'undefined') return;
-    
-    const auth: AuthToken = {
-      token,
-      address,
-      timestamp: Date.now()
-    };
-    
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
-  },
-  
-  clear: () => {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-  }
-};
-
-export default function LightningBalance({ userAddress, className = '' }: LightningBalanceProps) {
-  const { addressPublicKey, disconnect: walletDisconnect } = useWallet();
+export default function LightningBalance({ className = '' }: LightningBalanceProps) {
+  const { lightningToken, isLightningAuthenticated, isInitialized, connectWithLightning, refreshLightningAuth } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isConnected, setIsConnected] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
-  const hasInitiatedAuth = useRef<boolean>(false);
-
-  const clearAuth = useCallback(() => {
-    authStorage.clear();
-    setIsConnected(false);
-    setBalance(null);
-    setWalletInfo(null);
-    hasInitiatedAuth.current = false;
-  }, []);
-
-  const validateToken = useCallback(async (token: string): Promise<boolean> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/wallet_user/balance`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const requestNonce = useCallback(async (): Promise<string> => {
-    const response = await fetch(
-      `${API_BASE_URL}/login/${userAddress}/auth_nonce/${IDENTIFIER}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Failed to request nonce: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    return data.nonce;
-  }, [userAddress]);
-
-  const signNonce = useCallback(async (message: string): Promise<string> => {
-    try {
-      const response = await request('signMessage', {
-        address: userAddress,
-        message: message
-      });
-
-      if (response.status === 'success') {
-        if (typeof response.result === 'string') {
-          return response.result;
-        } else if (response.result && typeof response.result === 'object' && 'signature' in response.result) {
-          return response.result.signature;
-        } else {
-          throw new Error('Unexpected response format');
-        }
-      } else {
-        throw new Error('User cancelled signing or signing failed');
-      }
-    } catch {
-      throw new Error('Failed to sign message');
-    }
-  }, [userAddress]);
-
-  const loginWithSignature = useCallback(async (
-    signature: string,
-    nonce: string
-  ): Promise<string> => {
-    const response = await fetch(
-      `${API_BASE_URL}/login/${userAddress}/auth_sign/${IDENTIFIER}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          signature,
-          nonce,
-          address: userAddress,
-          public_key: addressPublicKey,
-          email: ''
-        })
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Authentication failed: ${errorText}`);
-    }
-
-    const data = await response.json();
-    return data.token;
-  }, [userAddress, addressPublicKey]);
 
   const fetchUserData = useCallback(async (token: string) => {
     try {
-      const userResponse = await fetch(`${API_BASE_URL}/wallet_user`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const [userResponse, balanceResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/wallet_user`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${API_BASE_URL}/wallet_user/balance`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
 
       if (!userResponse.ok) {
         throw new Error('Failed to fetch user info');
       }
 
-      const userData: WalletInfo = await userResponse.json();
-      setWalletInfo(userData);
-
-      const balanceResponse = await fetch(`${API_BASE_URL}/wallet_user/balance`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
       if (!balanceResponse.ok) {
         throw new Error('Failed to fetch balance');
       }
 
+      const userData: WalletInfo = await userResponse.json();
       const balanceData: BalanceResponse = await balanceResponse.json();
+
+      setWalletInfo(userData);
       setBalance(balanceData.balance);
     } catch (err) {
       throw err;
     }
   }, []);
 
-  const handleConnect = useCallback(async () => {
-    if (isLoading || isConnected || hasInitiatedAuth.current) {
-      return;
+  useEffect(() => {
+    if (isInitialized && isLightningAuthenticated && lightningToken) {
+      setIsLoading(true);
+      fetchUserData(lightningToken)
+        .catch((err) => {
+          console.error('Error fetching Lightning data:', err);
+          setError('Failed to load Lightning data');
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
     }
+  }, [isInitialized, isLightningAuthenticated, lightningToken, fetchUserData]);
 
-    hasInitiatedAuth.current = true;
+  const handleConnect = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const nonce = await requestNonce();
-      const signature = await signNonce(nonce);
-      const token = await loginWithSignature(signature, nonce);
+      const result = await connectWithLightning();
       
-      authStorage.save(token, userAddress);
-      
-      await fetchUserData(token);
-      setIsConnected(true);
+      if (!result) {
+        throw new Error('Failed to connect wallet or authenticate with Lightning');
+      }
+
     } catch (err) {
       console.error('Connection error:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect wallet');
-      setIsConnected(false);
-      hasInitiatedAuth.current = false;
     } finally {
       setIsLoading(false);
     }
-  }, [userAddress, isLoading, isConnected, requestNonce, signNonce, loginWithSignature, fetchUserData]);
-
-  const checkStoredAuth = useCallback(async () => {
-    if (isLoading || isConnected || hasInitiatedAuth.current) {
-      return;
-    }
-
-    const storedAuth = authStorage.load();
-    
-    if (storedAuth && storedAuth.address === userAddress) {
-      try {
-        const isValid = await validateToken(storedAuth.token);
-        if (isValid) {
-          setIsConnected(true);
-          await fetchUserData(storedAuth.token);
-          hasInitiatedAuth.current = true;
-        } else {
-          authStorage.clear();
-          await handleConnect();
-        }
-      } catch {
-        authStorage.clear();
-        await handleConnect();
-      }
-    } else {
-      await handleConnect();
-    }
-  }, [userAddress, handleConnect, isLoading, isConnected, validateToken, fetchUserData]);
-
-  useEffect(() => {
-    checkStoredAuth();
-  }, [checkStoredAuth]);
+  }, [connectWithLightning]);
 
   const handleRefresh = useCallback(async () => {
-    const storedAuth = authStorage.load();
-    
-    if (!storedAuth) {
+    if (!lightningToken) {
       setError('No authentication found. Please connect your wallet.');
       return;
     }
@@ -284,21 +102,40 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
     setError(null);
 
     try {
-      await fetchUserData(storedAuth.token);
+      await fetchUserData(lightningToken);
     } catch (err) {
       console.error('Refresh error:', err);
-      clearAuth();
-      setError('Session expired. Please reconnect your wallet.');
+      
+      try {
+        const newToken = await refreshLightningAuth();
+        if (newToken) {
+          await fetchUserData(newToken);
+        } else {
+          throw new Error('Failed to refresh authentication');
+        }
+      } catch {
+        setError('Session expired. Please reconnect your wallet.');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [fetchUserData, clearAuth]);
+  }, [lightningToken, fetchUserData, refreshLightningAuth]);
 
-  const handleDisconnect = useCallback(() => {
-    clearAuth();
-    walletDisconnect();
-    setError(null);
-  }, [clearAuth, walletDisconnect]);
+  if (!isInitialized) {
+    return (
+      <div className={`bg-background p-4 shadow-md border border-border ${className}`}>
+        <div className="flex items-center mb-3">
+          <div className="mr-2 text-accent-3">
+            <LightningIcon />
+          </div>
+          <h3 className="text-lg font-semibold">Lightning</h3>
+        </div>
+        <div className="flex items-center justify-center py-4">
+          <div className="animate-spin h-6 w-6 border-4 border-accent-3 border-t-transparent rounded-full"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`bg-background p-4 shadow-md border border-border ${className}`}>
@@ -307,10 +144,10 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
           <div className="mr-2 text-accent-3">
             <LightningIcon />
           </div>
-          <h3 className="text-lg font-semibold">Lightning Balance</h3>
+          <h3 className="text-lg font-semibold">Lightning</h3>
         </div>
         
-        {isConnected && (
+        {isLightningAuthenticated && !isLoading && (
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="text-xs text-accent-2 hover:text-primary transition-colors"
@@ -320,7 +157,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
         )}
       </div>
 
-      {!isConnected ? (
+      {!isLightningAuthenticated ? (
         <div className="space-y-3">
           {isLoading ? (
             <>
@@ -333,6 +170,17 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
             </>
           ) : (
             <>
+              <div className="text-center py-6">
+                <p className="text-foreground/70 mb-4">
+                  Connect your wallet to view your Lightning balance
+                </p>
+                <button
+                  onClick={handleConnect}
+                  className="bg-accent-3 text-white px-6 py-2 hover:bg-accent-3/90 transition-colors font-medium"
+                >
+                  Connect Wallet
+                </button>
+              </div>
               {error && (
                 <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
                   {error}
@@ -343,49 +191,48 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex items-baseline justify-between">
-            <span className="text-3xl font-bold">
-              {balance !== null ? balance.toLocaleString() : '--'}
-            </span>
-            <span className="text-sm text-foreground/70 ml-2">sats</span>
-          </div>
-
-          {isExpanded && walletInfo && (
-            <div className="pt-3 border-t border-border space-y-2 text-sm">
-              {walletInfo.username && (
-                <div className="flex justify-between">
-                  <span className="text-foreground/70">Username:</span>
-                  <span className="font-medium">{walletInfo.username}@sati.pro</span>
-                </div>
-              )}
-              
-              {walletInfo.lightning_ln_url && (
-                <div className="flex flex-col">
-                  <span className="text-foreground/70 mb-1">Lightning URL:</span>
-                  <span className="font-mono text-xs break-all bg-secondary p-2 border border-border">
-                    {walletInfo.lightning_ln_url}
-                  </span>
-                </div>
-              )}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
             </div>
-          )}
+          ) : (
+            <>
+              <div className="flex items-baseline justify-between">
+                <span className="text-3xl font-bold">
+                  {balance !== null ? balance.toLocaleString() : '--'}
+                </span>
+                <span className="text-sm text-foreground/70 ml-2">sats</span>
+              </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={handleRefresh}
-              disabled={isLoading}
-              className="flex-1 bg-secondary text-secondary-foreground px-3 py-2 hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-            >
-              {isLoading ? 'Refreshing...' : 'Refresh'}
-            </button>
-            
-            <button
-              onClick={handleDisconnect}
-              className="flex-1 bg-secondary text-secondary-foreground px-3 py-2 hover:bg-secondary/80 transition-colors text-sm font-medium"
-            >
-              Disconnect
-            </button>
-          </div>
+              {isExpanded && walletInfo && (
+                <div className="pt-3 border-t border-border space-y-2 text-sm">
+                  {walletInfo.username && (
+                    <div className="flex justify-between">
+                      <span className="text-foreground/70">Username:</span>
+                      <span className="font-medium">{walletInfo.username}@sati.pro</span>
+                    </div>
+                  )}
+                  
+                  {walletInfo.lightning_ln_url && (
+                    <div className="flex flex-col">
+                      <span className="text-foreground/70 mb-1">Lightning URL:</span>
+                      <span className="font-mono text-xs break-all bg-secondary p-2 border border-border">
+                        {walletInfo.lightning_ln_url}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={handleRefresh}
+                disabled={isLoading}
+                className="w-full bg-secondary text-secondary-foreground px-3 py-2 hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+              >
+                {isLoading ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </>
+          )}
 
           {error && (
             <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
