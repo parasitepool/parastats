@@ -8,7 +8,7 @@ import parasiteLogo from '@/public/parasite-white.png';
 import parasiteBug from '@/public/bug.png';
 import ErrorModal from './modals/ErrorModal';
 // import ConnectButton from './ConnectButton';
-import Counter from './Counter';
+// import Counter from './Counter';
 
 interface NavigationProps {
   address?: string;
