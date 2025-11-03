@@ -355,7 +355,7 @@ export default function LightningBalance({ userAddress, className = '' }: Lightn
               {walletInfo.username && (
                 <div className="flex justify-between">
                   <span className="text-foreground/70">Username:</span>
-                  <span className="font-medium">{walletInfo.username}</span>
+                  <span className="font-medium">{walletInfo.username}@sati.pro</span>
                 </div>
               )}
               
