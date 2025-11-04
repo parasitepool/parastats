@@ -346,31 +346,31 @@ export default function UserDashboard() {
   return (
     <main className="flex min-h-screen flex-col items-start py-8">
       <div className="w-full mb-2">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
-          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold break-all">{userId}</h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl lg:text-3xl font-bold wrap-anywhere text-ellipsis line-clamp-1">{userId}</h1>
 
           {/* Visibility Toggle Button */}
           {userData && (
             <button
               onClick={handleToggleVisibility}
               disabled={isTogglingVisibility}
-              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-background border border-border hover:bg-accent-1/10 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors flex-shrink-0 text-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-background border border-border hover:bg-accent-1/10 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors"
             >
               {userData.isPublic ? (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                     <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
                     <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
                   </svg>
-                  <span className="font-medium">Public</span>
+                  <span className="text-sm font-medium">Public</span>
                 </>
               ) : (
                 <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 sm:h-5 sm:w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
                     <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
                   </svg>
-                  <span className="font-medium">Private</span>
+                  <span className="text-sm font-medium">Private</span>
                 </>
               )}
             </button>
@@ -381,19 +381,15 @@ export default function UserDashboard() {
         <div className="w-full">
           <div className="flex flex-wrap -mx-2">
             {statCards.map((card, index) => (
-              <div key={index} className="w-1/5 p-1 lg:p-2">
-                <div className="bg-background p-3 sm:p-4 shadow-md border border-border">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center min-w-0">
-                      <div className="mr-1 sm:mr-2 text-accent-3 flex-shrink-0">
-                        {card.icon}
-                      </div>
-                      <h3 className="text-xs sm:text-sm font-medium text-accent-2 truncate">{card.title}</h3>
+              <div key={index} className="w-1/2 md:w-1/4 p-1 lg:p-2">
+                <div className="bg-background p-4 shadow-md border border-border h-full">
+                  <div className="flex items-center mb-2">
+                    <div className="mr-2 text-accent-3">
+                      {card.icon}
                     </div>
+                    <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
                   </div>
-                  
-                  <p className="text-base sm:text-lg lg:text-2xl font-semibold break-words">{card.value}</p>
-                  
+                  <p className="text-2xl font-semibold">{card.value}</p>
                 </div>
               </div>
             ))}
@@ -436,8 +432,8 @@ export default function UserDashboard() {
       
       {/* Workers Table/Cards */}
       <div className="w-full bg-background pb-6 shadow-md">
-        <h2 className="text-lg sm:text-xl font-semibold mb-4">Miners({userData.workerData.length})</h2>
-        
+        <h2 className="text-xl font-semibold mb-4">Miners({userData.workerData.length})</h2>
+
         {/* Desktop Table - Hidden on mobile */}
         <div className="hidden md:block">
           <SortableTable
@@ -473,25 +469,25 @@ export default function UserDashboard() {
             defaultSortDirection="desc"
           />
         </div>
-        
+
         {/* Mobile Cards - Visible only on mobile */}
         <div className="md:hidden space-y-4">
           {userData.workerData.map((worker) => (
-            <div key={worker.id} className="bg-background border border-border p-3 sm:p-4 shadow-sm">
+            <div key={worker.id} className="bg-background border border-border p-4 shadow-sm">
               {/* <Link href={`/worker/${worker.id}`} className="text-foreground font-bold text-lg block mb-2 hover:underline"> */}
-              <Link href='#' className="text-foreground font-bold text-base sm:text-lg block mb-2 hover:underline break-words">
+              <Link href='#' className="text-foreground font-bold text-lg block mb-2 hover:underline">
                 {worker.name}
               </Link>
-              <div className="grid grid-cols-2 gap-2 text-xs sm:text-sm">
+              <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <p className="text-gray-500">Hashrate</p>
-                  <p className="font-medium break-words">{formatHashrate(parseHashrate(worker.hashrate))}</p>
+                  <p className="font-medium">{formatHashrate(parseHashrate(worker.hashrate))}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Best Difficulty</p>
-                  <p className="font-medium break-words">{formatDifficulty(worker.bestDifficulty)}</p>
+                  <p className="font-medium">{formatDifficulty(worker.bestDifficulty)}</p>
                 </div>
-                <div className="col-span-2">
+                <div>
                   <p className="text-gray-500">Last Submission</p>
                   <p className="font-medium">{formatRelativeTime(parseInt(worker.lastSubmission))}</p>
                 </div>
