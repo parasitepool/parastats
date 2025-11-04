@@ -7,14 +7,25 @@ interface WalletContextType {
   address: string | null;
   addressPublicKey: string | null;
   isConnected: boolean;
+  lightningToken: string | null;
+  isLightningAuthenticated: boolean;
+  isInitialized: boolean;
   connect: () => Promise<string | null>;
+  connectWithLightning: () => Promise<{ address: string; token: string } | null>;
   disconnect: () => void;
+  refreshLightningAuth: () => Promise<string | null>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 const WALLET_ADDRESS_KEY = 'parasite_wallet_address';
 const WALLET_ADDRESS_PUBLIC_KEY = 'parasite_wallet_address_public_key';
+const LIGHTNING_TOKEN_KEY = 'lightning_auth_token';
+const LIGHTNING_TOKEN_TIMESTAMP_KEY = 'lightning_auth_timestamp';
+
+const IDENTIFIER = "de01d4ad-c24a-46fb-a5e8-755f3b7b7ab5";
+const API_BASE_URL = 'https://api.bitbit.bot';
+const TOKEN_VALIDITY_HOURS = 24;
 
 const walletStorage = {
   load: () => {
@@ -34,19 +45,60 @@ const walletStorage = {
   }
 };
 
+const lightningStorage = {
+  load: (): { token: string; timestamp: number } | null => {
+    const token = localStorage.getItem(LIGHTNING_TOKEN_KEY);
+    const timestamp = localStorage.getItem(LIGHTNING_TOKEN_TIMESTAMP_KEY);
+    
+    if (!token || !timestamp) return null;
+    
+    const now = Date.now();
+    const tokenAge = now - parseInt(timestamp);
+    const validityMs = TOKEN_VALIDITY_HOURS * 60 * 60 * 1000;
+    
+    if (tokenAge < validityMs) {
+      return { token, timestamp: parseInt(timestamp) };
+    }
+    
+    lightningStorage.clear();
+    return null;
+  },
+  
+  save: (token: string) => {
+    localStorage.setItem(LIGHTNING_TOKEN_KEY, token);
+    localStorage.setItem(LIGHTNING_TOKEN_TIMESTAMP_KEY, Date.now().toString());
+  },
+  
+  clear: () => {
+    localStorage.removeItem(LIGHTNING_TOKEN_KEY);
+    localStorage.removeItem(LIGHTNING_TOKEN_TIMESTAMP_KEY);
+  }
+};
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [addressPublicKey, setAddressPublicKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [lightningToken, setLightningToken] = useState<string | null>(null);
+  const [isLightningAuthenticated, setIsLightningAuthenticated] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     const { address: savedAddress, publicKey: savedPublicKey } = walletStorage.load();
     
-    if (savedAddress) {
+    if (savedAddress && savedPublicKey) {
       setAddress(savedAddress);
       setAddressPublicKey(savedPublicKey);
       setIsConnected(true);
     }
+
+    const savedLightning = lightningStorage.load();
+    if (savedLightning) {
+      setLightningToken(savedLightning.token);
+      setIsLightningAuthenticated(true);
+    }
+
+    setIsInitialized(true);
   }, []);
 
   const addAddressToMonitoring = useCallback(async (addr: string) => {
@@ -71,6 +123,110 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       console.error('Error adding address to monitoring:', error);
     }
   }, []);
+
+  const validateToken = useCallback(async (token: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/wallet_user/balance`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const requestNonce = useCallback(async (userAddress: string): Promise<string> => {
+    const response = await fetch(
+      `${API_BASE_URL}/login/${userAddress}/auth_nonce/${IDENTIFIER}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to request nonce: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.nonce;
+  }, []);
+
+  const signNonce = useCallback(async (userAddress: string, message: string): Promise<string> => {
+    try {
+      const response = await request('signMessage', {
+        address: userAddress,
+        message: message
+      });
+
+      if (response.status === 'success') {
+        if (typeof response.result === 'string') {
+          return response.result;
+        } else if (response.result && typeof response.result === 'object' && 'signature' in response.result) {
+          return response.result.signature;
+        } else {
+          throw new Error('Unexpected response format');
+        }
+      } else {
+        throw new Error('User cancelled signing or signing failed');
+      }
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : 'Failed to sign message');
+    }
+  }, []);
+
+  const loginWithSignature = useCallback(async (
+    userAddress: string,
+    publicKey: string,
+    signature: string,
+    nonce: string
+  ): Promise<string> => {
+    const response = await fetch(
+      `${API_BASE_URL}/login/${userAddress}/auth_sign/${IDENTIFIER}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          signature,
+          nonce,
+          address: userAddress,
+          public_key: publicKey,
+          email: ''
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Authentication failed: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.token;
+  }, []);
+
+  const performLightningAuth = useCallback(async (
+    userAddress: string,
+    publicKey: string
+  ): Promise<string> => {
+    const nonce = await requestNonce(userAddress);
+    
+    const signature = await signNonce(userAddress, nonce);
+    
+    const token = await loginWithSignature(userAddress, publicKey, signature, nonce);
+    
+    lightningStorage.save(token);
+    setLightningToken(token);
+    setIsLightningAuthenticated(true);
+    
+    return token;
+  }, [requestNonce, signNonce, loginWithSignature]);
 
   const connect = useCallback(async (): Promise<string | null> => {
     try {
@@ -103,15 +259,89 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [addAddressToMonitoring]);
 
+  const connectWithLightning = useCallback(async (): Promise<{ address: string; token: string } | null> => {
+    try {
+      const response = await request('getAccounts', {
+        purposes: [AddressPurpose.Payment],
+        message: 'Connect your wallet to Parasite'
+      });
+
+      if (response.status !== 'success') {
+        return null;
+      }
+
+      const paymentAddress = response.result.find(
+        (addr) => addr.purpose === AddressPurpose.Payment
+      );
+
+      if (!paymentAddress) {
+        return null;
+      }
+
+      walletStorage.save(paymentAddress.address, paymentAddress.publicKey);
+      setAddress(paymentAddress.address);
+      setAddressPublicKey(paymentAddress.publicKey);
+      setIsConnected(true);
+      
+      await addAddressToMonitoring(paymentAddress.address);
+
+      const savedLightning = lightningStorage.load();
+      if (savedLightning) {
+        const isValid = await validateToken(savedLightning.token);
+        if (isValid) {
+          setLightningToken(savedLightning.token);
+          setIsLightningAuthenticated(true);
+          return { address: paymentAddress.address, token: savedLightning.token };
+        }
+      }
+
+      const token = await performLightningAuth(paymentAddress.address, paymentAddress.publicKey);
+      
+      return { address: paymentAddress.address, token };
+    } catch (error) {
+      console.error('Failed to connect with Lightning:', error);
+      return null;
+    }
+  }, [addAddressToMonitoring, validateToken, performLightningAuth]);
+
+  const refreshLightningAuth = useCallback(async (): Promise<string | null> => {
+    if (!address || !addressPublicKey) {
+      throw new Error('Wallet not connected');
+    }
+
+    try {
+      const token = await performLightningAuth(address, addressPublicKey);
+      return token;
+    } catch (error) {
+      console.error('Failed to refresh Lightning auth:', error);
+      return null;
+    }
+  }, [address, addressPublicKey, performLightningAuth]);
+
   const disconnect = useCallback(() => {
     walletStorage.clear();
+    lightningStorage.clear();
     
     setAddress(null);
+    setAddressPublicKey(null);
     setIsConnected(false);
+    setLightningToken(null);
+    setIsLightningAuthenticated(false);
   }, []);
 
   return (
-    <WalletContext.Provider value={{ address, addressPublicKey, isConnected, connect, disconnect }}>
+    <WalletContext.Provider value={{ 
+      address, 
+      addressPublicKey, 
+      isConnected, 
+      lightningToken,
+      isLightningAuthenticated,
+      isInitialized,
+      connect, 
+      connectWithLightning,
+      disconnect,
+      refreshLightningAuth
+    }}>
       {children}
     </WalletContext.Provider>
   );

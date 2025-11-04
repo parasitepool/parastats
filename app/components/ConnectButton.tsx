@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useWallet } from '../hooks/useWallet';
 
 export default function ConnectButton() {
-  const { address, isConnected, connect, disconnect } = useWallet();
+  const { address, isConnected, connectWithLightning, disconnect } = useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -30,9 +31,16 @@ export default function ConnectButton() {
     if (isConnected) {
       setShowDropdown(!showDropdown);
     } else {
-      const addr = await connect();
-      if (addr) {
-        router.push(`/user/${addr}`);
+      setIsConnecting(true);
+      try {
+        const result = await connectWithLightning();
+        if (result) {
+          router.push(`/user/${result.address}`);
+        }
+      } catch (error) {
+        console.error('Failed to connect:', error);
+      } finally {
+        setIsConnecting(false);
       }
     }
   };
@@ -53,9 +61,15 @@ export default function ConnectButton() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={handleButtonClick}
-        className="cursor-pointer px-4 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium"
+        disabled={isConnecting}
+        className="cursor-pointer px-4 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isConnected && address ? shortenAddress(address) : 'Connect'}
+        {isConnecting 
+          ? 'Connecting...' 
+          : isConnected && address 
+            ? shortenAddress(address) 
+            : 'Connect'
+        }
       </button>
 
       {isConnected && showDropdown && (
