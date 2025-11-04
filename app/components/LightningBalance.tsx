@@ -28,7 +28,6 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
   const fetchUserData = useCallback(async (token: string) => {
     try {
@@ -146,15 +145,6 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
           </div>
           <h3 className="text-lg font-semibold">Lightning</h3>
         </div>
-        
-        {isLightningAuthenticated && !isLoading && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs text-accent-2 hover:text-primary transition-colors"
-          >
-            {isExpanded ? '▼' : '▶'}
-          </button>
-        )}
       </div>
 
       {!isLightningAuthenticated ? (
@@ -203,26 +193,6 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
                 </span>
                 <span className="text-sm text-foreground/70 ml-2">sats</span>
               </div>
-
-              {isExpanded && walletInfo && (
-                <div className="pt-3 border-t border-border space-y-2 text-sm">
-                  {walletInfo.username && (
-                    <div className="flex justify-between">
-                      <span className="text-foreground/70">Username:</span>
-                      <span className="font-medium">{walletInfo.username}@sati.pro</span>
-                    </div>
-                  )}
-                  
-                  {walletInfo.lightning_ln_url && (
-                    <div className="flex flex-col">
-                      <span className="text-foreground/70 mb-1">Lightning URL:</span>
-                      <span className="font-mono text-xs break-all bg-secondary p-2 border border-border">
-                        {walletInfo.lightning_ln_url}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
 
               <button
                 onClick={handleRefresh}

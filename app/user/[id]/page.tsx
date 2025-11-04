@@ -31,7 +31,6 @@ export default function UserDashboard() {
   const [isLoadingLightning, setIsLoadingLightning] = useState<boolean>(false);
   const [lightningUsername, setLightningUsername] = useState<string | null>(null);
   const [lightningUrl, setLightningUrl] = useState<string | null>(null);
-  const [isLightningExpanded, setIsLightningExpanded] = useState<boolean>(false);
 
   // Function to check if the address is valid and fetch user data
   useEffect(() => {
@@ -239,21 +238,6 @@ export default function UserDashboard() {
   // Stat cards configuration
   const statCards = [
     {
-      title: 'Lightning',
-      value: isLoadingLightning 
-        ? '...' 
-        : lightningBalance !== null 
-          ? `${lightningBalance.toLocaleString()} sats` 
-          : isLightningAuthenticated 
-            ? 'Error' 
-            : 'Connect',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-        </svg>
-      )
-    },
-    {
       title: 'Uptime',
       value: userData?.uptime,
       icon: (
@@ -303,6 +287,21 @@ export default function UserDashboard() {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
+        </svg>
+      )
+    },
+    {
+      title: 'Lightning',
+      value: isLoadingLightning 
+        ? '...' 
+        : lightningBalance !== null 
+          ? `${lightningBalance.toLocaleString()} sats` 
+          : isLightningAuthenticated 
+            ? 'Error' 
+            : 'Not Available',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
         </svg>
       )
     }
@@ -391,51 +390,10 @@ export default function UserDashboard() {
                       </div>
                       <h3 className="text-xs sm:text-sm font-medium text-accent-2 truncate">{card.title}</h3>
                     </div>
-                    
-                    {/* Show expand/refresh buttons only for Lightning card when authenticated */}
-                    {card.title === 'Lightning' && isLightningAuthenticated && !isLoadingLightning && (
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button
-                          onClick={handleRefreshLightning}
-                          className="text-xs text-accent-2 hover:text-primary transition-colors p-1"
-                          title="Refresh"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 sm:h-4 sm:w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => setIsLightningExpanded(!isLightningExpanded)}
-                          className="text-xs text-accent-2 hover:text-primary transition-colors"
-                        >
-                          {isLightningExpanded ? '▼' : '▶'}
-                        </button>
-                      </div>
-                    )}
                   </div>
                   
                   <p className="text-base sm:text-lg lg:text-2xl font-semibold break-words">{card.value}</p>
                   
-                  {/* Expandable section for Lightning card */}
-                  {card.title === 'Lightning' && isLightningExpanded && isLightningAuthenticated && (
-                    <div className="pt-3 mt-3 border-t border-border space-y-2 text-xs sm:text-sm">
-                      {lightningUsername && (
-                        <div className="flex flex-col gap-1">
-                          <span className="text-foreground/70">Username:</span>
-                          <span className="font-medium break-words">{lightningUsername}@sati.pro</span>
-                        </div>
-                      )}
-                      
-                      {lightningUrl && (
-                        <div className="flex flex-col">
-                          <span className="text-foreground/70 mb-1">Lightning URL:</span>
-                          <span className="font-mono text-xs break-all bg-secondary p-2 border border-border overflow-hidden">
-                            {lightningUrl}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             ))}
