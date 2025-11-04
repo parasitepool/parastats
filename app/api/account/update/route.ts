@@ -1,11 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-
-export interface AccountUpdate {
-  btc_address: string,
-  ln_address: string,
-  signature: string,
-}
+import type { AccountUpdate } from '@/app/api/account/types';
+import { toAccountData } from '@/app/api/account/shared';
 
 export async function POST(request: Request) {
   try {
@@ -43,20 +39,23 @@ export async function POST(request: Request) {
       headers["Authorization"] = `Bearer ${process.env.API_TOKEN}`;
     }
 
-    const accountData = await fetch(`${apiUrl}/account/update`, {
+    const response = await fetch(`${apiUrl}/account/update`, {
       method: "POST",
       headers,
       body: JSON.stringify({ btc_address, ln_address, signature }),
       cache: "no-store",
     });
 
-    if (!accountData.ok) {
-      const text = await accountData.text().catch(() => accountData.statusText);
+    if (!response.ok) {
+      const text = await response.text().catch(() => response.statusText);
       return NextResponse.json(
-        { error: `Failed to update user account: ${text || accountData.statusText}` },
-        { status: accountData.status }
+        { error: `Failed to update user account: ${text || response.statusText}` },
+        { status: response.status }
       );
     }
+    const json = await response.json();
+
+    const accountData = toAccountData(json);
 
     return NextResponse.json(accountData);
   } catch (error) {

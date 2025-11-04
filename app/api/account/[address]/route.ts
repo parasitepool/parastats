@@ -1,12 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-
-export interface AccountData {
-  btc_address: string;
-  ln_address: string | null;
-  past_ln_addresses: string[];
-  last_updated: string | null;
-}
+import { toAccountData } from '@/app/api/account/shared';
 
 export async function GET(
   request: Request,
@@ -52,7 +46,9 @@ export async function GET(
       );
     }
 
-    const accountData: AccountData = await response.json();
+    const json = await response.json();
+
+    const accountData = toAccountData(json);
 
     return NextResponse.json(accountData);
   } catch (error) {
