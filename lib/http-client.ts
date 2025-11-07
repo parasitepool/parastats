@@ -28,6 +28,8 @@ const CONFIG = {
   BODY_TIMEOUT: parseInt(process.env.HTTP2_BODY_TIMEOUT || '10000'),
   // Keep-alive timeout in milliseconds (should match server's keep-alive setting)
   KEEPALIVE_TIMEOUT: parseInt(process.env.HTTP2_KEEPALIVE_TIMEOUT || '60000'),
+  // Hard timeout for entire request duration (abort via AbortController)
+  REQUEST_TIMEOUT: parseInt(process.env.HTTP2_REQUEST_TIMEOUT || '30000'),
 } as const;
 
 /**
@@ -79,15 +81,52 @@ const http2Agent: Dispatcher = new Agent({
  *   headers: { 'Authorization': 'Bearer token' }
  * });
  */
+type ExtendedRequestInit = RequestInit & { timeout?: number };
+
 export const fetch = (
   input: string | URL | Request,
-  init?: RequestInit
+  init?: ExtendedRequestInit
 ) => {
+  const {
+    timeout: timeoutOverride,
+    signal: userSignal,
+    ...restInit
+  } = init ?? {};
+
+  const controller = new AbortController();
+  const timeoutMs = timeoutOverride ?? CONFIG.REQUEST_TIMEOUT;
+
+  let timeoutHandle: NodeJS.Timeout | undefined;
+  let removeUserSignalListener: (() => void) | undefined;
+
+  if (userSignal) {
+    if (userSignal.aborted) {
+      controller.abort(userSignal.reason);
+    } else {
+      const onAbort = () => controller.abort(userSignal.reason);
+      userSignal.addEventListener('abort', onAbort, { once: true });
+      removeUserSignalListener = () => userSignal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  if (timeoutMs > 0) {
+    timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+    timeoutHandle.unref?.();
+  }
+
+  const cleanup = () => {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+    removeUserSignalListener?.();
+  };
+
   // @ts-expect-error - Type mismatch between DOM and Undici types, but they are compatible at runtime
   return undiciFetch(input, {
-    ...init,
+    ...restInit,
     dispatcher: http2Agent,
-  }) as unknown as Promise<Response>;
+    signal: controller.signal,
+  }).finally(cleanup) as unknown as Promise<Response>;
 };
 
 /**
