@@ -86,11 +86,12 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
     try {
       // Request signature for the Lightning address using BIP322
       // We'll use the wallet's signMessage functionality
-      const { request } = await import('@sats-connect/core');
+      const { request, MessageSigningProtocols } = await import('@sats-connect/core');
 
       const signResponse = await request('signMessage', {
         address: address,
-        message: newLnAddress
+        message: newLnAddress,
+        protocol: MessageSigningProtocols.BIP322
       });
 
       if (signResponse.status !== 'success') {
