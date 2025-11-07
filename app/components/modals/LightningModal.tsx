@@ -49,12 +49,19 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
     }
   }, [isOpen, address, fetchAccountData]);
 
+  // Clean up state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setIsEditing(false);
+      setError(null);
+    }
+  }, [isOpen]);
+
   // Close modal on escape key
   useEffect(() => {
     const handleEscKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
-        setIsEditing(false);
       }
     };
 
@@ -113,8 +120,14 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update Lightning address');
+        let errorMessage = 'Failed to update Lightning address';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use default error message
+        }
+        throw new Error(errorMessage);
       }
 
       const updatedData: AccountData = await response.json();
