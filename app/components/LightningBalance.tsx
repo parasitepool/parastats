@@ -38,6 +38,7 @@ export default function LightningBalance({
     connectWithLightning,
     refreshLightningAuth,
     address,
+    addressPublicKey,
   } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
@@ -45,6 +46,8 @@ export default function LightningBalance({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isResetting, setIsResetting] = useState<boolean>(false);
+  const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
 
   const fetchUserData = useCallback(async (token: string) => {
     try {
@@ -80,7 +83,13 @@ export default function LightningBalance({
     if (!userId) return;
     
     try {
-      const response = await fetch(`/api/account/${userId}`);
+      // Add cache-busting to ensure fresh data
+      const response = await fetch(`/api/account/${userId}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
       if (response.ok) {
         const data: AccountData = await response.json();
         setAccountData(data);
@@ -111,6 +120,84 @@ export default function LightningBalance({
   useEffect(() => {
     fetchAccountData();
   }, [fetchAccountData]);
+
+  // Open reset confirmation modal
+  const handleResetClick = () => {
+    setShowResetConfirm(true);
+  };
+
+  // Reset to default lightning address
+  const handleResetToDefault = async () => {
+    if (!address || !addressPublicKey || !walletInfo?.username) {
+      setError('Missing required data');
+      setShowResetConfirm(false);
+      return;
+    }
+
+    const usernameAddress = `${walletInfo.username}@sati.pro`;
+    setIsResetting(true);
+    setError(null);
+
+    try {
+      // Request signature for the Lightning address using BIP322
+      const { request, MessageSigningProtocols } = await import('@sats-connect/core');
+
+      const signResponse = await request('signMessage', {
+        address: address,
+        message: usernameAddress,
+        protocol: MessageSigningProtocols.BIP322
+      });
+
+      if (signResponse.status !== 'success') {
+        throw new Error('Failed to sign message');
+      }
+
+      let signature: string;
+      if (typeof signResponse.result === 'string') {
+        signature = signResponse.result;
+      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
+        signature = signResponse.result.signature;
+      } else {
+        throw new Error('Unexpected signature format');
+      }
+
+      // Send update request
+      const response = await fetch('/api/account/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          btc_address: address,
+          ln_address: usernameAddress,
+          signature: signature,
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to update Lightning address';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use default error message
+        }
+        throw new Error(errorMessage);
+      }
+
+      const updatedData: AccountData = await response.json();
+      setAccountData(updatedData);
+      setShowResetConfirm(false);
+      
+      // Re-fetch to ensure we have the latest data
+      await fetchAccountData();
+    } catch (err) {
+      console.error('Error resetting Lightning address:', err);
+      setError(err instanceof Error ? err.message : 'Failed to reset Lightning address');
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const handleConnect = useCallback(async () => {
     setIsLoading(true);
@@ -189,6 +276,10 @@ export default function LightningBalance({
   // Only show lightning address from Next.js endpoint, not from bitbit
   const displayLnAddress = accountData?.ln_address || null;
   const hasData = isLightningAuthenticated && (balance !== null || walletInfo !== null || accountData !== null);
+  
+  // Check if username matches lightning address
+  const usernameWithDomain = walletInfo?.username ? `${walletInfo.username}@sati.pro` : null;
+  const addressesMatch = usernameWithDomain && displayLnAddress && usernameWithDomain === displayLnAddress;
 
   // If compact mode, show the old compact view
   if (compact) {
@@ -249,38 +340,50 @@ export default function LightningBalance({
           <div className="text-center py-8">
             <p className="text-2xl font-semibold text-gray-400">-</p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {/* Balance */}
+        ) : addressesMatch ? (
+          // If addresses match, show Lightning Address and Balance as separate boxes
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            {/* Lightning Address */}
+            <div className="flex flex-col">
+              <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
+              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center">
+                <p className="text-lg sm:text-xl font-semibold break-all">{displayLnAddress}</p>
+              </div>
+            </div>
+
+            {/* Balance - only show if available */}
             {balance !== null && (
-              <div>
+              <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border">
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center">
                   <p className="text-2xl sm:text-3xl font-bold">
                     {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
                   </p>
                 </div>
               </div>
             )}
-
-            {/* Username */}
-            {walletInfo?.username && (
-              <div>
-                <h3 className="text-sm font-medium text-accent-2 mb-2">Username</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border">
-                  <p className="text-lg sm:text-xl font-semibold break-all">{walletInfo.username}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Lightning Address */}
+          </div>
+        ) : (
+          // If addresses don't match, show only lightning address with reset button
+          <div className="flex flex-col sm:flex-row items-end gap-4">
             {displayLnAddress && (
-              <div className="sm:col-span-2 lg:col-span-1">
+              <div className="flex flex-col flex-1 sm:flex-initial sm:max-w-md">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
                 <div className="bg-secondary p-3 sm:p-4 border border-border">
                   <p className="text-lg sm:text-xl font-semibold break-all">{displayLnAddress}</p>
                 </div>
               </div>
+            )}
+            {walletInfo?.username && isOwner && (
+              <button
+                onClick={handleResetClick}
+                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="hidden sm:inline">Reset</span>
+              </button>
             )}
           </div>
         )}
@@ -297,6 +400,64 @@ export default function LightningBalance({
         onClose={() => setIsModalOpen(false)}
         onUpdate={fetchAccountData}
       />
+
+      {/* Reset Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-background border border-foreground p-6 max-w-md w-full mx-4 shadow-xl">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-2xl font-bold text-accent-3">Reset Lightning Address</h2>
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="text-gray-400 hover:text-gray-500 focus:outline-none"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">Current Address</h3>
+                <div className="bg-secondary p-3 border border-border">
+                  <p className="text-foreground break-all">{displayLnAddress || 'Not set'}</p>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">New Address</h3>
+                <div className="bg-secondary p-3 border border-border">
+                  <p className="text-foreground break-all">{walletInfo?.username}@sati.pro</p>
+                </div>
+              </div>
+
+              {error && (
+                <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-center mt-6">
+                <button
+                  onClick={() => setShowResetConfirm(false)}
+                  disabled={isResetting}
+                  className="px-4 py-2 bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleResetToDefault}
+                  disabled={isResetting}
+                  className="px-4 py-2 bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isResetting ? 'Resetting...' : 'Confirm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
