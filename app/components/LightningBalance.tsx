@@ -35,8 +35,6 @@ export default function LightningBalance({
     lightningToken,
     isLightningAuthenticated,
     isInitialized,
-    connectWithLightning,
-    refreshLightningAuth,
     address,
     addressPublicKey,
   } = useWallet();
@@ -199,55 +197,6 @@ export default function LightningBalance({
     }
   };
 
-  const handleConnect = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const result = await connectWithLightning();
-
-      if (!result) {
-        throw new Error(
-          "Failed to connect wallet or authenticate with Lightning"
-        );
-      }
-    } catch (err) {
-      console.error("Connection error:", err);
-      setError(err instanceof Error ? err.message : "Failed to connect wallet");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [connectWithLightning]);
-
-  const handleRefresh = useCallback(async () => {
-    if (!lightningToken) {
-      setError("No authentication found. Please connect your wallet.");
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      await fetchUserData(lightningToken);
-    } catch (err) {
-      console.error("Refresh error:", err);
-
-      try {
-        const newToken = await refreshLightningAuth();
-        if (newToken) {
-          await fetchUserData(newToken);
-        } else {
-          throw new Error("Failed to refresh authentication");
-        }
-      } catch {
-        setError("Session expired. Please reconnect your wallet.");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [lightningToken, fetchUserData, refreshLightningAuth]);
-
   if (!isInitialized) {
     return (
       <div
@@ -403,9 +352,7 @@ export default function LightningBalance({
                         <span>Activating...</span>
                       </>
                     ) : (
-                      <>
-                        <span>Activate Account</span>
-                      </>
+                      <span>Activate Account</span>
                     )}
                   </button>
                 )}

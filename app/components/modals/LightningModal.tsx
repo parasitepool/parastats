@@ -109,7 +109,6 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
   useEffect(() => {
     if (isOpen && address) {
       fetchAccountData();
-      // Start in edit mode if we have Next.js data
       setIsEditing(false);
     }
   }, [isOpen, address, fetchAccountData]);
