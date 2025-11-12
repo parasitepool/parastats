@@ -16,17 +16,42 @@ class HttpError extends Error {
 }
 
 /**
+ * Check if an error is an abort/timeout error (not retryable)
+ */
+function isAbortError(error: unknown): boolean {
+  if (error instanceof Error) {
+    // Check for abort-related error messages
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('abort') ||
+      message.includes('timeout') ||
+      message.includes('timed out') ||
+      error.name === 'AbortError' ||
+      error.name === 'TimeoutError'
+    );
+  }
+  return false;
+}
+
+/**
  * Check if an error is retryable based on HTTP status code or error type
  *
  * Non-retryable errors (fail immediately):
  * - 4xx client errors (400, 401, 403, 404, 409, 422, etc.) - won't change on retry
+ * - Abort/timeout errors - request took too long, retrying won't help
  *
  * Retryable errors (should retry with backoff):
  * - 429 Too Many Requests - rate limiting
  * - 5xx server errors (500, 502, 503, 504) - temporary server issues
- * - Network errors (connection refused, timeout, DNS failures)
+ * - Network errors (connection refused, DNS failures, socket errors)
+ * - ClientDestroyedError (UND_ERR_DESTROYED) - connection pool issues
  */
 function isRetryableError(error: unknown): boolean {
+  // Don't retry abort/timeout errors
+  if (isAbortError(error)) {
+    return false;
+  }
+
   if (error instanceof HttpError) {
     const status = error.status;
 
@@ -43,8 +68,78 @@ function isRetryableError(error: unknown): boolean {
     return true;
   }
 
-  // Network errors and other non-HTTP errors - should retry
-  return true;
+  // Check for ClientDestroyedError from Undici
+  if (error instanceof Error && 'code' in error && error.code === 'UND_ERR_DESTROYED') {
+    return true; // This is retryable - connection pool issue
+  }
+
+  // Check for Undici socket errors (connection closed, reset, etc.)
+  if (error instanceof Error && 'code' in error) {
+    const errorWithCode = error as { code?: string };
+    const code = errorWithCode.code;
+    if (
+      code === 'UND_ERR_SOCKET' ||
+      code === 'UND_ERR_CONNECT_TIMEOUT' ||
+      code === 'UND_ERR_HEADERS_TIMEOUT' ||
+      code === 'UND_ERR_BODY_TIMEOUT'
+    ) {
+      return true; // Socket errors are retryable
+    }
+  }
+
+  // Check for "fetch failed" errors (usually have a cause with more details)
+  if (error instanceof Error && error.message === 'fetch failed') {
+    // Check the cause for more details
+    const errorWithCause = error as { cause?: unknown };
+    const cause = errorWithCause.cause;
+    if (cause && typeof cause === 'object' && cause !== null) {
+      // Socket errors in the cause are retryable
+      if ('code' in cause) {
+        const causeWithCode = cause as { code?: string; message?: string };
+        const code = causeWithCode.code;
+        if (
+          code === 'UND_ERR_SOCKET' ||
+          code === 'ECONNRESET' ||
+          code === 'ECONNREFUSED' ||
+          code === 'ETIMEDOUT'
+        ) {
+          return true;
+        }
+        // Check message for "other side closed" and similar
+        const message = causeWithCode.message;
+        if (message && typeof message === 'string') {
+          const msg = message.toLowerCase();
+          if (
+            msg.includes('other side closed') ||
+            msg.includes('connection reset') ||
+            msg.includes('connection refused')
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+    return true; // Generic fetch failed - retry
+  }
+
+  // Network errors (ECONNREFUSED, ENOTFOUND, etc.) - should retry
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (
+      message.includes('econnrefused') ||
+      message.includes('enotfound') ||
+      message.includes('econnreset') ||
+      message.includes('etimedout') ||
+      message.includes('network error') ||
+      message.includes('socket') ||
+      message.includes('connection')
+    ) {
+      return true;
+    }
+  }
+
+  // Unknown errors - default to NOT retryable to avoid endless loops
+  return false;
 }
 
 interface StatsData {
@@ -103,7 +198,7 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
  * Retry helper function with backoff and jitter
- * Intelligently skips retries for non-retryable errors (4xx client errors)
+ * Intelligently skips retries for non-retryable errors (4xx client errors, timeouts, aborts)
  */
 async function withRetry<T>(
   operation: () => Promise<T>,
@@ -123,10 +218,19 @@ async function withRetry<T>(
       const retryable = isRetryableError(error);
 
       if (!retryable) {
-        // Non-retryable error (e.g., 404, 400, 403) - fail immediately
+        // Non-retryable error (e.g., 404, 400, 403, timeout, abort) - fail immediately
         const contextMsg = context ? ` [${context}]` : '';
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.log(`Non-retryable error${contextMsg} - ${errorMsg}`);
+        
+        // Only log abort/timeout errors at debug level to reduce noise
+        if (isAbortError(error)) {
+          // Suppress abort error logs - they're expected with timeouts
+        } else if (error instanceof HttpError && error.status === 404) {
+          // Concise 404 message with helpful hint
+          console.error(`❌ Endpoint not found${contextMsg} - Check API_URL and endpoint paths in .env`);
+        } else {
+          console.log(`Non-retryable error${contextMsg} - ${errorMsg}`);
+        }
         throw error;
       }
 
@@ -204,8 +308,28 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
       }
 
+      // Discover endpoint on first run or use cached/configured path
+      if (!discoveredUserStatsPath) {
+        const configuredPath = process.env.USER_STATS_ENDPOINT;
+        if (configuredPath) {
+          discoveredUserStatsPath = configuredPath;
+          console.log(`Using configured user stats endpoint: ${configuredPath}`);
+        } else {
+          // Auto-discover using the first user address
+          try {
+            discoveredUserStatsPath = await discoverUserStatsEndpoint(apiUrl, headers, address);
+          } catch (error) {
+            console.error(error instanceof Error ? error.message : String(error));
+            throw new Error('Could not discover user stats endpoint');
+          }
+        }
+      }
+
+      // Replace {address} placeholder with actual address
+      const endpoint = discoveredUserStatsPath.replace('{address}', address);
+
       try {
-        const res = await fetch(`${apiUrl}/aggregator/users/${address}`, {
+        const res = await fetch(`${apiUrl}${endpoint}`, {
           headers,
         });
         if (!res.ok) {
@@ -215,6 +339,12 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
             const body = await res.text();
             if (body) errorDetail += `: ${body}`;
           } catch {}
+          
+          // On 404, clear cached path and try discovery again next time
+          if (res.status === 404) {
+            discoveredUserStatsPath = null;
+          }
+          
           // Throw HttpError with status code so retry logic can determine if it's retryable
           throw new HttpError(res.status, `HTTP ${res.status} ${errorDetail}`);
         }
@@ -230,7 +360,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         }
         throw error;
       }
-    }, 6, 200, `GET /users/${address}`);
+    }, 2, 200, `GET /users/${address}`); // Reduced from 6 to 2 retries
 
     const userData: UserData = await response.json();
     const now = Math.floor(Date.now() / 1000);
@@ -255,7 +385,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
           created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-
+      
       historyStmt.run(
         userId,
         userData.hashrate1m,
@@ -269,145 +399,278 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         now
       );
 
-      // Update monitored_users with latest bestever and earliest authorised_at
-      // bestever: only increase (higher is better)
-      // authorised_at: only decrease to earlier timestamp (earlier = more loyal), but never to 0
-      // Also reset failed_attempts since we succeeded
-      const updateStmt = db.prepare(`
-        UPDATE monitored_users
-        SET
-          bestever = CASE WHEN bestever < ? THEN ? ELSE bestever END,
-          authorised_at = CASE
-            WHEN ? > 0 AND (authorised_at = 0 OR authorised_at > ?)
-            THEN ?
-            ELSE authorised_at
-          END,
-          failed_attempts = 0,
-          updated_at = ?
-        WHERE id = ?
+      // Update current stats (upsert)
+      const currentStmt = db.prepare(`
+        INSERT INTO user_stats_current (
+          user_id,
+          hashrate1m,
+          hashrate5m,
+          hashrate1hr,
+          hashrate1d,
+          hashrate7d,
+          workers,
+          bestshare,
+          bestever,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          hashrate1m = excluded.hashrate1m,
+          hashrate5m = excluded.hashrate5m,
+          hashrate1hr = excluded.hashrate1hr,
+          hashrate1d = excluded.hashrate1d,
+          hashrate7d = excluded.hashrate7d,
+          workers = excluded.workers,
+          bestshare = excluded.bestshare,
+          bestever = excluded.bestever,
+          updated_at = excluded.updated_at
       `);
-
-      updateStmt.run(
+      
+      currentStmt.run(
+        userId,
+        userData.hashrate1m,
+        userData.hashrate5m,
+        userData.hashrate1hr,
+        userData.hashrate1d,
+        userData.hashrate7d,
+        userData.workers,
+        userData.bestshare,
         userData.bestever,
-        userData.bestever,
-        userData.authorised,     // Check if API value is valid (> 0)
-        userData.authorised,     // Compare against existing value
-        userData.authorised,     // Set to this value if conditions met
-        now,
-        userId
+        now
       );
-    })();
 
-  } catch (error) {
-    console.error(`Error collecting stats for user ${address}:`, error);
-    
-    // Increment failed attempts and deactivate if threshold reached
-    const db = getDb();
-    db.transaction(() => {
-      // First get the current failed attempts count
-      const user = db.prepare('SELECT failed_attempts FROM monitored_users WHERE id = ?').get(userId) as { failed_attempts: number };
-      const newFailedAttempts = (user?.failed_attempts ?? 0) + 1;
-      const now = Math.floor(Date.now() / 1000);
-
-      // Then update based on the new count
-      const updateStmt = db.prepare(`
+      // Update the user record (mark as successful, reset failed attempts)
+      const updateUserStmt = db.prepare(`
         UPDATE monitored_users 
-        SET 
-          failed_attempts = ?,
-          is_active = ?,
-          updated_at = ?
+        SET updated_at = ?, 
+            failed_attempts = 0,
+            authorised_at = ?
         WHERE id = ?
       `);
-
-      // If we hit max failures, deactivate and reset counter, otherwise just increment
-      updateStmt.run(
-        newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS ? 0 : newFailedAttempts,
-        newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS ? 0 : 1,
-        now,
-        userId
-      );
-
-      if (newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS) {
-        console.log(`Deactivating user ${address} after ${CONFIG.MAX_FAILED_ATTEMPTS} failed attempts`);
-      }
+      
+      updateUserStmt.run(now, userData.authorised, userId);
     })();
+
+  } catch {
+    // Record failure
+    const db = getDb();
+    const updateFailStmt = db.prepare(`
+      UPDATE monitored_users 
+      SET failed_attempts = failed_attempts + 1,
+          updated_at = ?
+      WHERE id = ?
+    `);
+    
+    const now = Math.floor(Date.now() / 1000);
+    updateFailStmt.run(now, userId);
+
+    // Check if we should deactivate this user
+    const user = db.prepare('SELECT failed_attempts FROM monitored_users WHERE id = ?').get(userId) as { failed_attempts: number };
+    
+    if (user && user.failed_attempts >= CONFIG.MAX_FAILED_ATTEMPTS) {
+      db.prepare('UPDATE monitored_users SET is_active = 0 WHERE id = ?').run(userId);
+      console.log(`Deactivated user ${address} after ${CONFIG.MAX_FAILED_ATTEMPTS} failed attempts`);
+    }
   }
 }
 
+// Cache for discovered endpoint paths
+let discoveredPoolUsersPath: string | null = null;
+let discoveredPoolStatsPath: string | null = null;
+let discoveredUserStatsPath: string | null = null;
+
 /**
- * Fetch stats for all monitored users and manage user lifecycle
- * Handles auto-discovery, deactivation, and reactivation of users
+ * Discover the correct pool users endpoint by trying common paths
  */
-export async function collectAllUserStats() {
+async function discoverPoolUsersEndpoint(apiUrl: string, headers: Record<string, string>): Promise<string> {
+  const possiblePaths = [
+    '/aggregator/pool/users',
+    '/pool/users',
+    '/api/pool/users',
+    '/users',
+  ];
+
+  for (const path of possiblePaths) {
+    try {
+      const response = await fetch(`${apiUrl}${path}`, { 
+        headers,
+        timeout: 5000 
+      });
+      if (response.ok) {
+        console.log(`✓ Discovered pool users endpoint: ${path}`);
+        return path;
+      }
+    } catch {
+      // Continue trying other paths
+    }
+  }
+
+  throw new Error(
+    `Could not find pool users endpoint. Tried: ${possiblePaths.join(', ')}. ` +
+    `Please set POOL_USERS_ENDPOINT in your .env file.`
+  );
+}
+
+/**
+ * Discover the correct pool stats endpoint by trying common paths
+ */
+async function discoverPoolStatsEndpoint(apiUrl: string, headers: Record<string, string>): Promise<string> {
+  const possiblePaths = [
+    '/aggregator/pool/pool.status',
+    '/pool/pool.status',
+    '/api/pool/pool.status',
+    '/pool.status',
+    '/pool/status',
+  ];
+
+  for (const path of possiblePaths) {
+    try {
+      const response = await fetch(`${apiUrl}${path}`, { 
+        headers,
+        timeout: 5000 
+      });
+      if (response.ok) {
+        console.log(`✓ Discovered pool stats endpoint: ${path}`);
+        return path;
+      }
+    } catch {
+      // Continue trying other paths
+    }
+  }
+
+  throw new Error(
+    `Could not find pool stats endpoint. Tried: ${possiblePaths.join(', ')}. ` +
+    `Please set POOL_STATS_ENDPOINT in your .env file.`
+  );
+}
+
+/**
+ * Discover the correct user stats endpoint by trying common paths
+ * @param address - A test user address to try
+ */
+async function discoverUserStatsEndpoint(
+  apiUrl: string, 
+  headers: Record<string, string>,
+  address: string
+): Promise<string> {
+  const possiblePaths = [
+    `/aggregator/users/${address}`,
+    `/users/${address}`,
+    `/api/users/${address}`,
+  ];
+
+  for (const path of possiblePaths) {
+    try {
+      const response = await fetch(`${apiUrl}${path}`, { 
+        headers,
+        timeout: 5000 
+      });
+      if (response.ok) {
+        // Extract the base path without the address
+        const basePath = path.replace(address, '{address}');
+        console.log(`✓ Discovered user stats endpoint: ${basePath}`);
+        return basePath;
+      }
+    } catch {
+      // Continue trying other paths
+    }
+  }
+
+  throw new Error(
+    `Could not find user stats endpoint. Tried: ${possiblePaths.join(', ')}. ` +
+    `Please set USER_STATS_ENDPOINT in your .env file.`
+  );
+}
+
+/**
+ * Collect stats for all monitored users
+ */
+async function collectAllUserStats() {
   if (isUserCollectorRunning) {
-    console.warn('⚠️  User stats collection already running, skipping this cycle');
+    console.log("⚠️  User stats collection already running, skipping this cycle");
     return;
   }
 
   try {
     isUserCollectorRunning = true;
+
+    // Get pool users list first to determine who is active
+    const apiUrl = process.env.API_URL;
+    if (!apiUrl) {
+      console.error("Error fetching pool users: No API_URL defined in env");
+      return;
+    }
+
+    // Fetch the pool user list
+    const headers: Record<string, string> = {};
+    if (process.env.API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+    }
+
+    // Discover endpoint on first run or use cached/configured path
+    if (!discoveredPoolUsersPath) {
+      // Check if user configured it via env var
+      const configuredPath = process.env.POOL_USERS_ENDPOINT;
+      if (configuredPath) {
+        discoveredPoolUsersPath = configuredPath;
+        console.log(`Using configured pool users endpoint: ${configuredPath}`);
+      } else {
+        // Auto-discover
+        try {
+          discoveredPoolUsersPath = await discoverPoolUsersEndpoint(apiUrl, headers);
+        } catch (error) {
+          console.error(error instanceof Error ? error.message : String(error));
+          return; // Skip this cycle
+        }
+      }
+    }
+
+    const poolUsersText = await withRetry(async () => {
+      const response = await fetch(`${apiUrl}${discoveredPoolUsersPath}`, { headers });
+      if (!response.ok) {
+        // On 404, clear cached path and try discovery again next time
+        if (response.status === 404) {
+          discoveredPoolUsersPath = null;
+        }
+        throw new HttpError(response.status, `Failed to fetch pool users: ${response.statusText}`);
+      }
+      return response.text();
+    }, 2, 500, `GET ${discoveredPoolUsersPath}`);
+
+    // Parse pool users - handle both newline-delimited and JSON array formats
+    let poolUsersArray: string[];
+    const trimmedText = poolUsersText.trim();
+    
+    if (trimmedText.startsWith('[') && trimmedText.endsWith(']')) {
+      // JSON array format
+      try {
+        poolUsersArray = JSON.parse(trimmedText) as string[];
+      } catch (error) {
+        console.error('Failed to parse pool users JSON:', error);
+        poolUsersArray = [];
+      }
+    } else {
+      // Newline-delimited format
+      poolUsersArray = trimmedText.split('\n');
+    }
+    
+    // Filter out empty, whitespace-only, or invalid addresses
+    const poolUsers = new Set(
+      poolUsersArray
+        .map(addr => addr.trim())
+        .filter(addr => addr.length > 0 && addr !== '[]' && !addr.startsWith('['))
+    );
+
     const db = getDb();
     const now = Math.floor(Date.now() / 1000);
     const backoffThreshold = now - (CONFIG.FAILED_USER_BACKOFF_MINUTES * 60);
 
-    // Fetch current pool users list directly from API
-    let poolUsers: Set<string>;
-    try {
-      poolUsers = await withRetry(async () => {
-        const apiUrl = process.env.API_URL;
-        if (!apiUrl) {
-          throw new Error('API_URL is not defined in environment variables');
-        }
-
-        const headers: Record<string, string> = {};
-        if (process.env.API_TOKEN) {
-          headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
-        }
-
-        const response = await fetch(`${apiUrl}/aggregator/users`, { headers });
-        if (!response.ok) {
-          throw new HttpError(response.status, `Failed to fetch users: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        // API returns array of address strings
-        return new Set<string>(data as string[]);
-      }, 5, 250, 'GET /users');
-    } catch (error) {
-      console.error('Error fetching pool users:', error);
-      poolUsers = new Set<string>();
-    }
-
-    if (poolUsers.size === 0) {
-      console.warn('⚠️  Pool users API returned empty - either API failed or pool is actually empty');
-      console.log('Skipping auto-discovery and lifecycle management, collecting stats for known active users only');
-
-      // Collect stats for existing active users even when API is down
-      const knownUsers = db.prepare(`
-        SELECT id, address, updated_at, failed_attempts
-        FROM monitored_users
-        WHERE is_active = 1
-      `).all() as Array<{ id: number; address: string; updated_at: number; failed_attempts: number }>;
-
-      // Apply backoff for users with recent failures
-      const usersToCollect = knownUsers.filter(user => {
-        return user.failed_attempts === 0 || user.updated_at < backoffThreshold;
-      });
-
-      const collectedCount = await processBatchedUserStats(usersToCollect);
-      console.log(`Collected stats for ${collectedCount} known users at ${new Date().toISOString()}`);
-      return;
-    }
-
-    // Track lifecycle changes for logging
     let addedCount = 0;
     let deactivatedCount = 0;
     let reactivatedCount = 0;
 
-    // Get all monitored users (active and inactive) with all needed fields
-    // We fetch this once and reuse for both auto-discovery and lifecycle management
+    // Get all monitored users
     const allUsers = db.prepare(`
-      SELECT id, address, is_active, updated_at, failed_attempts
+      SELECT id, address, is_active, updated_at, failed_attempts 
       FROM monitored_users
     `).all() as Array<{
       id: number;
@@ -535,7 +798,10 @@ export async function collectAllUserStats() {
     console.log(`Collected stats for ${collectedCount} users at ${new Date().toISOString()}`);
 
   } catch (error) {
-    console.error("Error collecting user stats:", error);
+    // Only log if it's not a 404 (404s are already logged by withRetry)
+    if (!(error instanceof HttpError && error.status === 404)) {
+      console.error("Error collecting user stats:", error);
+    }
   } finally {
     isUserCollectorRunning = false;
   }
@@ -550,26 +816,48 @@ export async function collectPoolStats() {
   try {
     isCollectorRunning = true;
     
+    const apiUrl = process.env.API_URL;
+    if (!apiUrl) {
+      console.error("Error fetching pool stats: No API_URL defined in env");
+      return;
+    }
+
+    const headers: Record<string, string> = {};
+    if (process.env.API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+    }
+
+    // Discover endpoint on first run or use cached/configured path
+    if (!discoveredPoolStatsPath) {
+      // Check if user configured it via env var
+      const configuredPath = process.env.POOL_STATS_ENDPOINT;
+      if (configuredPath) {
+        discoveredPoolStatsPath = configuredPath;
+        console.log(`Using configured pool stats endpoint: ${configuredPath}`);
+      } else {
+        // Auto-discover
+        try {
+          discoveredPoolStatsPath = await discoverPoolStatsEndpoint(apiUrl, headers);
+        } catch (error) {
+          console.error(error instanceof Error ? error.message : String(error));
+          return; // Skip this cycle
+        }
+      }
+    }
+
     const text = await withRetry(async () => {
-      const apiUrl = process.env.API_URL;
-      if (!apiUrl) {
-        console.error("Error fetching pool stats: No API_URL defined in env");
-        throw new Error('API_URL is not defined in environment variables');
-      }
-
-      const headers: Record<string, string> = {};
-      if (process.env.API_TOKEN) {
-        headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
-      }
-
-      const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
+      const response = await fetch(`${apiUrl}${discoveredPoolStatsPath}`, {
         headers,
       });
       if (!response.ok) {
+        // On 404, clear cached path and try discovery again next time
+        if (response.status === 404) {
+          discoveredPoolStatsPath = null;
+        }
         throw new HttpError(response.status, `Failed to fetch pool stats: ${response.statusText}`);
       }
       return response.text();
-    }, 4, 500, 'GET /pool/pool.status');
+    }, 2, 500, `GET ${discoveredPoolStatsPath}`);
     
     // Split the response into lines and parse each JSON object
     const jsonLines = text.trim().split('\n').map(line => JSON.parse(line));
@@ -613,7 +901,10 @@ export async function collectPoolStats() {
     console.log(`Pool stats collected and stored at ${new Date().toISOString()}`);
     
   } catch (error) {
-    console.error("Error collecting pool stats:", error);
+    // Only log if it's not a 404 (404s are already logged by withRetry)
+    if (!(error instanceof HttpError && error.status === 404)) {
+      console.error("Error collecting pool stats:", error);
+    }
   } finally {
     isCollectorRunning = false;
   }
