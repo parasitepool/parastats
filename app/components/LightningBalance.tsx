@@ -37,6 +37,7 @@ export default function LightningBalance({
     isInitialized,
     address,
     addressPublicKey,
+    connectWithLightning,
   } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
@@ -46,6 +47,7 @@ export default function LightningBalance({
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
+  const [isConnecting, setIsConnecting] = useState<boolean>(false);
 
   const fetchUserData = useCallback(async (token: string) => {
     try {
@@ -265,27 +267,40 @@ export default function LightningBalance({
   return (
     <>
       <div className={`bg-background p-4 sm:p-6 shadow-md border border-border ${className}`}>
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
+        <div className="flex items-center mb-4 sm:mb-6">
           <div className="flex items-center">
             <div className="mr-2 text-accent-3">
               <LightningIcon />
             </div>
             <h2 className="text-xl sm:text-2xl font-bold">Lightning</h2>
           </div>
-          {isOwner && isLightningAuthenticated && (
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              <span className="hidden sm:inline">Edit</span>
-            </button>
-          )}
         </div>
 
-        {!hasData ? (
+        {!isLightningAuthenticated ? (
+          <div className="flex justify-center py-8">
+            <button
+              onClick={async () => {
+                setIsConnecting(true);
+                setError(null);
+                try {
+                  const result = await connectWithLightning();
+                  if (!result) {
+                    setError('Failed to connect wallet');
+                  }
+                } catch (err) {
+                  console.error('Connection error:', err);
+                  setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+                } finally {
+                  setIsConnecting(false);
+                }
+              }}
+              disabled={isConnecting}
+              className="px-6 py-3 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isConnecting ? 'Connecting...' : 'Connect'}
+            </button>
+          </div>
+        ) : !hasData ? (
           <div className="text-center py-8">
             <p className="text-2xl font-semibold text-gray-400">-</p>
           </div>
@@ -295,8 +310,19 @@ export default function LightningBalance({
             {/* Lightning Address */}
             <div className="flex flex-col">
               <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
-              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center">
+              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2">
                 <p className="text-lg sm:text-xl font-semibold break-all">{displayLnAddress}</p>
+                {isOwner && isLightningAuthenticated && (
+                  <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium flex-shrink-0"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span>Edit</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -318,45 +344,54 @@ export default function LightningBalance({
             {displayLnAddress && (
               <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border">
-                  <p className="text-lg sm:text-xl font-semibold break-all">{displayLnAddress}</p>
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2">
+                  <p className="text-lg sm:text-xl font-semibold break-all flex-1">{displayLnAddress}</p>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {walletInfo?.username && isOwner && (
+                      <button
+                        onClick={handleResetClick}
+                        className="flex items-center gap-1 px-2 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Reset</span>
+                      </button>
+                    )}
+                    {isOwner && isLightningAuthenticated && (
+                      <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="flex items-center gap-1 px-2 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        <span>Edit</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
-            {walletInfo?.username && isOwner && (
-              <>
-                {displayLnAddress ? (
-                  // If address exists but doesn't match, show reset button
-                  <button
-                    onClick={handleResetClick}
-                    className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            {walletInfo?.username && isOwner && !displayLnAddress && (
+              // If no address set, show activate account button
+              <button
+                onClick={handleResetToDefault}
+                disabled={isResetting}
+                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isResetting ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>Reset to Default</span>
-                  </button>
+                    <span>Activating...</span>
+                  </>
                 ) : (
-                  // If no address set, show activate account button
-                  <button
-                    onClick={handleResetToDefault}
-                    disabled={isResetting}
-                    className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isResetting ? (
-                      <>
-                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>Activating...</span>
-                      </>
-                    ) : (
-                      <span>Activate Account</span>
-                    )}
-                  </button>
+                  <span>Activate Account</span>
                 )}
-              </>
+              </button>
             )}
           </div>
         )}

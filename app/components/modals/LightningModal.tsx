@@ -324,8 +324,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
         className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl overflow-y-auto max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-start mb-4">
-          <h2 className="text-2xl font-bold text-accent-3">Lightning Information</h2>
+        <div className="flex justify-end items-start mb-4">
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-500 focus:outline-none"
@@ -348,7 +347,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
           <div className="space-y-6">
             {/* Current Lightning Address */}
             <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Lightning Address</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Current Lightning Address</h3>
               {isEditing && hasNextJsData ? (
                 <div className="space-y-2">
                   <input
@@ -373,10 +372,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
                       {isSaving ? 'Saving...' : 'Save'}
                     </button>
                     <button
-                      onClick={() => {
-                        handleCancel();
-                        onClose();
-                      }}
+                      onClick={handleCancel}
                       disabled={isSaving}
                       className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -424,7 +420,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
             {hasNextJsData && accountData?.past_ln_addresses && accountData.past_ln_addresses.length > 0 && (
               <div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">Past Lightning Addresses</h3>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
                   {accountData.past_ln_addresses.map((addr, index) => (
                     <div key={index} className="bg-secondary/50 p-3 border border-border">
                       <span className="text-foreground/70 break-all">{addr}</span>
