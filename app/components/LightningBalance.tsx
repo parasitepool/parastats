@@ -364,10 +364,10 @@ export default function LightningBalance({
             )}
           </div>
         ) : (
-          // If addresses don't match, show only lightning address with reset button
-          <div className="flex flex-col sm:flex-row items-end gap-4">
+          // If addresses don't match or address not set, show lightning address with appropriate button
+          <div className="space-y-4">
             {displayLnAddress && (
-              <div className="flex flex-col flex-1 sm:flex-initial sm:max-w-md">
+              <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
                 <div className="bg-secondary p-3 sm:p-4 border border-border">
                   <p className="text-lg sm:text-xl font-semibold break-all">{displayLnAddress}</p>
@@ -375,15 +375,41 @@ export default function LightningBalance({
               </div>
             )}
             {walletInfo?.username && isOwner && (
-              <button
-                onClick={handleResetClick}
-                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span className="hidden sm:inline">Reset</span>
-              </button>
+              <>
+                {displayLnAddress ? (
+                  // If address exists but doesn't match, show reset button
+                  <button
+                    onClick={handleResetClick}
+                    className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>Reset to Default</span>
+                  </button>
+                ) : (
+                  // If no address set, show activate account button
+                  <button
+                    onClick={handleResetToDefault}
+                    disabled={isResetting}
+                    className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isResetting ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Activating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Activate Account</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
@@ -442,14 +468,14 @@ export default function LightningBalance({
                 <button
                   onClick={() => setShowResetConfirm(false)}
                   disabled={isResetting}
-                  className="px-4 py-2 bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleResetToDefault}
                   disabled={isResetting}
-                  className="px-4 py-2 bg-secondary border border-border text-secondary-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isResetting ? 'Resetting...' : 'Confirm'}
                 </button>
