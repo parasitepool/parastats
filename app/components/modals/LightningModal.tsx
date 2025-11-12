@@ -7,16 +7,62 @@ import type { AccountData } from '@/app/api/account/types';
 interface LightningModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onUpdate?: () => void;
 }
 
-export default function LightningModal({ isOpen, onClose }: LightningModalProps) {
-  const { address, addressPublicKey } = useWallet();
+interface WalletInfo {
+  email: string;
+  id: string;
+  lightning_ln_onchain: string;
+  lightning_ln_url: string;
+  username: string;
+}
+
+interface BalanceResponse {
+  balance: number;
+}
+
+const API_BASE_URL = "https://api.bitbit.bot";
+
+export default function LightningModal({ isOpen, onClose, onUpdate }: LightningModalProps) {
+  const { address, addressPublicKey, lightningToken, isLightningAuthenticated } = useWallet();
   const [accountData, setAccountData] = useState<AccountData | null>(null);
+  const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newLnAddress, setNewLnAddress] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch bitbit.bot data
+  const fetchBitbitData = useCallback(async (token: string) => {
+    try {
+      const [userResponse, balanceResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/wallet_user`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_BASE_URL}/wallet_user/balance`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      if (!userResponse.ok || !balanceResponse.ok) {
+        return null;
+      }
+
+      const userData: WalletInfo = await userResponse.json();
+      const balanceData: BalanceResponse = await balanceResponse.json();
+
+      return {
+        walletInfo: userData,
+        balance: balanceData.balance,
+      };
+    } catch (err) {
+      console.error('Error fetching bitbit data:', err);
+      return null;
+    }
+  }, []);
 
   // Fetch account data when modal opens
   const fetchAccountData = useCallback(async () => {
@@ -26,26 +72,40 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
     setError(null);
 
     try {
-      const response = await fetch(`/api/account/${address}`);
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch account data');
+      // Fetch from Next.js endpoint
+      const accountResponse = await fetch(`/api/account/${address}`);
+      let accountData: AccountData | null = null;
+      
+      if (accountResponse.ok) {
+        accountData = await accountResponse.json();
+        setAccountData(accountData);
+        setNewLnAddress(accountData?.ln_address || '');
+      } else {
+        // Next.js endpoint returned nothing (404 or error)
+        setAccountData(null);
       }
 
-      const data: AccountData = await response.json();
-      setAccountData(data);
-      setNewLnAddress(data.ln_address || '');
+      // Fetch from bitbit.bot if authenticated
+      if (isLightningAuthenticated && lightningToken) {
+        const bitbitData = await fetchBitbitData(lightningToken);
+        if (bitbitData) {
+          setWalletInfo(bitbitData.walletInfo);
+          setBalance(bitbitData.balance);
+        }
+      }
     } catch (err) {
       console.error('Error fetching account data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load account data');
     } finally {
       setIsLoading(false);
     }
-  }, [address]);
+  }, [address, isLightningAuthenticated, lightningToken, fetchBitbitData]);
 
   useEffect(() => {
     if (isOpen && address) {
       fetchAccountData();
+      // Start in edit mode if we have Next.js data
+      setIsEditing(false);
     }
   }, [isOpen, address, fetchAccountData]);
 
@@ -54,6 +114,8 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
     if (!isOpen) {
       setIsEditing(false);
       setError(null);
+      setWalletInfo(null);
+      setBalance(null);
     }
   }, [isOpen]);
 
@@ -134,6 +196,10 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
       const updatedData: AccountData = await response.json();
       setAccountData(updatedData);
       setIsEditing(false);
+      // Trigger refresh in parent component
+      if (onUpdate) {
+        onUpdate();
+      }
     } catch (err) {
       console.error('Error updating Lightning address:', err);
       setError(err instanceof Error ? err.message : 'Failed to update Lightning address');
@@ -144,9 +210,15 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
 
   const handleCancel = () => {
     setIsEditing(false);
+    // Reset to account data only
     setNewLnAddress(accountData?.ln_address || '');
     setError(null);
   };
+
+  // Only show lightning address from Next.js endpoint, not from bitbit
+  const displayLnAddress = accountData?.ln_address || '';
+  const hasNextJsData = accountData !== null;
+  const hasBitbitData = walletInfo !== null && balance !== null;
 
   if (!isOpen) return null;
 
@@ -169,16 +241,16 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
           </div>
-        ) : error && !accountData ? (
+        ) : error && !hasNextJsData && !hasBitbitData ? (
           <div className="text-sm text-red-500 bg-red-500/10 p-4 border border-red-500/20">
             {error}
           </div>
-        ) : accountData ? (
+        ) : (
           <div className="space-y-6">
             {/* Current Lightning Address */}
             <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Current Lightning Address</h3>
-              {isEditing ? (
+              <h3 className="text-lg font-semibold text-foreground mb-2">Lightning Address</h3>
+              {isEditing && hasNextJsData ? (
                 <div className="space-y-2">
                   <input
                     type="text"
@@ -210,34 +282,26 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between bg-secondary p-3 border border-border">
-                  <span className="text-foreground break-all">
-                    {accountData.ln_address || 'Not set'}
-                  </span>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="ml-4 text-accent-3 hover:text-accent-3/80 transition-colors flex-shrink-0"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between bg-secondary p-3 border border-border">
+                    <span className="text-foreground break-all">
+                      {displayLnAddress || 'Not set'}
+                    </span>
+                  </div>
+                  {hasNextJsData && (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="w-full bg-accent-3 text-white px-4 py-2 hover:bg-accent-3/90 transition-colors font-medium"
+                    >
+                      Edit Address
+                    </button>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Bitcoin Address */}
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Bitcoin Address</h3>
-              <div className="bg-secondary p-3 border border-border">
-                <span className="text-foreground/70 break-all font-mono text-sm">
-                  {accountData.btc_address}
-                </span>
-              </div>
-            </div>
-
-            {/* Past Lightning Addresses */}
-            {accountData.past_ln_addresses && accountData.past_ln_addresses.length > 0 && (
+            {/* Past Lightning Addresses - only show if we have Next.js data */}
+            {hasNextJsData && accountData?.past_ln_addresses && accountData.past_ln_addresses.length > 0 && (
               <div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">Past Lightning Addresses</h3>
                 <div className="space-y-2">
@@ -249,15 +313,8 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
                 </div>
               </div>
             )}
-
-            {/* Last Updated */}
-            {accountData.last_updated && (
-              <div className="text-sm text-foreground/50">
-                Last updated: {new Date(accountData.last_updated).toLocaleString()}
-              </div>
-            )}
           </div>
-        ) : null}
+        )}
 
         <div className="flex justify-end mt-6">
           <button

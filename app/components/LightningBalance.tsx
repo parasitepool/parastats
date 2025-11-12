@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { LightningIcon } from "@/app/components/icons";
 import { useWallet } from "@/app/hooks/useWallet";
 import LightningModal from "@/app/components/modals/LightningModal";
+import type { AccountData } from "@/app/api/account/types";
 
 interface LightningBalanceProps {
   className?: string;
@@ -40,6 +41,7 @@ export default function LightningBalance({
   } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
+  const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -73,6 +75,24 @@ export default function LightningBalance({
     }
   }, []);
 
+  // Fetch account data from Next.js API
+  const fetchAccountData = useCallback(async () => {
+    if (!userId) return;
+    
+    try {
+      const response = await fetch(`/api/account/${userId}`);
+      if (response.ok) {
+        const data: AccountData = await response.json();
+        setAccountData(data);
+      } else {
+        setAccountData(null);
+      }
+    } catch (err) {
+      console.error("Error fetching account data:", err);
+      setAccountData(null);
+    }
+  }, [userId]);
+
   useEffect(() => {
     if (isInitialized && isLightningAuthenticated && lightningToken) {
       setIsLoading(true);
@@ -86,6 +106,11 @@ export default function LightningBalance({
         });
     }
   }, [isInitialized, isLightningAuthenticated, lightningToken, fetchUserData]);
+
+  // Fetch account data when userId changes
+  useEffect(() => {
+    fetchAccountData();
+  }, [fetchAccountData]);
 
   const handleConnect = useCallback(async () => {
     setIsLoading(true);
@@ -160,140 +185,109 @@ export default function LightningBalance({
 
   // Check if the connected wallet owns this profile
   const isOwner = !userId || address === userId;
+  
+  // Only show lightning address from Next.js endpoint, not from bitbit
+  const displayLnAddress = accountData?.ln_address || null;
+  const hasData = isLightningAuthenticated && (balance !== null || walletInfo !== null || accountData !== null);
 
-  return (
-    <>
-      <div
-        className={`bg-background p-4 shadow-md border border-border ${className} ${
-          isLightningAuthenticated && isOwner
-            ? "cursor-pointer transition-all hover:border-accent-3/50 hover:shadow-lg"
-            : ""
-        }`}
-        onClick={() => isLightningAuthenticated && isOwner && setIsModalOpen(true)}
-      >
+  // If compact mode, show the old compact view
+  if (compact) {
+    return (
+      <>
         <div
-          className={`flex items-center ${
-            compact ? "mb-2" : "justify-between mb-3"
-          }`}
+          className={`bg-background p-4 shadow-md border border-border ${className}`}
         >
-          <div className="flex items-center flex-1">
+          <div className="flex items-center mb-2">
             <div className="mr-2 text-accent-3">
               <LightningIcon />
             </div>
-            <h3
-              className={
-                compact
-                  ? "text-sm font-medium text-accent-2"
-                  : "text-lg font-semibold"
-              }
-            >
-              Lightning
-            </h3>
+            <h3 className="text-sm font-medium text-accent-2">Lightning</h3>
           </div>
-          {isLightningAuthenticated && isOwner && (
-            <svg
-              className="w-4 h-4 text-foreground/50"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {!isLightningAuthenticated ? (
+            <p className="text-2xl font-semibold">
+              <span className="text-gray-400">-</span>
+            </p>
+          ) : (
+            <p className="text-2xl font-semibold">
+              {balance !== null ? balance.toLocaleString() : "--"}
+            </p>
+          )}
+        </div>
+        <LightningModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+        />
+      </>
+    );
+  }
+
+  // Expanded full-width view
+  return (
+    <>
+      <div className={`bg-background p-4 sm:p-6 shadow-md border border-border ${className}`}>
+        <div className="flex items-center justify-between mb-4 sm:mb-6">
+          <div className="flex items-center">
+            <div className="mr-2 text-accent-3">
+              <LightningIcon />
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold">Lightning</h2>
+          </div>
+          {isOwner && isLightningAuthenticated && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 5l7 7-7 7"
-              />
-            </svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <span className="hidden sm:inline">Edit</span>
+            </button>
           )}
         </div>
 
-        {!isLightningAuthenticated ? (
-          compact ? (
-            // Compact mode - unauthenticated
-            <div>
-              <p className="text-2xl font-semibold text-foreground/50">
-                Not connected
-              </p>
-            </div>
-          ) : (
-            // Full mode - unauthenticated
-            <div className="space-y-3">
-              {isLoading ? (
-                <>
-                  <div className="flex items-center justify-center py-4">
-                    <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
-                  </div>
-                  <p className="text-sm text-center text-foreground/70">
-                    Connecting to Lightning wallet...
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="text-center py-6">
-                    <p className="text-foreground/70 mb-4">
-                      Connect your wallet to view your Lightning balance
-                    </p>
-                    <button
-                      onClick={handleConnect}
-                      className="bg-accent-3 text-white px-6 py-2 hover:bg-accent-3/90 transition-colors font-medium"
-                    >
-                      Connect Wallet
-                    </button>
-                  </div>
-                  {error && (
-                    <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
-                      {error}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )
-        ) : compact ? (
-          // Compact mode - authenticated
-          <div>
-            {isLoading ? (
-              <div className="flex items-center justify-center pt-1">
-                <div className="animate-spin h-6 w-6 border-4 border-accent-3 border-t-transparent rounded-full"></div>
-              </div>
-            ) : (
-              <p className="text-2xl font-semibold">
-                {balance !== null ? balance.toLocaleString() : "--"}
-              </p>
-            )}
-            {error && <p className="text-xs text-red-500 mt-1">Error</p>}
+        {!hasData ? (
+          <div className="text-center py-8">
+            <p className="text-2xl font-semibold text-gray-400">-</p>
           </div>
         ) : (
-          // Full mode - authenticated
-          <div className="space-y-3">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-3xl font-bold">
-                    {balance !== null ? balance.toLocaleString() : "--"}
-                  </span>
-                  <span className="text-sm text-foreground/70 ml-2">sats</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {/* Balance */}
+            {balance !== null && (
+              <div>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
+                <div className="bg-secondary p-3 sm:p-4 border border-border">
+                  <p className="text-2xl sm:text-3xl font-bold">
+                    {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
+                  </p>
                 </div>
-
-                <button
-                  onClick={handleRefresh}
-                  disabled={isLoading}
-                  className="w-full bg-secondary text-secondary-foreground px-3 py-2 hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                >
-                  {isLoading ? "Refreshing..." : "Refresh"}
-                </button>
-              </>
-            )}
-
-            {error && (
-              <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
-                {error}
               </div>
             )}
+
+            {/* Username */}
+            {walletInfo?.username && (
+              <div>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">Username</h3>
+                <div className="bg-secondary p-3 sm:p-4 border border-border">
+                  <p className="text-lg sm:text-xl font-semibold break-all">{walletInfo.username}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Lightning Address */}
+            {displayLnAddress && (
+              <div className="sm:col-span-2 lg:col-span-1">
+                <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
+                <div className="bg-secondary p-3 sm:p-4 border border-border">
+                  <p className="text-lg sm:text-xl font-semibold break-all">{displayLnAddress}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
+            {error}
           </div>
         )}
       </div>
@@ -301,6 +295,7 @@ export default function LightningBalance({
       <LightningModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onUpdate={fetchAccountData}
       />
     </>
   );
