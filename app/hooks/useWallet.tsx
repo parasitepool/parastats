@@ -298,9 +298,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const token = await performLightningAuth(paymentAddress.address, paymentAddress.publicKey);
       
       return { address: paymentAddress.address, token };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Check if error indicates wallet provider is not found
-      const errorMessage = error?.message || String(error) || '';
+      const errorMessage = (error instanceof Error ? error.message : String(error)) || '';
       const errorString = errorMessage.toLowerCase();
       
       if (

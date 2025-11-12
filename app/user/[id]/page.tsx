@@ -26,7 +26,6 @@ export default function UserDashboard() {
   const [hashrate, setHashrate] = useState<Hashrate>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
-  const [isUserNotFound, setIsUserNotFound] = useState(false);
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
 
   // Function to check if the address is valid and fetch user data
@@ -67,12 +66,10 @@ export default function UserDashboard() {
             const isValid = isValidBitcoinAddress(userId.trim());
             if (isValid) {
               setIsValidAddress(true);
-              setIsUserNotFound(true);
               setUserData(null);
             } else {
               // Invalid address
               setIsValidAddress(false);
-              setIsUserNotFound(false);
               setUserData(null);
             }
           } else {

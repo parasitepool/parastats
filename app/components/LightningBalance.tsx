@@ -5,23 +5,12 @@ import { LightningIcon } from "@/app/components/icons";
 import { useWallet } from "@/app/hooks/useWallet";
 import LightningModal from "@/app/components/modals/LightningModal";
 import type { AccountData } from "@/app/api/account/types";
+import type { WalletInfo, BalanceResponse } from "@/app/components/types/lightning";
 
 interface LightningBalanceProps {
   className?: string;
   compact?: boolean;
   userId?: string;
-}
-
-interface WalletInfo {
-  email: string;
-  id: string;
-  lightning_ln_onchain: string;
-  lightning_ln_url: string;
-  username: string;
-}
-
-interface BalanceResponse {
-  balance: number;
 }
 
 const API_BASE_URL = "https://api.bitbit.bot";
@@ -42,7 +31,6 @@ export default function LightningBalance({
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [accountData, setAccountData] = useState<AccountData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isResetting, setIsResetting] = useState<boolean>(false);
@@ -50,32 +38,28 @@ export default function LightningBalance({
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
 
   const fetchUserData = useCallback(async (token: string) => {
-    try {
-      const [userResponse, balanceResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/wallet_user`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_BASE_URL}/wallet_user/balance`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
+    const [userResponse, balanceResponse] = await Promise.all([
+      fetch(`${API_BASE_URL}/wallet_user`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      fetch(`${API_BASE_URL}/wallet_user/balance`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+    ]);
 
-      if (!userResponse.ok) {
-        throw new Error("Failed to fetch user info");
-      }
-
-      if (!balanceResponse.ok) {
-        throw new Error("Failed to fetch balance");
-      }
-
-      const userData: WalletInfo = await userResponse.json();
-      const balanceData: BalanceResponse = await balanceResponse.json();
-
-      setWalletInfo(userData);
-      setBalance(balanceData.balance);
-    } catch (err) {
-      throw err;
+    if (!userResponse.ok) {
+      throw new Error("Failed to fetch user info");
     }
+
+    if (!balanceResponse.ok) {
+      throw new Error("Failed to fetch balance");
+    }
+
+    const userData: WalletInfo = await userResponse.json();
+    const balanceData: BalanceResponse = await balanceResponse.json();
+
+    setWalletInfo(userData);
+    setBalance(balanceData.balance);
   }, []);
 
   // Fetch account data from Next.js API
@@ -104,14 +88,10 @@ export default function LightningBalance({
 
   useEffect(() => {
     if (isInitialized && isLightningAuthenticated && lightningToken) {
-      setIsLoading(true);
       fetchUserData(lightningToken)
         .catch((err) => {
           console.error("Error fetching Lightning data:", err);
           setError("Failed to load Lightning data");
-        })
-        .finally(() => {
-          setIsLoading(false);
         });
     }
   }, [isInitialized, isLightningAuthenticated, lightningToken, fetchUserData]);

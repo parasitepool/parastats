@@ -3,23 +3,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/app/hooks/useWallet';
 import type { AccountData } from '@/app/api/account/types';
+import type { WalletInfo, BalanceResponse } from '@/app/components/types/lightning';
 
 interface LightningModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdate?: () => void;
-}
-
-interface WalletInfo {
-  email: string;
-  id: string;
-  lightning_ln_onchain: string;
-  lightning_ln_url: string;
-  username: string;
-}
-
-interface BalanceResponse {
-  balance: number;
 }
 
 const API_BASE_URL = "https://api.bitbit.bot";

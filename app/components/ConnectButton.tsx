@@ -41,10 +41,15 @@ export default function ConnectButton() {
           router.push(`/user/${result.address}`);
         }
         // If result is null, user likely cancelled - don't show help modal
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Check if error indicates Xverse is not installed
-        const errorMessage = err?.message || String(err) || '';
+        const errorMessage = (err instanceof Error ? err.message : String(err)) || '';
         const errorString = errorMessage.toLowerCase();
+        
+        // Check for error code/name if err is an object
+        const errorObj = err && typeof err === 'object' ? err as { code?: string; name?: string } : null;
+        const errorCode = errorObj?.code;
+        const errorName = errorObj?.name;
         
         // Common error patterns when Xverse extension is not installed
         const isExtensionNotFound = (
@@ -57,9 +62,9 @@ export default function ConnectButton() {
           errorString.includes('provider not found') ||
           errorString.includes('window.btc') ||
           errorString.includes('sats-connect') ||
-          err?.code === 'EXTENSION_NOT_FOUND' ||
-          err?.name === 'ExtensionNotFoundError' ||
-          err?.name === 'ProviderNotFoundError'
+          errorCode === 'EXTENSION_NOT_FOUND' ||
+          errorName === 'ExtensionNotFoundError' ||
+          errorName === 'ProviderNotFoundError'
         );
         
         if (isExtensionNotFound) {
