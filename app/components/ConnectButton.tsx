@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '../hooks/useWallet';
-import ConnectModal from './modals/ConnectModal';
+import HelpModal from './modals/HelpModal';
 
 export default function ConnectButton() {
-  const { address, isConnected, disconnect } = useWallet();
+  const { address, isConnected, disconnect, connectWithLightning } = useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
-  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -28,11 +29,49 @@ export default function ConnectButton() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
-  const handleButtonClick = () => {
+  const handleButtonClick = async () => {
     if (isConnected) {
       setShowDropdown(!showDropdown);
     } else {
-      setShowConnectModal(true);
+      setIsConnecting(true);
+      try {
+        // Try to connect with Xverse directly
+        const result = await connectWithLightning();
+        if (result) {
+          router.push(`/user/${result.address}`);
+        }
+        // If result is null, user likely cancelled - don't show help modal
+      } catch (err: any) {
+        // Check if error indicates Xverse is not installed
+        const errorMessage = err?.message || String(err) || '';
+        const errorString = errorMessage.toLowerCase();
+        
+        // Common error patterns when Xverse extension is not installed
+        const isExtensionNotFound = (
+          errorString.includes('no wallet provider') ||
+          errorString.includes('wallet provider was found') ||
+          errorString.includes('extension') ||
+          errorString.includes('not found') ||
+          errorString.includes('not installed') ||
+          errorString.includes('no provider') ||
+          errorString.includes('provider not found') ||
+          errorString.includes('window.btc') ||
+          errorString.includes('sats-connect') ||
+          err?.code === 'EXTENSION_NOT_FOUND' ||
+          err?.name === 'ExtensionNotFoundError' ||
+          err?.name === 'ProviderNotFoundError'
+        );
+        
+        if (isExtensionNotFound) {
+          // Xverse is not installed, show help modal
+          setShowHelpModal(true);
+        } else {
+          // Other error (user cancelled, network error, etc.), just log it
+          console.error('Failed to connect:', err);
+        }
+      } finally {
+        setIsConnecting(false);
+      }
     }
   };
 
@@ -53,12 +92,16 @@ export default function ConnectButton() {
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={handleButtonClick}
-          className="cursor-pointer px-4 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium"
+          disabled={isConnecting}
+          className="cursor-pointer px-4 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isConnected && address 
-            ? shortenAddress(address) 
-            : 'Connect'
-          }
+          {isConnecting ? (
+            'Connecting...'
+          ) : isConnected && address ? (
+            shortenAddress(address)
+          ) : (
+            'Connect'
+          )}
         </button>
 
         {isConnected && showDropdown && (
@@ -79,9 +122,9 @@ export default function ConnectButton() {
         )}
       </div>
 
-      <ConnectModal 
-        isOpen={showConnectModal} 
-        onClose={() => setShowConnectModal(false)} 
+      <HelpModal 
+        isOpen={showHelpModal} 
+        onClose={() => setShowHelpModal(false)} 
       />
     </>
   );

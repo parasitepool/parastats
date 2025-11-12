@@ -298,7 +298,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const token = await performLightningAuth(paymentAddress.address, paymentAddress.publicKey);
       
       return { address: paymentAddress.address, token };
-    } catch (error) {
+    } catch (error: any) {
+      // Check if error indicates wallet provider is not found
+      const errorMessage = error?.message || String(error) || '';
+      const errorString = errorMessage.toLowerCase();
+      
+      if (
+        errorString.includes('no wallet provider') ||
+        errorString.includes('no provider') ||
+        errorString.includes('provider not found') ||
+        errorString.includes('wallet provider was found') ||
+        errorString.includes('extension') ||
+        errorString.includes('not installed')
+      ) {
+        // Re-throw provider not found errors so they can be handled by the caller
+        throw error;
+      }
+      
+      // For other errors, log and return null
       console.error('Failed to connect with Lightning:', error);
       return null;
     }

@@ -6,11 +6,19 @@ export default function MinerSetupGuide() {
   return (
     <ol className="list-decimal pl-4 space-y-2 ml-6">
       <li>
-        Set up a new private key on Xverse wallet:
+        Install the Xverse wallet extension from{" "}
+        <Link
+          href="https://www.xverse.app/"
+          className="underline hover:text-foreground"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          xverse.app
+        </Link>: 
         <ul className="list-disc pl-4 mt-2">
           <li>Create a brand new wallet (not just a new account)</li>
           <li>Ensure there are no Bitcoin or Ordinals on it</li>
-          <li>Securely store your private key</li>
+          <li>Securely store your seed phrase</li>
         </ul>
       </li>
       <li>
