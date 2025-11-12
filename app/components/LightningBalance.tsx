@@ -1,11 +1,14 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { LightningIcon } from '@/app/components/icons';
-import { useWallet } from '@/app/hooks/useWallet';
+import { useState, useEffect, useCallback } from "react";
+import { LightningIcon } from "@/app/components/icons";
+import { useWallet } from "@/app/hooks/useWallet";
+import LightningModal from "@/app/components/modals/LightningModal";
 
 interface LightningBalanceProps {
   className?: string;
+  compact?: boolean;
+  userId?: string;
 }
 
 interface WalletInfo {
@@ -20,32 +23,44 @@ interface BalanceResponse {
   balance: number;
 }
 
-const API_BASE_URL = 'https://api.bitbit.bot';
+const API_BASE_URL = "https://api.bitbit.bot";
 
-export default function LightningBalance({ className = '' }: LightningBalanceProps) {
-  const { lightningToken, isLightningAuthenticated, isInitialized, connectWithLightning, refreshLightningAuth } = useWallet();
+export default function LightningBalance({
+  className = "",
+  compact = false,
+  userId,
+}: LightningBalanceProps) {
+  const {
+    lightningToken,
+    isLightningAuthenticated,
+    isInitialized,
+    connectWithLightning,
+    refreshLightningAuth,
+    address,
+  } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   const fetchUserData = useCallback(async (token: string) => {
     try {
       const [userResponse, balanceResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/wallet_user`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`${API_BASE_URL}/wallet_user/balance`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
+          headers: { Authorization: `Bearer ${token}` },
+        }),
       ]);
 
       if (!userResponse.ok) {
-        throw new Error('Failed to fetch user info');
+        throw new Error("Failed to fetch user info");
       }
 
       if (!balanceResponse.ok) {
-        throw new Error('Failed to fetch balance');
+        throw new Error("Failed to fetch balance");
       }
 
       const userData: WalletInfo = await userResponse.json();
@@ -63,8 +78,8 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
       setIsLoading(true);
       fetchUserData(lightningToken)
         .catch((err) => {
-          console.error('Error fetching Lightning data:', err);
-          setError('Failed to load Lightning data');
+          console.error("Error fetching Lightning data:", err);
+          setError("Failed to load Lightning data");
         })
         .finally(() => {
           setIsLoading(false);
@@ -78,14 +93,15 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
 
     try {
       const result = await connectWithLightning();
-      
-      if (!result) {
-        throw new Error('Failed to connect wallet or authenticate with Lightning');
-      }
 
+      if (!result) {
+        throw new Error(
+          "Failed to connect wallet or authenticate with Lightning"
+        );
+      }
     } catch (err) {
-      console.error('Connection error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+      console.error("Connection error:", err);
+      setError(err instanceof Error ? err.message : "Failed to connect wallet");
     } finally {
       setIsLoading(false);
     }
@@ -93,7 +109,7 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
 
   const handleRefresh = useCallback(async () => {
     if (!lightningToken) {
-      setError('No authentication found. Please connect your wallet.');
+      setError("No authentication found. Please connect your wallet.");
       return;
     }
 
@@ -103,17 +119,17 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
     try {
       await fetchUserData(lightningToken);
     } catch (err) {
-      console.error('Refresh error:', err);
-      
+      console.error("Refresh error:", err);
+
       try {
         const newToken = await refreshLightningAuth();
         if (newToken) {
           await fetchUserData(newToken);
         } else {
-          throw new Error('Failed to refresh authentication');
+          throw new Error("Failed to refresh authentication");
         }
       } catch {
-        setError('Session expired. Please reconnect your wallet.');
+        setError("Session expired. Please reconnect your wallet.");
       }
     } finally {
       setIsLoading(false);
@@ -122,95 +138,170 @@ export default function LightningBalance({ className = '' }: LightningBalancePro
 
   if (!isInitialized) {
     return (
-      <div className={`bg-background p-4 shadow-md border border-border ${className}`}>
-        <div className="flex items-center mb-3">
-          <div className="mr-2 text-accent-3">
-            <LightningIcon />
-          </div>
-          <h3 className="text-lg font-semibold">Lightning</h3>
-        </div>
-        <div className="flex items-center justify-center py-4">
-          <div className="animate-spin h-6 w-6 border-4 border-accent-3 border-t-transparent rounded-full"></div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`bg-background p-4 shadow-md border border-border ${className}`}>
-      <div className="flex items-center justify-between mb-3">
+      <div
+        className={`bg-background p-4 shadow-md border border-border ${className}`}
+      >
         <div className="flex items-center">
           <div className="mr-2 text-accent-3">
             <LightningIcon />
           </div>
           <h3 className="text-lg font-semibold">Lightning</h3>
         </div>
+        <div
+          className={`flex items-center justify-center ${
+            compact ? "pt-1" : "py-4"
+          }`}
+        >
+          <div className="animate-spin h-6 w-6 border-4 border-accent-3 border-t-transparent rounded-full"></div>
+        </div>
       </div>
+    );
+  }
 
-      {!isLightningAuthenticated ? (
-        <div className="space-y-3">
-          {isLoading ? (
-            <>
+  // Check if the connected wallet owns this profile
+  const isOwner = !userId || address === userId;
+
+  return (
+    <>
+      <div
+        className={`bg-background p-4 shadow-md border border-border ${className} ${
+          isLightningAuthenticated && isOwner
+            ? "cursor-pointer transition-all hover:border-accent-3/50 hover:shadow-lg"
+            : ""
+        }`}
+        onClick={() => isLightningAuthenticated && isOwner && setIsModalOpen(true)}
+      >
+        <div
+          className={`flex items-center ${
+            compact ? "mb-2" : "justify-between mb-3"
+          }`}
+        >
+          <div className="flex items-center flex-1">
+            <div className="mr-2 text-accent-3">
+              <LightningIcon />
+            </div>
+            <h3
+              className={
+                compact
+                  ? "text-sm font-medium text-accent-2"
+                  : "text-lg font-semibold"
+              }
+            >
+              Lightning
+            </h3>
+          </div>
+          {isLightningAuthenticated && isOwner && (
+            <svg
+              className="w-4 h-4 text-foreground/50"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5l7 7-7 7"
+              />
+            </svg>
+          )}
+        </div>
+
+        {!isLightningAuthenticated ? (
+          compact ? (
+            // Compact mode - unauthenticated
+            <div>
+              <p className="text-2xl font-semibold text-foreground/50">
+                Not connected
+              </p>
+            </div>
+          ) : (
+            // Full mode - unauthenticated
+            <div className="space-y-3">
+              {isLoading ? (
+                <>
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
+                  </div>
+                  <p className="text-sm text-center text-foreground/70">
+                    Connecting to Lightning wallet...
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="text-center py-6">
+                    <p className="text-foreground/70 mb-4">
+                      Connect your wallet to view your Lightning balance
+                    </p>
+                    <button
+                      onClick={handleConnect}
+                      className="bg-accent-3 text-white px-6 py-2 hover:bg-accent-3/90 transition-colors font-medium"
+                    >
+                      Connect Wallet
+                    </button>
+                  </div>
+                  {error && (
+                    <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
+                      {error}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        ) : compact ? (
+          // Compact mode - authenticated
+          <div>
+            {isLoading ? (
+              <div className="flex items-center justify-center pt-1">
+                <div className="animate-spin h-6 w-6 border-4 border-accent-3 border-t-transparent rounded-full"></div>
+              </div>
+            ) : (
+              <p className="text-2xl font-semibold">
+                {balance !== null ? balance.toLocaleString() : "--"}
+              </p>
+            )}
+            {error && <p className="text-xs text-red-500 mt-1">Error</p>}
+          </div>
+        ) : (
+          // Full mode - authenticated
+          <div className="space-y-3">
+            {isLoading ? (
               <div className="flex items-center justify-center py-4">
                 <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
               </div>
-              <p className="text-sm text-center text-foreground/70">
-                Connecting to Lightning wallet...
-              </p>
-            </>
-          ) : (
-            <>
-              <div className="text-center py-6">
-                <p className="text-foreground/70 mb-4">
-                  Connect your wallet to view your Lightning balance
-                </p>
-                <button
-                  onClick={handleConnect}
-                  className="bg-accent-3 text-white px-6 py-2 hover:bg-accent-3/90 transition-colors font-medium"
-                >
-                  Connect Wallet
-                </button>
-              </div>
-              {error && (
-                <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
-                  {error}
+            ) : (
+              <>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-3xl font-bold">
+                    {balance !== null ? balance.toLocaleString() : "--"}
+                  </span>
+                  <span className="text-sm text-foreground/70 ml-2">sats</span>
                 </div>
-              )}
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-baseline justify-between">
-                <span className="text-3xl font-bold">
-                  {balance !== null ? balance.toLocaleString() : '--'}
-                </span>
-                <span className="text-sm text-foreground/70 ml-2">sats</span>
+
+                <button
+                  onClick={handleRefresh}
+                  disabled={isLoading}
+                  className="w-full bg-secondary text-secondary-foreground px-3 py-2 hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  {isLoading ? "Refreshing..." : "Refresh"}
+                </button>
+              </>
+            )}
+
+            {error && (
+              <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
+                {error}
               </div>
+            )}
+          </div>
+        )}
+      </div>
 
-              <button
-                onClick={handleRefresh}
-                disabled={isLoading}
-                className="w-full bg-secondary text-secondary-foreground px-3 py-2 hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-              >
-                {isLoading ? 'Refreshing...' : 'Refresh'}
-              </button>
-            </>
-          )}
-
-          {error && (
-            <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
-              {error}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+      <LightningModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
+    </>
   );
 }

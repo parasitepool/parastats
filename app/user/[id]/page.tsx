@@ -13,12 +13,11 @@ import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty'
 import SortableTable from '../../components/SortableTable';
 import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/utils/formatters';
 import { parseHashrate } from '@/app/utils/formatters';
-import { useWallet } from '@/app/hooks/useWallet';
+import LightningBalance from '@/app/components/LightningBalance';
 
 export default function UserDashboard() {
   const params = useParams();
   const userId = params.id as string;
-  const { lightningToken, isLightningAuthenticated, isInitialized } = useWallet();
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
@@ -27,10 +26,6 @@ export default function UserDashboard() {
   const [hashrate, setHashrate] = useState<Hashrate>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
-  const [lightningBalance, setLightningBalance] = useState<number | null>(null);
-  const [isLoadingLightning, setIsLoadingLightning] = useState<boolean>(false);
-  const [lightningUsername, setLightningUsername] = useState<string | null>(null);
-  const [lightningUrl, setLightningUrl] = useState<string | null>(null);
 
   // Function to check if the address is valid and fetch user data
   useEffect(() => {
@@ -121,64 +116,6 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
-  // Fetch Lightning balance
-  useEffect(() => {
-    const fetchLightningBalance = async () => {
-      if (!isInitialized || !isLightningAuthenticated || !lightningToken) {
-        setLightningBalance(null);
-        setLightningUsername(null);
-        setLightningUrl(null);
-        return;
-      }
-
-      setIsLoadingLightning(true);
-      try {
-        const [balanceResponse, userResponse] = await Promise.all([
-          fetch('https://api.bitbit.bot/wallet_user/balance', {
-            headers: {
-              'Authorization': `Bearer ${lightningToken}`
-            }
-          }),
-          fetch('https://api.bitbit.bot/wallet_user', {
-            headers: {
-              'Authorization': `Bearer ${lightningToken}`
-            }
-          })
-        ]);
-
-        if (balanceResponse.ok) {
-          const balanceData = await balanceResponse.json();
-          setLightningBalance(balanceData.balance);
-        } else {
-          setLightningBalance(null);
-        }
-
-        if (userResponse.ok) {
-          const userData = await userResponse.json();
-          setLightningUsername(userData.username || null);
-          setLightningUrl(userData.lightning_ln_url || null);
-        } else {
-          setLightningUsername(null);
-          setLightningUrl(null);
-        }
-      } catch (error) {
-        console.error('Error fetching Lightning balance:', error);
-        setLightningBalance(null);
-        setLightningUsername(null);
-        setLightningUrl(null);
-      } finally {
-        setIsLoadingLightning(false);
-      }
-    };
-
-    fetchLightningBalance();
-    
-    // Refresh balance every 30 seconds
-    const intervalId = setInterval(fetchLightningBalance, 30000);
-    
-    return () => clearInterval(intervalId);
-  }, [isInitialized, isLightningAuthenticated, lightningToken]);
-
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
     if (!userData) return;
@@ -192,42 +129,6 @@ export default function UserDashboard() {
       alert('Failed to toggle visibility. Please try again.');
     } finally {
       setIsTogglingVisibility(false);
-    }
-  };
-
-  // Manual refresh for Lightning data
-  const handleRefreshLightning = async () => {
-    if (!isLightningAuthenticated || !lightningToken) return;
-
-    setIsLoadingLightning(true);
-    try {
-      const [balanceResponse, userResponse] = await Promise.all([
-        fetch('https://api.bitbit.bot/wallet_user/balance', {
-          headers: {
-            'Authorization': `Bearer ${lightningToken}`
-          }
-        }),
-        fetch('https://api.bitbit.bot/wallet_user', {
-          headers: {
-            'Authorization': `Bearer ${lightningToken}`
-          }
-        })
-      ]);
-
-      if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        setLightningBalance(balanceData.balance);
-      }
-
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        setLightningUsername(userData.username || null);
-        setLightningUrl(userData.lightning_ln_url || null);
-      }
-    } catch (error) {
-      console.error('Error refreshing Lightning data:', error);
-    } finally {
-      setIsLoadingLightning(false);
     }
   };
 
@@ -287,21 +188,6 @@ export default function UserDashboard() {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
-        </svg>
-      )
-    },
-    {
-      title: 'Lightning',
-      value: isLoadingLightning 
-        ? '...' 
-        : lightningBalance !== null 
-          ? `${lightningBalance.toLocaleString()} sats` 
-          : isLightningAuthenticated 
-            ? 'Error' 
-            : 'Not Available',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
         </svg>
       )
     }
@@ -381,7 +267,7 @@ export default function UserDashboard() {
         <div className="w-full">
           <div className="flex flex-wrap -mx-2">
             {statCards.map((card, index) => (
-              <div key={index} className="w-1/2 md:w-1/4 p-1 lg:p-2">
+              <div key={index} className="w-1/2 sm:w-1/3 xl:w-1/5 p-1 lg:p-2">
                 <div className="bg-background p-4 shadow-md border border-border h-full">
                   <div className="flex items-center mb-2">
                     <div className="mr-2 text-accent-3">
@@ -393,6 +279,11 @@ export default function UserDashboard() {
                 </div>
               </div>
             ))}
+
+            {/* Lightning Balance Card */}
+            <div className="w-1/2 sm:w-1/3 xl:w-1/5 p-1 lg:p-2">
+              <LightningBalance className="h-full" compact userId={userId} />
+            </div>
           </div>
         </div>
       </div>
