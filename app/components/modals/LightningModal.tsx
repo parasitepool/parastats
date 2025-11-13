@@ -271,18 +271,18 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
                   )}
                   <div className="flex gap-2 justify-center">
                     <button
-                      onClick={handleSave}
-                      disabled={isSaving || !newLnAddress}
-                      className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSaving ? 'Saving...' : 'Save'}
-                    </button>
-                    <button
                       onClick={handleCancel}
                       disabled={isSaving}
                       className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={isSaving || !newLnAddress}
+                      className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSaving ? 'Saving...' : 'Save'}
                     </button>
                   </div>
                 </div>
@@ -315,14 +315,42 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
 
             {/* Past Lightning Addresses - only show if we have account data */}
             {hasAccountData && accountData?.past_ln_addresses && accountData.past_ln_addresses.length > 0 && (
-              <div>
+              <div className="flex flex-col">
                 <h3 className="text-lg font-semibold text-foreground mb-2">Past Lightning Addresses</h3>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {accountData.past_ln_addresses.map((addr, index) => (
-                    <div key={index} className="bg-secondary/50 p-3 border border-border">
-                      <span className="text-foreground/70 break-all">{addr}</span>
+                <div className="overflow-hidden" style={{ height: '156px' }}>
+                  <style dangerouslySetInnerHTML={{ __html: `
+                    .past-addresses-scroll::-webkit-scrollbar {
+                      width: 6px;
+                    }
+                    .past-addresses-scroll::-webkit-scrollbar-track {
+                      background: transparent;
+                    }
+                    .past-addresses-scroll::-webkit-scrollbar-thumb {
+                      background: rgba(255, 255, 255, 0.15);
+                      border-radius: 3px;
+                    }
+                    .past-addresses-scroll::-webkit-scrollbar-thumb:hover {
+                      background: rgba(255, 255, 255, 0.25);
+                    }
+                  `}} />
+                  <div 
+                    className="h-full overflow-y-auto past-addresses-scroll"
+                    style={{ 
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: 'rgba(255, 255, 255, 0.15) transparent'
+                    }}
+                  >
+                    <div className="space-y-2">
+                      {accountData.past_ln_addresses
+                        .slice()
+                        .reverse()
+                        .map((addr, index) => (
+                          <div key={accountData.past_ln_addresses.length - 1 - index} className="bg-secondary/50 p-3 border border-border min-h-[48px]">
+                            <span className="text-foreground/70 break-all">{addr}</span>
+                          </div>
+                        ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               </div>
             )}
