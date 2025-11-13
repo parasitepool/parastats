@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { LightningIcon } from "@/app/components/icons";
 import { useWallet } from "@/app/hooks/useWallet";
 import LightningModal from "@/app/components/modals/LightningModal";
@@ -20,6 +21,7 @@ export default function LightningBalance({
   compact = false,
   userId,
 }: LightningBalanceProps) {
+  const router = useRouter();
   const {
     lightningToken,
     isLightningAuthenticated,
@@ -258,7 +260,9 @@ export default function LightningBalance({
                 setError(null);
                 try {
                   const result = await connectWithLightning();
-                  if (!result) {
+                  if (result) {
+                    router.push(`/user/${result.address}`);
+                  } else {
                     setError('Failed to connect wallet');
                   }
                 } catch (err) {
