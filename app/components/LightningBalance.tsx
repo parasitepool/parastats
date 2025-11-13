@@ -62,17 +62,13 @@ export default function LightningBalance({
     setBalance(balanceData.balance);
   }, []);
 
-  // Fetch account data from Next.js API
   const fetchAccountData = useCallback(async () => {
     if (!userId) return;
-    
+
     try {
       // Add cache-busting to ensure fresh data
       const response = await fetch(`/api/account/${userId}`, {
         cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
       });
       if (response.ok) {
         const data: AccountData = await response.json();
@@ -168,7 +164,7 @@ export default function LightningBalance({
       const updatedData: AccountData = await response.json();
       setAccountData(updatedData);
       setShowResetConfirm(false);
-      
+
       // Re-fetch to ensure we have the latest data
       await fetchAccountData();
     } catch (err) {
@@ -191,9 +187,8 @@ export default function LightningBalance({
           <h3 className="text-lg font-semibold">Lightning</h3>
         </div>
         <div
-          className={`flex items-center justify-center ${
-            compact ? "pt-1" : "py-4"
-          }`}
+          className={`flex items-center justify-center ${compact ? "pt-1" : "py-4"
+            }`}
         >
           <div className="animate-spin h-6 w-6 border-4 border-accent-3 border-t-transparent rounded-full"></div>
         </div>
@@ -203,11 +198,10 @@ export default function LightningBalance({
 
   // Check if the connected wallet owns this profile
   const isOwner = !userId || address === userId;
-  
-  // Only show lightning address from Next.js endpoint, not from bitbit
+
   const displayLnAddress = accountData?.ln_address || null;
   const hasData = isLightningAuthenticated && (balance !== null || walletInfo !== null || accountData !== null);
-  
+
   // Check if username matches lightning address
   const usernameWithDomain = walletInfo?.username ? `${walletInfo.username}@sati.pro` : null;
   const addressesMatch = usernameWithDomain && displayLnAddress && usernameWithDomain === displayLnAddress;

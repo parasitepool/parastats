@@ -14,7 +14,7 @@ interface LightningModalProps {
 const API_BASE_URL = "https://api.bitbit.bot";
 
 export default function LightningModal({ isOpen, onClose, onUpdate }: LightningModalProps) {
-  const { address, addressPublicKey, lightningToken, isLightningAuthenticated } = useWallet();
+  const { address, lightningToken, isLightningAuthenticated } = useWallet();
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -24,8 +24,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
   const [newLnAddress, setNewLnAddress] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Fetch bitbit.bot data
-  const fetchBitbitData = useCallback(async (token: string) => {
+  const fetchLightningData = useCallback(async (token: string) => {
     try {
       const [userResponse, balanceResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/wallet_user`, {
@@ -48,7 +47,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
         balance: balanceData.balance,
       };
     } catch (err) {
-      console.error('Error fetching bitbit data:', err);
+      console.error('Error fetching lightning data:', err);
       return null;
     }
   }, []);
@@ -61,30 +60,26 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
     setError(null);
 
     try {
-      // Fetch from Next.js endpoint with cache-busting
       const accountResponse = await fetch(`/api/account/${address}`, {
         cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
       });
       let accountData: AccountData | null = null;
-      
+
       if (accountResponse.ok) {
         accountData = await accountResponse.json();
         setAccountData(accountData);
         setNewLnAddress(accountData?.ln_address || '');
       } else {
-        // Next.js endpoint returned nothing (404 or error)
+        // account endpoint returned nothing (404 or error)
         setAccountData(null);
       }
 
-      // Fetch from bitbit.bot if authenticated
+      // Fetch from lightning if authenticated
       if (isLightningAuthenticated && lightningToken) {
-        const bitbitData = await fetchBitbitData(lightningToken);
-        if (bitbitData) {
-          setWalletInfo(bitbitData.walletInfo);
-          setBalance(bitbitData.balance);
+        const lightningData = await fetchLightningData(lightningToken);
+        if (lightningData) {
+          setWalletInfo(lightningData.walletInfo);
+          setBalance(lightningData.balance);
         }
       }
     } catch (err) {
@@ -93,7 +88,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
     } finally {
       setIsLoading(false);
     }
-  }, [address, isLightningAuthenticated, lightningToken, fetchBitbitData]);
+  }, [address, isLightningAuthenticated, lightningToken, fetchLightningData]);
 
   useEffect(() => {
     if (isOpen && address) {
@@ -130,7 +125,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
   }, [isOpen, onClose]);
 
   const handleSave = async () => {
-    if (!address || !addressPublicKey || !newLnAddress) {
+    if (!address || !newLnAddress) {
       setError('Missing required data');
       return;
     }
@@ -191,10 +186,10 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
       setAccountData(updatedData);
       setNewLnAddress(updatedData.ln_address || '');
       setIsEditing(false);
-      
+
       // Re-fetch to ensure we have the latest data
       await fetchAccountData();
-      
+
       // Trigger refresh in parent component
       if (onUpdate) {
         onUpdate();
@@ -214,87 +209,9 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
     setError(null);
   };
 
-  const handleSetFromUsername = async () => {
-    if (!address || !addressPublicKey || !walletInfo?.username) {
-      setError('Missing required data');
-      return;
-    }
-
-    const usernameAddress = `${walletInfo.username}@sati.pro`;
-    setIsSaving(true);
-    setError(null);
-
-    try {
-      // Request signature for the Lightning address using BIP322
-      const { request, MessageSigningProtocols } = await import('@sats-connect/core');
-
-      const signResponse = await request('signMessage', {
-        address: address,
-        message: usernameAddress,
-        protocol: MessageSigningProtocols.BIP322
-      });
-
-      if (signResponse.status !== 'success') {
-        throw new Error('Failed to sign message');
-      }
-
-      let signature: string;
-      if (typeof signResponse.result === 'string') {
-        signature = signResponse.result;
-      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
-        signature = signResponse.result.signature;
-      } else {
-        throw new Error('Unexpected signature format');
-      }
-
-      // Send update request
-      const response = await fetch('/api/account/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          btc_address: address,
-          ln_address: usernameAddress,
-          signature: signature,
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'Failed to update Lightning address';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          // If response is not JSON, use default error message
-        }
-        throw new Error(errorMessage);
-      }
-
-      const updatedData: AccountData = await response.json();
-      // Update modal state immediately with returned data
-      setAccountData(updatedData);
-      setNewLnAddress(updatedData.ln_address || '');
-      
-      // Re-fetch to ensure we have the latest data
-      await fetchAccountData();
-      
-      // Trigger refresh in parent component
-      if (onUpdate) {
-        onUpdate();
-      }
-    } catch (err) {
-      console.error('Error setting Lightning address:', err);
-      setError(err instanceof Error ? err.message : 'Failed to set Lightning address');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Only show lightning address from Next.js endpoint, not from bitbit
   const displayLnAddress = accountData?.ln_address || '';
-  const hasNextJsData = accountData !== null;
-  const hasBitbitData = walletInfo !== null && balance !== null;
+  const hasAccountData = accountData !== null;
+  const hasLightningData = walletInfo !== null && balance !== null;
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
@@ -305,11 +222,11 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
   if (!isOpen) return null;
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       onClick={handleBackdropClick}
     >
-      <div 
+      <div
         className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl overflow-y-auto max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -328,7 +245,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
           </div>
-        ) : error && !hasNextJsData && !hasBitbitData ? (
+        ) : error && !hasAccountData && !hasLightningData ? (
           <div className="text-sm text-red-500 bg-red-500/10 p-4 border border-red-500/20">
             {error}
           </div>
@@ -337,7 +254,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
             {/* Current Lightning Address */}
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">Current Lightning Address</h3>
-              {isEditing && hasNextJsData ? (
+              {isEditing && hasAccountData ? (
                 <div className="space-y-2">
                   <input
                     type="text"
@@ -371,7 +288,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {hasNextJsData ? (
+                  {hasAccountData ? (
                     <div
                       onClick={() => setIsEditing(true)}
                       className="flex items-center justify-between bg-secondary p-3 border border-border cursor-pointer hover:bg-secondary/80 transition-colors"
@@ -387,15 +304,6 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
                       </span>
                     </div>
                   )}
-                  {!hasNextJsData && walletInfo?.username && (
-                    <button
-                      onClick={handleSetFromUsername}
-                      disabled={isSaving}
-                      className="w-full bg-accent-3 text-white px-4 py-2 hover:bg-accent-3/90 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSaving ? 'Setting...' : `Set to ${walletInfo.username}@sati.pro`}
-                    </button>
-                  )}
                   {error && (
                     <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
                       {error}
@@ -405,8 +313,8 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
               )}
             </div>
 
-            {/* Past Lightning Addresses - only show if we have Next.js data */}
-            {hasNextJsData && accountData?.past_ln_addresses && accountData.past_ln_addresses.length > 0 && (
+            {/* Past Lightning Addresses - only show if we have account data */}
+            {hasAccountData && accountData?.past_ln_addresses && accountData.past_ln_addresses.length > 0 && (
               <div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">Past Lightning Addresses</h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
