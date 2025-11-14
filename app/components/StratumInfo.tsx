@@ -12,9 +12,7 @@ export default function StratumInfo({ userId, lnAddress }: StratumInfoProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const stratumUrl = "parasite.wtf:42069";
-  const stratumUsername = lnAddress 
-    ? `${userId}.WORKER_NAME.${lnAddress}`
-    : `${userId}.WORKER_NAME.username@domain`;
+  const stratumUsername = `${userId}.WORKER_NAME`;
 
   const copyToClipboard = async (text: string, fieldName: string) => {
     try {
@@ -37,12 +35,12 @@ export default function StratumInfo({ userId, lnAddress }: StratumInfoProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6">
         {/* Stratum URL */}
         <div className="flex flex-col">
           <h3 className="text-sm font-medium text-accent-2 mb-2">Stratum URL</h3>
-          <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2">
-            <p className="text-lg sm:text-xl font-semibold break-all">
+          <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 min-h-[4rem]">
+            <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">
               {stratumUrl}
             </p>
             <button
@@ -68,8 +66,8 @@ export default function StratumInfo({ userId, lnAddress }: StratumInfoProps) {
         {/* Stratum Username */}
         <div className="flex flex-col">
           <h3 className="text-sm font-medium text-accent-2 mb-2">Stratum Username</h3>
-          <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2">
-            <p className="text-sm sm:text-base font-semibold break-all flex-1">
+          <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 min-h-[4rem]">
+            <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">
               {stratumUsername}
             </p>
             <button

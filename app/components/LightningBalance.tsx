@@ -284,12 +284,12 @@ export default function LightningBalance({
           </div>
         ) : addressesMatch ? (
           // If addresses match, show Lightning Address and Balance as separate boxes
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6">
             {/* Lightning Address */}
             <div className="flex flex-col">
               <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
-              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2">
-                <p className="text-lg sm:text-xl font-semibold break-all">{displayLnAddress}</p>
+              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 min-h-[4rem]">
+                <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">{displayLnAddress}</p>
                 {isOwner && isLightningAuthenticated && (
                   <button
                     onClick={() => setIsModalOpen(true)}
@@ -308,8 +308,8 @@ export default function LightningBalance({
             {balance !== null && (
               <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center">
-                  <p className="text-2xl sm:text-3xl font-bold">
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center min-h-[4rem]">
+                  <p className="text-lg sm:text-xl font-semibold">
                     {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
                   </p>
                 </div>
@@ -322,8 +322,8 @@ export default function LightningBalance({
             {displayLnAddress && (
               <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2">
-                  <p className="text-lg sm:text-xl font-semibold break-all flex-1">{displayLnAddress}</p>
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2 min-h-[4rem]">
+                  <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">{displayLnAddress}</p>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {walletInfo?.username && isOwner && (
                       <button
