@@ -3,6 +3,12 @@ import "./globals.css";
 import NavigationWrapper from "./components/NavigationWrapper";
 import Footer from "./components/Footer";
 import { WalletProvider } from "./hooks/useWallet";
+import { validateEnv } from "./lib/env-validation";
+
+// Validate environment variables on server startup
+if (typeof window === 'undefined') {
+  validateEnv();
+}
 
 export const metadata: Metadata = {
   title: "Parasite",

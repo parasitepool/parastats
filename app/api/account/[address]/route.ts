@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { toAccountData } from '@/app/api/account/shared';
 import type { CombinedAccountResponse, AccountData, WalletInfo, BalanceResponse } from '@/app/api/account/types';
+import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
 
 export async function GET(
   request: Request,
@@ -41,7 +42,7 @@ export async function GET(
     }
 
     try {
-      const response = await fetch(`${apiUrl}/account/${address}`, {
+      const response = await fetchWithTimeout(`${apiUrl}/account/${address}`, {
         headers,
       });
 
@@ -57,20 +58,25 @@ export async function GET(
 
     // Fetch lightning data if token is provided
     let lightningData: { walletInfo: WalletInfo; balance: number } | null = null;
+    let lightningTokenExpired = false;
+    
     if (lightningToken) {
-      const lightningApiUrl = process.env.LIGHTNING_API_URL;
+      const lightningApiUrl = process.env.LIGHTNING_API_URL || 'https://api.bitbit.bot';
       
       try {
         const [userResponse, balanceResponse] = await Promise.all([
-          fetch(`${lightningApiUrl}/wallet_user`, {
+          fetchWithTimeout(`${lightningApiUrl}/wallet_user`, {
             headers: { Authorization: `Bearer ${lightningToken}` },
           }),
-          fetch(`${lightningApiUrl}/wallet_user/balance`, {
+          fetchWithTimeout(`${lightningApiUrl}/wallet_user/balance`, {
             headers: { Authorization: `Bearer ${lightningToken}` },
           }),
         ]);
 
-        if (userResponse.ok && balanceResponse.ok) {
+        // Check if token is expired/invalid (401 Unauthorized)
+        if (userResponse.status === 401 || balanceResponse.status === 401) {
+          lightningTokenExpired = true;
+        } else if (userResponse.ok && balanceResponse.ok) {
           const userData: WalletInfo = await userResponse.json();
           const balanceData: BalanceResponse = await balanceResponse.json();
           lightningData = {
@@ -87,6 +93,7 @@ export async function GET(
     const combinedResponse: CombinedAccountResponse = {
       account: accountData,
       lightning: lightningData,
+      ...(lightningTokenExpired && { lightningTokenExpired: true }),
     };
 
     return NextResponse.json(combinedResponse);

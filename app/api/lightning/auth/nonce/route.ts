@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
+import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
 
 export async function POST(request: Request) {
   try {
-    const lightningApiUrl = process.env.LIGHTNING_API_URL;
+    const lightningApiUrl = process.env.LIGHTNING_API_URL || 'https://api.bitbit.bot';
     const identifier = process.env.LIGHTNING_API_ID;
 
     if (!identifier) {
@@ -25,14 +26,22 @@ export async function POST(request: Request) {
 
     const { address } = payload;
 
-    if (!address) {
+    // Validate address input
+    if (!address || typeof address !== 'string') {
       return NextResponse.json(
         { error: 'Address is required' },
         { status: 400 }
       );
     }
 
-    const response = await fetch(
+    if (address.length < 10 || address.length > 100) {
+      return NextResponse.json(
+        { error: 'Invalid address format' },
+        { status: 400 }
+      );
+    }
+
+    const response = await fetchWithTimeout(
       `${lightningApiUrl}/login/${address}/auth_nonce/${identifier}`,
       {
         method: 'GET',

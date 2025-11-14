@@ -31,4 +31,5 @@ export interface CombinedAccountResponse {
     walletInfo: WalletInfo;
     balance: number;
   } | null;
+  lightningTokenExpired?: boolean;
 }

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
+import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
 
 export async function POST(request: Request) {
   try {
-    const lightningApiUrl = process.env.LIGHTNING_API_URL;
+    const lightningApiUrl = process.env.LIGHTNING_API_URL || 'https://api.bitbit.bot';
     const identifier = process.env.LIGHTNING_API_ID;
 
     if (!identifier) {
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
 
     const { address, public_key, signature, nonce } = payload;
 
+    // Validate required fields
     if (!address || !public_key || !signature || !nonce) {
       return NextResponse.json(
         { error: 'Missing required fields: address, public_key, signature, nonce' },
@@ -37,7 +39,32 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = await fetch(
+    // Validate input types and lengths
+    if (
+      typeof address !== 'string' ||
+      typeof public_key !== 'string' ||
+      typeof signature !== 'string' ||
+      typeof nonce !== 'string'
+    ) {
+      return NextResponse.json(
+        { error: 'Invalid field types' },
+        { status: 400 }
+      );
+    }
+
+    if (
+      address.length < 10 || address.length > 100 ||
+      public_key.length > 200 ||
+      signature.length > 500 ||
+      nonce.length > 200
+    ) {
+      return NextResponse.json(
+        { error: 'Invalid field lengths' },
+        { status: 400 }
+      );
+    }
+
+    const response = await fetchWithTimeout(
       `${lightningApiUrl}/login/${address}/auth_sign/${identifier}`,
       {
         method: 'POST',
