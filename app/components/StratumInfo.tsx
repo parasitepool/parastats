@@ -6,9 +6,10 @@ import { StratumIcon, CopyIcon, CheckIcon } from "@/app/components/icons";
 interface StratumInfoProps {
   userId: string;
   lnAddress: string | null;
+  isLoading?: boolean;
 }
 
-export default function StratumInfo({ userId, lnAddress }: StratumInfoProps) {
+export default function StratumInfo({ userId, lnAddress, isLoading = false }: StratumInfoProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const stratumUrl = "parasite.wtf:42069";
@@ -23,6 +24,39 @@ export default function StratumInfo({ userId, lnAddress }: StratumInfoProps) {
       console.error("Failed to copy:", err);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="bg-background p-4 sm:p-6 shadow-md border border-border h-full">
+        <div className="flex items-center mb-4 sm:mb-6">
+          <div className="flex items-center">
+            <div className="mr-2 text-accent-3">
+              <StratumIcon />
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold">Stratum</h2>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:gap-6">
+          {/* Stratum URL shimmer */}
+          <div className="flex flex-col">
+            <h3 className="text-sm font-medium text-accent-2 mb-2">Stratum URL</h3>
+            <div className="bg-secondary p-3 sm:p-4 border border-border min-h-[4rem] flex items-center">
+              <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+            </div>
+          </div>
+
+          {/* Stratum Username shimmer */}
+          <div className="flex flex-col">
+            <h3 className="text-sm font-medium text-accent-2 mb-2">Stratum Username</h3>
+            <div className="bg-secondary p-3 sm:p-4 border border-border min-h-[4rem] flex items-center">
+              <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-background p-4 sm:p-6 shadow-md border border-border h-full">
@@ -90,15 +124,6 @@ export default function StratumInfo({ userId, lnAddress }: StratumInfoProps) {
           </div>
         </div>
       </div>
-
-      {/* Helper text */}
-      {!lnAddress && (
-        <div className="text-xs text-accent-2 bg-accent-1/5 p-2 border border-border mt-4">
-          <p>
-            <strong>Note:</strong> Complete account activation to get your personalized stratum username.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

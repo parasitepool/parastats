@@ -80,7 +80,7 @@ export default function ConnectButton() {
     }
   };
 
-  const handleGoToProfile = () => {
+  const handleGoToAccount = () => {
     if (address) {
       router.push(`/user/${address}`);
       setShowDropdown(false);
@@ -112,10 +112,10 @@ export default function ConnectButton() {
         {isConnected && showDropdown && (
           <div className="absolute right-0 mt-2 w-48 bg-background border border-gray-300 shadow-lg z-50">
             <button
-              onClick={handleGoToProfile}
+              onClick={handleGoToAccount}
               className="w-full text-left px-4 py-2 hover:bg-gray-100 hover:text-black text-xs sm:text-sm transition-colors"
             >
-              Profile
+              Account
             </button>
             <button
               onClick={handleDisconnect}

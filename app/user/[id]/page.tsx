@@ -3,9 +3,7 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import UserAddressHelp from '../../components/UserAddressHelp';
 import HashrateChart from '../../components/HashrateChart';
-import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
@@ -23,7 +21,6 @@ export default function UserDashboard() {
   const params = useParams();
   const router = useRouter();
   const userId = params.id as string;
-  const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
   const [historicalData, setHistoricalData] = useState<HistoricalUserStats[] | null>(null);
@@ -53,38 +50,20 @@ export default function UserDashboard() {
           setIsLoading(true);
         }
         
-        // First check if the address is valid
-        const isValid = isValidBitcoinAddress(userId.trim());
-        
+        // Fetch user data and hashrate in parallel
+        const [data, hashrateData] = await Promise.all([
+          getUserData(userId),
+          getHashrate()
+        ]);
         if (mounted) {
-          setIsValidAddress(isValid);
-          
-          if (isValid) {
-            // Fetch user data and hashrate in parallel
-            const [data, hashrateData] = await Promise.all([
-              getUserData(userId),
-              getHashrate()
-            ]);
-            if (mounted) {
-              setUserData(data);
-              setHashrate(hashrateData);
-            }
-          }
+          setUserData(data);
+          setHashrate(hashrateData);
         }
       } catch (error) {
         if (mounted) {
           if (error instanceof Error && error.message.includes('404')) {
-            // For 404 errors, check if address is valid
-            // If valid address but 404, user doesn't exist yet
-            const isValid = isValidBitcoinAddress(userId.trim());
-            if (isValid) {
-              setIsValidAddress(true);
-              setUserData(null);
-            } else {
-              // Invalid address
-              setIsValidAddress(false);
-              setUserData(null);
-            }
+            // For 404 errors, user doesn't exist yet - set userData to null
+            setUserData(null);
           } else {
             // Only show error on initial load, not on background updates
             if (!hasInitiallyLoaded) {
@@ -125,8 +104,6 @@ export default function UserDashboard() {
     let mounted = true;
 
     const fetchHistoricalData = async () => {
-      if (!isValidAddress) return;
-      
       try {
         const data = await getHistoricalUserStats(userId, '3d', '5m');
         if (mounted) {
@@ -144,15 +121,13 @@ export default function UserDashboard() {
       mounted = false;
       clearInterval(intervalId);
     };
-  }, [userId, isValidAddress]);
+  }, [userId]);
 
   // Fetch account data when userId changes
   useEffect(() => {
     let mounted = true;
 
     const fetchAccountData = async () => {
-      if (!isValidAddress) return;
-      
       try {
         const response = await fetch(`/api/account/${userId}`, {
           cache: 'no-store',
@@ -176,7 +151,7 @@ export default function UserDashboard() {
     };
 
     fetchAccountData();
-  }, [userId, isValidAddress]);
+  }, [userId]);
 
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
@@ -274,18 +249,8 @@ export default function UserDashboard() {
     }
   ];
 
-  // Show loading state only on initial load (before we've loaded anything)
-  if (isLoading && !hasInitiallyLoaded) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center">
-        <div className="animate-spin h-10 w-10 border-4 border-foreground border-t-transparent rounded-full"></div>
-        <p className="mt-4">Loading user data...</p>
-      </div>
-    );
-  }
-
   // Show error message if there was an error fetching data
-  if (error) {
+  if (error && !hasInitiallyLoaded) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center">
         <div className="text-red-500 mb-4">
@@ -297,19 +262,11 @@ export default function UserDashboard() {
         <Link href="/" className="mt-4 text-accent-3 hover:underline">
           Return to Home
         </Link>
-        <Link href="/?help" className="mt-4 text-accent-3 hover:underline">
-          Go to Help
-        </Link>
       </div>
     );
   }
 
-  // Show help component only for invalid addresses
-  if (!isValidAddress) {
-    return <UserAddressHelp address={userId} />;
-  }
-
-  // Show dashboard for valid addresses (best effort - works even without userData)
+  // Show dashboard (works even without userData - will show shimmer or empty states)
   return (
     <>
       <main className="flex min-h-screen flex-col items-start py-8">
@@ -359,7 +316,11 @@ export default function UserDashboard() {
                     </div>
                     <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
                   </div>
-                  <p className="text-2xl font-semibold">{card.value}</p>
+                  {!hasInitiallyLoaded ? (
+                    <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                  ) : (
+                    <p className="text-2xl font-semibold">{card.value}</p>
+                  )}
                 </div>
               </div>
             ))}
@@ -368,29 +329,22 @@ export default function UserDashboard() {
 
         {/* Account Activation / Lightning & Stratum Information */}
         <div className="w-full mt-4">
-          {!isInitialized ? (
-            // Loading state
-            <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
-              </div>
+          {!isInitialized || !hasInitiallyLoaded ? (
+            // Loading state - Show shimmer components on initial load only
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <LightningBalance userId={userId} loading={true} />
+              <StratumInfo userId={userId} lnAddress={null} isLoading={true} />
             </div>
-          ) : !isLightningAuthenticated ? (
-            // Not authenticated - Show Activate Account button
+          ) : !isLightningAuthenticated || !accountData ? (
+            // Not authenticated or no account data - Show Connect or Activate Account button
             <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
               <div className="flex flex-col items-center justify-center py-8">
-                <h2 className="text-xl sm:text-2xl font-bold mb-4 text-center">
-                  Activate Your Mining Account
-                </h2>
-                <p className="text-sm text-accent-2 mb-6 text-center max-w-md">
-                  Connect your wallet to activate your account and get your personalized mining credentials.
-                </p>
                 <button
                   onClick={handleActivateAccount}
                   disabled={isConnecting}
                   className="px-8 py-4 bg-foreground text-background text-lg font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isConnecting ? 'Connecting...' : 'Activate Account'}
+                  {isConnecting ? 'Connecting...' : (userData ? 'Connect' : 'Activate Account')}
                 </button>
                 {error && (
                   <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
@@ -400,10 +354,10 @@ export default function UserDashboard() {
               </div>
             </div>
           ) : (
-            // Authenticated - Show Lightning and Stratum components in grid
+            // Authenticated with account data - Show Lightning and Stratum components
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <LightningBalance userId={userId} />
-              <StratumInfo userId={userId} lnAddress={accountData?.ln_address || null} />
+              <LightningBalance userId={userId} loading={false} />
+              <StratumInfo userId={userId} lnAddress={accountData?.ln_address || null} isLoading={false} />
             </div>
           )}
         </div>
@@ -444,71 +398,96 @@ export default function UserDashboard() {
         electricityRate={0.10} // Example electricity rate in dollars per kWh
       /> */}
       
-      {/* Workers Table/Cards - only show if we have worker data */}
-      {userData && userData.workerData && userData.workerData.length > 0 && (
+      {/* Workers Table/Cards - show shimmer when loading or actual data when loaded */}
+      {(!hasInitiallyLoaded || (userData && userData.workerData && userData.workerData.length > 0)) && (
         <div className="w-full bg-background pb-6 shadow-md">
-          <h2 className="text-xl font-semibold mb-4">Miners({userData.workerData.length})</h2>
+          <h2 className="text-xl font-semibold mb-4">
+            {!hasInitiallyLoaded ? 'Miners' : `Miners(${userData?.workerData?.length || 0})`}
+          </h2>
 
         {/* Desktop Table - Hidden on mobile */}
         <div className="hidden md:block">
-          <SortableTable
-            data={userData.workerData}
-            columns={[
-              {
-                key: 'name',
-                header: 'Name',
-                render: (value) => (
-                  // <Link href={`/worker/${worker.id}`} className="text-foreground font-bold hover:underline">
-                  <Link href='#' className="text-foreground font-bold hover:underline">
-                    {value as string}
-                  </Link>
-                )
-              },
-              {
-                key: 'hashrate',
-                header: 'Hashrate',
-                render: (value) => formatHashrate(parseHashrate(value as string))
-              },
-              {
-                key: 'bestDifficulty',
-                header: 'Best Difficulty',
-                render: (value) => formatDifficulty(value as string)
-              },
-              {
-                key: 'lastSubmission',
-                header: 'Last Submission',
-                render: (value) => formatRelativeTime(parseInt(value as string))
-              }
-            ]}
-            defaultSortColumn="hashrate"
-            defaultSortDirection="desc"
-          />
+          {!hasInitiallyLoaded ? (
+            <div className="space-y-3">
+              <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+            </div>
+          ) : userData?.workerData ? (
+            <SortableTable
+              data={userData.workerData}
+              columns={[
+                {
+                  key: 'name',
+                  header: 'Name',
+                  render: (value) => (
+                    // <Link href={`/worker/${worker.id}`} className="text-foreground font-bold hover:underline">
+                    <Link href='#' className="text-foreground font-bold hover:underline">
+                      {value as string}
+                    </Link>
+                  )
+                },
+                {
+                  key: 'hashrate',
+                  header: 'Hashrate',
+                  render: (value) => formatHashrate(parseHashrate(value as string))
+                },
+                {
+                  key: 'bestDifficulty',
+                  header: 'Best Difficulty',
+                  render: (value) => formatDifficulty(value as string)
+                },
+                {
+                  key: 'lastSubmission',
+                  header: 'Last Submission',
+                  render: (value) => formatRelativeTime(parseInt(value as string))
+                }
+              ]}
+              defaultSortColumn="hashrate"
+              defaultSortDirection="desc"
+            />
+          ) : null}
         </div>
 
         {/* Mobile Cards - Visible only on mobile */}
         <div className="md:hidden space-y-4">
-          {userData.workerData.map((worker) => (
-            <div key={worker.id} className="bg-background border border-border p-4 shadow-sm">
-              {/* <Link href={`/worker/${worker.id}`} className="text-foreground font-bold text-lg block mb-2 hover:underline"> */}
-              <Link href='#' className="text-foreground font-bold text-lg block mb-2 hover:underline">
-                {worker.name}
-              </Link>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-gray-500">Hashrate</p>
-                  <p className="font-medium">{formatHashrate(parseHashrate(worker.hashrate))}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Best Difficulty</p>
-                  <p className="font-medium">{formatDifficulty(worker.bestDifficulty)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Last Submission</p>
-                  <p className="font-medium">{formatRelativeTime(parseInt(worker.lastSubmission))}</p>
+          {!hasInitiallyLoaded ? (
+            <>
+              <div className="bg-background border border-border p-4 shadow-sm space-y-3">
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              </div>
+              <div className="bg-background border border-border p-4 shadow-sm space-y-3">
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              </div>
+            </>
+          ) : userData?.workerData ? (
+            userData.workerData.map((worker) => (
+              <div key={worker.id} className="bg-background border border-border p-4 shadow-sm">
+                {/* <Link href={`/worker/${worker.id}`} className="text-foreground font-bold text-lg block mb-2 hover:underline"> */}
+                <Link href='#' className="text-foreground font-bold text-lg block mb-2 hover:underline">
+                  {worker.name}
+                </Link>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-gray-500">Hashrate</p>
+                    <p className="font-medium">{formatHashrate(parseHashrate(worker.hashrate))}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Best Difficulty</p>
+                    <p className="font-medium">{formatDifficulty(worker.bestDifficulty)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Last Submission</p>
+                    <p className="font-medium">{formatRelativeTime(parseInt(worker.lastSubmission))}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : null}
         </div>
         </div>
       )}
