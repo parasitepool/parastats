@@ -31,6 +31,7 @@ export default function UserDashboard() {
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   const [accountData, setAccountData] = useState<AccountData | null>(null);
+  const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   
   const {
@@ -120,6 +121,7 @@ export default function UserDashboard() {
   // Fetch account data when userId changes
   useEffect(() => {
     const fetchAccountData = async () => {
+      setIsLoadingAccountData(true);
       try {
         const response = await fetch(`/api/account/${userId}`, {
           cache: 'no-store',
@@ -133,6 +135,8 @@ export default function UserDashboard() {
       } catch (err) {
         console.error("Error fetching account data:", err);
         setAccountData(null);
+      } finally {
+        setIsLoadingAccountData(false);
       }
     };
 
@@ -383,8 +387,8 @@ export default function UserDashboard() {
 
         {/* Account Activation / Lightning & Stratum Information */}
         <div className="w-full mt-4">
-          {!isInitialized || !hasInitiallyLoaded ? (
-            // Loading state - Show shimmer components on initial load only
+          {!isInitialized || !hasInitiallyLoaded || isLoadingAccountData ? (
+            // Loading state - Show shimmer components while data is loading
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <LightningBalance userId={userId} loading={true} />
               <StratumInfo userId={userId} isLoading={true} />
