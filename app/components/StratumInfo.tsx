@@ -5,11 +5,10 @@ import { StratumIcon, CopyIcon, CheckIcon } from "@/app/components/icons";
 
 interface StratumInfoProps {
   userId: string;
-  lnAddress: string | null;
   isLoading?: boolean;
 }
 
-export default function StratumInfo({ userId, lnAddress, isLoading = false }: StratumInfoProps) {
+export default function StratumInfo({ userId, isLoading = false }: StratumInfoProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const stratumUrl = "parasite.wtf:42069";

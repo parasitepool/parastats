@@ -17,11 +17,12 @@ import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData } from '@/app/api/account/types';
 
+const LIGHTNING_API_BASE_URL = "https://api.bitbit.bot";
+
 export default function UserDashboard() {
   const params = useParams();
   const router = useRouter();
   const userId = params.id as string;
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
   const [historicalData, setHistoricalData] = useState<HistoricalUserStats[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,18 +39,12 @@ export default function UserDashboard() {
     connectWithLightning,
   } = useWallet();
 
-  // Function to check if the address is valid and fetch user data
+  // Fetch user data and hashrate on mount and every 10 seconds
   useEffect(() => {
     let mounted = true;
 
     const fetchUserData = async () => {
       try {
-        // Only set loading on the very first fetch (initial load)
-        const isInitialLoad = !hasInitiallyLoaded;
-        if (isInitialLoad) {
-          setIsLoading(true);
-        }
-        
         // Fetch user data and hashrate in parallel
         const [data, hashrateData] = await Promise.all([
           getUserData(userId),
@@ -78,7 +73,6 @@ export default function UserDashboard() {
         }
       } finally {
         if (mounted) {
-          setIsLoading(false);
           setHasInitiallyLoaded(true);
         }
       }
@@ -99,7 +93,7 @@ export default function UserDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  // Function to fetch historical data
+  // Fetch historical data on mount and every minute
   useEffect(() => {
     let mounted = true;
 
@@ -125,8 +119,6 @@ export default function UserDashboard() {
 
   // Fetch account data when userId changes
   useEffect(() => {
-    let mounted = true;
-
     const fetchAccountData = async () => {
       try {
         const response = await fetch(`/api/account/${userId}`, {
@@ -134,19 +126,13 @@ export default function UserDashboard() {
         });
         if (response.ok) {
           const data: AccountData = await response.json();
-          if (mounted) {
-            setAccountData(data);
-          }
+          setAccountData(data);
         } else {
-          if (mounted) {
-            setAccountData(null);
-          }
+          setAccountData(null);
         }
       } catch (err) {
         console.error("Error fetching account data:", err);
-        if (mounted) {
-          setAccountData(null);
-        }
+        setAccountData(null);
       }
     };
 
@@ -174,23 +160,91 @@ export default function UserDashboard() {
     setIsConnecting(true);
     setError(null);
     try {
-      const result = await connectWithLightning();
-      if (result) {
-        router.push(`/user/${result.address}`);
-      } else {
-        setError('Failed to connect wallet');
+      // If not authenticated, just connect the wallet
+      if (!isLightningAuthenticated) {
+        const result = await connectWithLightning();
+        if (result) {
+          router.push(`/user/${result.address}`);
+        } else {
+          setError('Failed to connect wallet');
+        }
+        return;
       }
+
+      // Already authenticated - do the full activation flow to set Lightning address
+      const result = await connectWithLightning();
+      if (!result || !result.address || !result.token) {
+        setError('Failed to get wallet info');
+        return;
+      }
+
+      // Fetch wallet info to get the username
+      const walletResponse = await fetch(`${LIGHTNING_API_BASE_URL}/wallet_user`, {
+        headers: { Authorization: `Bearer ${result.token}` },
+      });
+
+      if (!walletResponse.ok) {
+        throw new Error('Failed to fetch wallet info');
+      }
+
+      const walletInfo = await walletResponse.json();
+      const usernameAddress = `${walletInfo.username}@sati.pro`;
+
+      // Request signature for the Lightning address using BIP322
+      const { request: satConnectRequest, MessageSigningProtocols } = await import('@sats-connect/core');
+
+      const signResponse = await satConnectRequest('signMessage', {
+        address: result.address,
+        message: usernameAddress,
+        protocol: MessageSigningProtocols.BIP322
+      });
+
+      if (signResponse.status !== 'success') {
+        throw new Error('Failed to sign message');
+      }
+
+      let signature: string;
+      if (typeof signResponse.result === 'string') {
+        signature = signResponse.result;
+      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
+        signature = signResponse.result.signature;
+      } else {
+        throw new Error('Unexpected signature format');
+      }
+
+      // Send update request to set the Lightning address
+      const updateResponse = await fetch('/api/account/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          btc_address: result.address,
+          ln_address: usernameAddress,
+          signature: signature,
+        }),
+      });
+
+      if (!updateResponse.ok) {
+        let errorMessage = 'Failed to activate account';
+        try {
+          const errorData = await updateResponse.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use default error message
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Refresh the page to show updated data
+      window.location.reload();
     } catch (err) {
-      console.error('Connection error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+      console.error('Activation error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to activate account');
     } finally {
       setIsConnecting(false);
     }
   };
-
-  // TODO: Left for future - determine if the current user is the owner of the dashboard
-  // Check if current user is the owner
-  // const isOwner = connectedAddress && connectedAddress === userId;
 
   // Stat cards configuration - show placeholders when data is missing
   const statCards = [
@@ -333,10 +387,10 @@ export default function UserDashboard() {
             // Loading state - Show shimmer components on initial load only
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <LightningBalance userId={userId} loading={true} />
-              <StratumInfo userId={userId} lnAddress={null} isLoading={true} />
+              <StratumInfo userId={userId} isLoading={true} />
             </div>
-          ) : !isLightningAuthenticated || !accountData ? (
-            // Not authenticated or no account data - Show Connect or Activate Account button
+          ) : !isLightningAuthenticated || !accountData || !accountData.ln_address ? (
+            // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
             <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
               <div className="flex flex-col items-center justify-center py-8">
                 <button
@@ -344,7 +398,7 @@ export default function UserDashboard() {
                   disabled={isConnecting}
                   className="px-8 py-4 bg-foreground text-background text-lg font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isConnecting ? 'Connecting...' : (userData ? 'Connect' : 'Activate Account')}
+                  {isConnecting ? 'Connecting...' : (!isLightningAuthenticated ? 'Connect' : 'Activate Account')}
                 </button>
                 {error && (
                   <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
@@ -354,10 +408,10 @@ export default function UserDashboard() {
               </div>
             </div>
           ) : (
-            // Authenticated with account data - Show Lightning and Stratum components
+            // Authenticated with account data and lightning address - Show Lightning and Stratum components
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <LightningBalance userId={userId} loading={false} />
-              <StratumInfo userId={userId} lnAddress={accountData?.ln_address || null} isLoading={false} />
+              <StratumInfo userId={userId} isLoading={false} />
             </div>
           )}
         </div>
