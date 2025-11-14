@@ -51,7 +51,7 @@ export async function GET(
       }
       // If response is not ok (e.g., 404), accountData stays null
     } catch (error) {
-      console.error("Error fetching account data:", error);
+      console.error("Error fetching account data:", error instanceof Error ? error.message : 'Unknown error');
       // accountData stays null
     }
 
@@ -79,7 +79,7 @@ export async function GET(
           };
         }
       } catch (error) {
-        console.error("Error fetching lightning data:", error);
+        console.error("Error fetching lightning data:", error instanceof Error ? error.message : 'Unknown error');
         // lightningData stays null
       }
     }
@@ -91,7 +91,7 @@ export async function GET(
 
     return NextResponse.json(combinedResponse);
   } catch (error) {
-    console.error("Error in account endpoint:", error);
+    console.error("Error in account endpoint:", error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: "Failed to fetch account data" },
       { status: 500 }

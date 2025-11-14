@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const data = await response.json();
     return NextResponse.json({ nonce: data.nonce });
   } catch (error) {
-    console.error('Error requesting nonce:', error);
+    console.error('Error requesting nonce:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Failed to request nonce' },
       { status: 500 }

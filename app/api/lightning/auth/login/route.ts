@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     const data = await response.json();
     return NextResponse.json({ token: data.token });
   } catch (error) {
-    console.error('Error during authentication:', error);
+    console.error('Error during authentication:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Failed to authenticate' },
       { status: 500 }
