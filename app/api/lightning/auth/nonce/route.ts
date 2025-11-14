@@ -3,10 +3,10 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const lightningApiUrl = process.env.LIGHTNING_API_URL;
-    const identifier = process.env.LIGHTNING_API_IDENTIFIER;
+    const identifier = process.env.LIGHTNING_API_ID;
 
     if (!identifier) {
-      console.error('LIGHTNING_API_IDENTIFIER not configured');
+      console.error('LIGHTNING_API_ID not configured');
       return NextResponse.json(
         { error: 'Lightning authentication not configured' },
         { status: 500 }

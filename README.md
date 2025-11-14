@@ -73,7 +73,7 @@ The stats collector can be configured using environment variables:
 - `API_URL` - URL of server to fetch statistics from (example: https://example.com/api)
 - `API_TOKEN` - Bearer access token (example: supersecrettoken)
 - `LIGHTNING_API_URL` - Lightning wallet API URL (example: https://api.example.com)
-- `LIGHTNING_API_IDENTIFIER` - Lightning authentication identifier
+- `LIGHTNING_API_ID` - Lightning authentication identifier
 
 ### Optional
 
