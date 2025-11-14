@@ -37,10 +37,12 @@ export default function LightningBalance({
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isFetching, setIsFetching] = useState<boolean>(false);
 
   const fetchCombinedData = useCallback(async () => {
     if (!userId) return;
 
+    setIsFetching(true);
     try {
       const headers: Record<string, string> = {};
       if (lightningToken) {
@@ -73,6 +75,8 @@ export default function LightningBalance({
       setAccountData(null);
       setWalletInfo(null);
       setBalance(null);
+    } finally {
+      setIsFetching(false);
     }
   }, [userId, lightningToken]);
 
@@ -160,8 +164,8 @@ export default function LightningBalance({
     }
   };
 
-  // Show loading shimmer if not initialized or explicitly loading
-  const isLoading = !isInitialized || loading;
+  // Show loading shimmer if not initialized, explicitly loading, or fetching data
+  const isLoading = !isInitialized || loading || isFetching;
 
   if (isLoading && compact) {
     return (
