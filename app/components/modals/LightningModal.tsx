@@ -3,20 +3,54 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/app/hooks/useWallet';
 import type { AccountData } from '@/app/api/account/types';
+import type { WalletInfo, BalanceResponse } from '@/app/components/types/lightning';
 
 interface LightningModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onUpdate?: () => void;
 }
 
-export default function LightningModal({ isOpen, onClose }: LightningModalProps) {
-  const { address, addressPublicKey } = useWallet();
+const API_BASE_URL = "https://api.bitbit.bot";
+
+export default function LightningModal({ isOpen, onClose, onUpdate }: LightningModalProps) {
+  const { address, lightningToken, isLightningAuthenticated } = useWallet();
   const [accountData, setAccountData] = useState<AccountData | null>(null);
+  const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
+  const [balance, setBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newLnAddress, setNewLnAddress] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  const fetchLightningData = useCallback(async (token: string) => {
+    try {
+      const [userResponse, balanceResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/wallet_user`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_BASE_URL}/wallet_user/balance`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      if (!userResponse.ok || !balanceResponse.ok) {
+        return null;
+      }
+
+      const userData: WalletInfo = await userResponse.json();
+      const balanceData: BalanceResponse = await balanceResponse.json();
+
+      return {
+        walletInfo: userData,
+        balance: balanceData.balance,
+      };
+    } catch (err) {
+      console.error('Error fetching lightning data:', err);
+      return null;
+    }
+  }, []);
 
   // Fetch account data when modal opens
   const fetchAccountData = useCallback(async () => {
@@ -26,26 +60,40 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
     setError(null);
 
     try {
-      const response = await fetch(`/api/account/${address}`);
+      const accountResponse = await fetch(`/api/account/${address}`, {
+        cache: 'no-store',
+      });
+      let accountData: AccountData | null = null;
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch account data');
+      if (accountResponse.ok) {
+        accountData = await accountResponse.json();
+        setAccountData(accountData);
+        setNewLnAddress(accountData?.ln_address || '');
+      } else {
+        // account endpoint returned nothing (404 or error)
+        setAccountData(null);
       }
 
-      const data: AccountData = await response.json();
-      setAccountData(data);
-      setNewLnAddress(data.ln_address || '');
+      // Fetch from lightning if authenticated
+      if (isLightningAuthenticated && lightningToken) {
+        const lightningData = await fetchLightningData(lightningToken);
+        if (lightningData) {
+          setWalletInfo(lightningData.walletInfo);
+          setBalance(lightningData.balance);
+        }
+      }
     } catch (err) {
       console.error('Error fetching account data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load account data');
     } finally {
       setIsLoading(false);
     }
-  }, [address]);
+  }, [address, isLightningAuthenticated, lightningToken, fetchLightningData]);
 
   useEffect(() => {
     if (isOpen && address) {
       fetchAccountData();
+      setIsEditing(false);
     }
   }, [isOpen, address, fetchAccountData]);
 
@@ -54,6 +102,8 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
     if (!isOpen) {
       setIsEditing(false);
       setError(null);
+      setWalletInfo(null);
+      setBalance(null);
     }
   }, [isOpen]);
 
@@ -75,7 +125,7 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
   }, [isOpen, onClose]);
 
   const handleSave = async () => {
-    if (!address || !addressPublicKey || !newLnAddress) {
+    if (!address || !newLnAddress) {
       setError('Missing required data');
       return;
     }
@@ -132,8 +182,18 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
       }
 
       const updatedData: AccountData = await response.json();
+      // Update modal state immediately with returned data
       setAccountData(updatedData);
+      setNewLnAddress(updatedData.ln_address || '');
       setIsEditing(false);
+
+      // Re-fetch to ensure we have the latest data
+      await fetchAccountData();
+
+      // Trigger refresh in parent component
+      if (onUpdate) {
+        onUpdate();
+      }
     } catch (err) {
       console.error('Error updating Lightning address:', err);
       setError(err instanceof Error ? err.message : 'Failed to update Lightning address');
@@ -144,17 +204,33 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
 
   const handleCancel = () => {
     setIsEditing(false);
+    // Reset to account data only
     setNewLnAddress(accountData?.ln_address || '');
     setError(null);
+  };
+
+  const displayLnAddress = accountData?.ln_address || '';
+  const hasAccountData = accountData !== null;
+  const hasLightningData = walletInfo !== null && balance !== null;
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl overflow-y-auto max-h-[90vh]">
-        <div className="flex justify-between items-start mb-4">
-          <h2 className="text-2xl font-bold text-accent-3">Lightning Information</h2>
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={handleBackdropClick}
+    >
+      <div
+        className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl overflow-y-auto max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-end items-start mb-4">
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-500 focus:outline-none"
@@ -169,16 +245,16 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
           </div>
-        ) : error && !accountData ? (
+        ) : error && !hasAccountData && !hasLightningData ? (
           <div className="text-sm text-red-500 bg-red-500/10 p-4 border border-red-500/20">
             {error}
           </div>
-        ) : accountData ? (
+        ) : (
           <div className="space-y-6">
             {/* Current Lightning Address */}
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">Current Lightning Address</h3>
-              {isEditing ? (
+              {isEditing && hasAccountData ? (
                 <div className="space-y-2">
                   <input
                     type="text"
@@ -186,87 +262,100 @@ export default function LightningModal({ isOpen, onClose }: LightningModalProps)
                     onChange={(e) => setNewLnAddress(e.target.value)}
                     placeholder="Enter Lightning address (e.g., user@getalby.com)"
                     className="w-full bg-secondary text-foreground px-3 py-2 border border-border focus:outline-none focus:border-accent-3"
+                    autoFocus
                   />
                   {error && (
                     <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
                       {error}
                     </div>
                   )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleSave}
-                      disabled={isSaving || !newLnAddress}
-                      className="bg-accent-3 text-white px-4 py-2 hover:bg-accent-3/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSaving ? 'Saving...' : 'Save'}
-                    </button>
+                  <div className="flex gap-2 justify-center">
                     <button
                       onClick={handleCancel}
                       disabled={isSaving}
-                      className="bg-secondary text-secondary-foreground px-4 py-2 hover:bg-secondary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Cancel
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={isSaving || !newLnAddress}
+                      className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSaving ? 'Saving...' : 'Save'}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between bg-secondary p-3 border border-border">
-                  <span className="text-foreground break-all">
-                    {accountData.ln_address || 'Not set'}
-                  </span>
-                  <button
-                    onClick={() => setIsEditing(true)}
-                    className="ml-4 text-accent-3 hover:text-accent-3/80 transition-colors flex-shrink-0"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
+                <div className="space-y-2">
+                  {hasAccountData ? (
+                    <div
+                      onClick={() => setIsEditing(true)}
+                      className="flex items-center justify-between bg-secondary p-3 border border-border cursor-pointer hover:bg-secondary/80 transition-colors"
+                    >
+                      <span className="text-foreground break-all">
+                        {displayLnAddress || 'Not set'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between bg-secondary p-3 border border-border">
+                      <span className="text-foreground break-all">
+                        {displayLnAddress || 'Not set'}
+                      </span>
+                    </div>
+                  )}
+                  {error && (
+                    <div className="text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
+                      {error}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Bitcoin Address */}
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Bitcoin Address</h3>
-              <div className="bg-secondary p-3 border border-border">
-                <span className="text-foreground/70 break-all font-mono text-sm">
-                  {accountData.btc_address}
-                </span>
-              </div>
-            </div>
-
-            {/* Past Lightning Addresses */}
-            {accountData.past_ln_addresses && accountData.past_ln_addresses.length > 0 && (
-              <div>
+            {/* Past Lightning Addresses - only show if we have account data */}
+            {hasAccountData && accountData?.past_ln_addresses && accountData.past_ln_addresses.length > 0 && (
+              <div className="flex flex-col">
                 <h3 className="text-lg font-semibold text-foreground mb-2">Past Lightning Addresses</h3>
-                <div className="space-y-2">
-                  {accountData.past_ln_addresses.map((addr, index) => (
-                    <div key={index} className="bg-secondary/50 p-3 border border-border">
-                      <span className="text-foreground/70 break-all">{addr}</span>
+                <div className="overflow-hidden" style={{ height: '156px' }}>
+                  <style dangerouslySetInnerHTML={{ __html: `
+                    .past-addresses-scroll::-webkit-scrollbar {
+                      width: 6px;
+                    }
+                    .past-addresses-scroll::-webkit-scrollbar-track {
+                      background: transparent;
+                    }
+                    .past-addresses-scroll::-webkit-scrollbar-thumb {
+                      background: rgba(255, 255, 255, 0.15);
+                      border-radius: 3px;
+                    }
+                    .past-addresses-scroll::-webkit-scrollbar-thumb:hover {
+                      background: rgba(255, 255, 255, 0.25);
+                    }
+                  `}} />
+                  <div 
+                    className="h-full overflow-y-auto past-addresses-scroll"
+                    style={{ 
+                      scrollbarWidth: 'thin',
+                      scrollbarColor: 'rgba(255, 255, 255, 0.15) transparent'
+                    }}
+                  >
+                    <div className="space-y-2">
+                      {accountData.past_ln_addresses
+                        .slice()
+                        .reverse()
+                        .map((addr, index) => (
+                          <div key={accountData.past_ln_addresses.length - 1 - index} className="bg-secondary/50 p-3 border border-border min-h-[48px]">
+                            <span className="text-foreground/70 break-all">{addr}</span>
+                          </div>
+                        ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               </div>
             )}
-
-            {/* Last Updated */}
-            {accountData.last_updated && (
-              <div className="text-sm text-foreground/50">
-                Last updated: {new Date(accountData.last_updated).toLocaleString()}
-              </div>
-            )}
           </div>
-        ) : null}
-
-        <div className="flex justify-end mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground"
-          >
-            Close
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
