@@ -14,9 +14,14 @@ import SortableTable from '../../components/SortableTable';
 import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/utils/formatters';
 import { parseHashrate } from '@/app/utils/formatters';
 import LightningBalance from '@/app/components/LightningBalance';
+import StratumInfo from '@/app/components/StratumInfo';
+import { useWallet } from '@/app/hooks/useWallet';
+import { useRouter } from 'next/navigation';
+import type { AccountData } from '@/app/api/account/types';
 
 export default function UserDashboard() {
   const params = useParams();
+  const router = useRouter();
   const userId = params.id as string;
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -27,6 +32,14 @@ export default function UserDashboard() {
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
+  const [accountData, setAccountData] = useState<AccountData | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  
+  const {
+    isLightningAuthenticated,
+    isInitialized,
+    connectWithLightning,
+  } = useWallet();
 
   // Function to check if the address is valid and fetch user data
   useEffect(() => {
@@ -133,6 +146,38 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
+  // Fetch account data when userId changes
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchAccountData = async () => {
+      if (!isValidAddress) return;
+      
+      try {
+        const response = await fetch(`/api/account/${userId}`, {
+          cache: 'no-store',
+        });
+        if (response.ok) {
+          const data: AccountData = await response.json();
+          if (mounted) {
+            setAccountData(data);
+          }
+        } else {
+          if (mounted) {
+            setAccountData(null);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching account data:", err);
+        if (mounted) {
+          setAccountData(null);
+        }
+      }
+    };
+
+    fetchAccountData();
+  }, [userId, isValidAddress]);
+
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
     if (!userData) return;
@@ -146,6 +191,25 @@ export default function UserDashboard() {
       alert('Failed to toggle visibility. Please try again.');
     } finally {
       setIsTogglingVisibility(false);
+    }
+  };
+
+  // Handle account activation
+  const handleActivateAccount = async () => {
+    setIsConnecting(true);
+    setError(null);
+    try {
+      const result = await connectWithLightning();
+      if (result) {
+        router.push(`/user/${result.address}`);
+      } else {
+        setError('Failed to connect wallet');
+      }
+    } catch (err) {
+      console.error('Connection error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -302,9 +366,46 @@ export default function UserDashboard() {
           </div>
         </div>
 
-        {/* Lightning Information - Full Width Section */}
+        {/* Account Activation / Lightning & Stratum Information */}
         <div className="w-full mt-4">
-          <LightningBalance userId={userId} />
+          {!isInitialized ? (
+            // Loading state
+            <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
+              </div>
+            </div>
+          ) : !isLightningAuthenticated ? (
+            // Not authenticated - Show Activate Account button
+            <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
+              <div className="flex flex-col items-center justify-center py-8">
+                <h2 className="text-xl sm:text-2xl font-bold mb-4 text-center">
+                  Activate Your Mining Account
+                </h2>
+                <p className="text-sm text-accent-2 mb-6 text-center max-w-md">
+                  Connect your wallet to activate your account and get your personalized mining credentials.
+                </p>
+                <button
+                  onClick={handleActivateAccount}
+                  disabled={isConnecting}
+                  className="px-8 py-4 bg-foreground text-background text-lg font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isConnecting ? 'Connecting...' : 'Activate Account'}
+                </button>
+                {error && (
+                  <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
+                    {error}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            // Authenticated - Show Lightning and Stratum components in grid
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <LightningBalance userId={userId} />
+              <StratumInfo userId={userId} lnAddress={accountData?.ln_address || null} />
+            </div>
+          )}
         </div>
       </div>
 
