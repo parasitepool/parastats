@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import HashrateChart from '../../components/HashrateChart';
+import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
@@ -23,6 +24,7 @@ export default function UserDashboard() {
   const params = useParams();
   const router = useRouter();
   const userId = params.id as string;
+  const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
   const [historicalData, setHistoricalData] = useState<HistoricalUserStats[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +42,19 @@ export default function UserDashboard() {
     connectWithLightning,
   } = useWallet();
 
-  // Fetch user data and hashrate on mount and every 10 seconds
+  // Validate Bitcoin address on mount
   useEffect(() => {
+    const isValid = isValidBitcoinAddress(userId.trim());
+    setIsValidAddress(isValid);
+  }, [userId]);
+
+  // Fetch user data and hashrate on mount and every 10 seconds (only if valid address)
+  useEffect(() => {
+    // Don't fetch if address is invalid
+    if (isValidAddress === false) return;
+    // Don't fetch until we've validated the address
+    if (isValidAddress === null) return;
+
     let mounted = true;
 
     const fetchUserData = async () => {
@@ -92,10 +105,13 @@ export default function UserDashboard() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, isValidAddress]);
 
-  // Fetch historical data on mount and every minute
+  // Fetch historical data on mount and every minute (only if valid address)
   useEffect(() => {
+    // Don't fetch if address is invalid or not yet validated
+    if (!isValidAddress) return;
+
     let mounted = true;
 
     const fetchHistoricalData = async () => {
@@ -116,10 +132,18 @@ export default function UserDashboard() {
       mounted = false;
       clearInterval(intervalId);
     };
-  }, [userId]);
+  }, [userId, isValidAddress]);
 
-  // Fetch account data when userId changes
+  // Fetch account data when userId changes (only if valid address)
   useEffect(() => {
+    // Don't fetch if address is invalid
+    if (isValidAddress === false) {
+      setIsLoadingAccountData(false);
+      return;
+    }
+    // Don't fetch until we've validated the address
+    if (isValidAddress === null) return;
+
     const fetchAccountData = async () => {
       setIsLoadingAccountData(true);
       try {
@@ -141,7 +165,7 @@ export default function UserDashboard() {
     };
 
     fetchAccountData();
-  }, [userId]);
+  }, [userId, isValidAddress]);
 
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
@@ -306,6 +330,24 @@ export default function UserDashboard() {
       )
     }
   ];
+
+  // Show error for invalid Bitcoin address
+  if (isValidAddress === false) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center">
+        <div className="text-red-500 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <p className="text-center text-lg font-semibold mb-2">Invalid Bitcoin Address</p>
+        <p className="text-center text-accent-2 mb-4">The address you entered is not a valid Bitcoin address.</p>
+        <Link href="/" className="mt-4 text-accent-3 hover:underline">
+          Return to Home
+        </Link>
+      </div>
+    );
+  }
 
   // Show error message if there was an error fetching data
   if (error && !hasInitiallyLoaded) {
