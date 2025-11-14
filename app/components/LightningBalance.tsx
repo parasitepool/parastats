@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { LightningIcon } from "@/app/components/icons";
 import { useWallet } from "@/app/hooks/useWallet";
 import LightningModal from "@/app/components/modals/LightningModal";
-import type { AccountData } from "@/app/api/account/types";
-import type { WalletInfo, BalanceResponse } from "@/app/components/types/lightning";
+import type { AccountData, WalletInfo, CombinedAccountResponse } from "@/app/api/account/types";
 
 interface LightningBalanceProps {
   className?: string;
@@ -14,8 +13,6 @@ interface LightningBalanceProps {
   userId?: string;
   loading?: boolean;
 }
-
-const API_BASE_URL = "https://api.bitbit.bot";
 
 export default function LightningBalance({
   className = "",
@@ -40,66 +37,54 @@ export default function LightningBalance({
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isFetching, setIsFetching] = useState<boolean>(false);
 
-  const fetchUserData = useCallback(async (token: string) => {
-    const [userResponse, balanceResponse] = await Promise.all([
-      fetch(`${API_BASE_URL}/wallet_user`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-      fetch(`${API_BASE_URL}/wallet_user/balance`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    ]);
-
-    if (!userResponse.ok) {
-      throw new Error("Failed to fetch user info");
-    }
-
-    if (!balanceResponse.ok) {
-      throw new Error("Failed to fetch balance");
-    }
-
-    const userData: WalletInfo = await userResponse.json();
-    const balanceData: BalanceResponse = await balanceResponse.json();
-
-    setWalletInfo(userData);
-    setBalance(balanceData.balance);
-  }, []);
-
-  const fetchAccountData = useCallback(async () => {
+  const fetchCombinedData = useCallback(async () => {
     if (!userId) return;
 
+    setIsFetching(true);
     try {
-      // Add cache-busting to ensure fresh data
+      const headers: Record<string, string> = {};
+      if (lightningToken) {
+        headers['X-Lightning-Token'] = lightningToken;
+      }
+
       const response = await fetch(`/api/account/${userId}`, {
         cache: 'no-store',
+        headers,
       });
+
       if (response.ok) {
-        const data: AccountData = await response.json();
-        setAccountData(data);
+        const data: CombinedAccountResponse = await response.json();
+        setAccountData(data.account);
+        if (data.lightning) {
+          setWalletInfo(data.lightning.walletInfo);
+          setBalance(data.lightning.balance);
+        } else {
+          setWalletInfo(null);
+          setBalance(null);
+        }
       } else {
         setAccountData(null);
+        setWalletInfo(null);
+        setBalance(null);
       }
     } catch (err) {
-      console.error("Error fetching account data:", err);
+      console.error("Error fetching combined data:", err);
+      setError("Failed to load data");
       setAccountData(null);
+      setWalletInfo(null);
+      setBalance(null);
+    } finally {
+      setIsFetching(false);
     }
-  }, [userId]);
+  }, [userId, lightningToken]);
 
   useEffect(() => {
-    if (isInitialized && isLightningAuthenticated && lightningToken) {
-      fetchUserData(lightningToken)
-        .catch((err) => {
-          console.error("Error fetching Lightning data:", err);
-          setError("Failed to load Lightning data");
-        });
+    if (isInitialized) {
+      fetchCombinedData();
     }
-  }, [isInitialized, isLightningAuthenticated, lightningToken, fetchUserData]);
-
-  // Fetch account data when userId changes
-  useEffect(() => {
-    fetchAccountData();
-  }, [fetchAccountData]);
+  }, [isInitialized, fetchCombinedData]);
 
   // Open reset confirmation modal
   const handleResetClick = () => {
@@ -170,7 +155,7 @@ export default function LightningBalance({
       setShowResetConfirm(false);
 
       // Re-fetch to ensure we have the latest data
-      await fetchAccountData();
+      await fetchCombinedData();
     } catch (err) {
       console.error('Error resetting Lightning address:', err);
       setError(err instanceof Error ? err.message : 'Failed to reset Lightning address');
@@ -179,8 +164,8 @@ export default function LightningBalance({
     }
   };
 
-  // Show loading shimmer if not initialized or explicitly loading
-  const isLoading = !isInitialized || loading;
+  // Show loading shimmer if not initialized, explicitly loading, or fetching data
+  const isLoading = !isInitialized || loading || isFetching;
 
   if (isLoading && compact) {
     return (
@@ -397,7 +382,7 @@ export default function LightningBalance({
       <LightningModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onUpdate={fetchAccountData}
+        onUpdate={fetchCombinedData}
       />
 
       {/* Reset Confirmation Modal */}

@@ -16,9 +16,7 @@ import LightningBalance from '@/app/components/LightningBalance';
 import StratumInfo from '@/app/components/StratumInfo';
 import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
-import type { AccountData } from '@/app/api/account/types';
-
-const LIGHTNING_API_BASE_URL = "https://api.bitbit.bot";
+import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
 
 export default function UserDashboard() {
   const params = useParams();
@@ -151,8 +149,8 @@ export default function UserDashboard() {
           cache: 'no-store',
         });
         if (response.ok) {
-          const data: AccountData = await response.json();
-          setAccountData(data);
+          const data: CombinedAccountResponse = await response.json();
+          setAccountData(data.account);
         } else {
           setAccountData(null);
         }
@@ -206,17 +204,22 @@ export default function UserDashboard() {
         return;
       }
 
-      // Fetch wallet info to get the username
-      const walletResponse = await fetch(`${LIGHTNING_API_BASE_URL}/wallet_user`, {
-        headers: { Authorization: `Bearer ${result.token}` },
+      // Fetch wallet info to get the username using combined endpoint
+      const walletResponse = await fetch(`/api/account/${result.address}`, {
+        headers: { 'X-Lightning-Token': result.token },
+        cache: 'no-store',
       });
 
       if (!walletResponse.ok) {
         throw new Error('Failed to fetch wallet info');
       }
 
-      const walletInfo = await walletResponse.json();
-      const usernameAddress = `${walletInfo.username}@sati.pro`;
+      const combinedData: CombinedAccountResponse = await walletResponse.json();
+      if (!combinedData.lightning?.walletInfo) {
+        throw new Error('Failed to get wallet info');
+      }
+
+      const usernameAddress = `${combinedData.lightning.walletInfo.username}@sati.pro`;
 
       // Request signature for the Lightning address using BIP322
       const { request: satConnectRequest, MessageSigningProtocols } = await import('@sats-connect/core');
