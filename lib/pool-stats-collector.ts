@@ -142,6 +142,7 @@ function isRetryableError(error: unknown): boolean {
   return false;
 }
 
+// Type definitions for API response structures
 interface StatsData {
   runtime: number;
   lastupdate: number;
@@ -161,6 +162,33 @@ interface HashrateData {
   hashrate7d: string;
 }
 
+/**
+ * Type guard to check if an object matches StatsData structure
+ */
+function isStatsData(obj: unknown): obj is StatsData {
+  if (!obj || typeof obj !== 'object') return false;
+  const data = obj as Record<string, unknown>;
+  
+  // Check for required numeric fields (case-insensitive)
+  const users = getCaseInsensitive(data, 'Users');
+  const workers = getCaseInsensitive(data, 'Workers');
+  
+  return typeof users === 'number' && typeof workers === 'number';
+}
+
+/**
+ * Type guard to check if an object matches HashrateData structure
+ */
+function isHashrateData(obj: unknown): obj is HashrateData {
+  if (!obj || typeof obj !== 'object') return false;
+  const data = obj as Record<string, unknown>;
+  
+  // Check for required hashrate field
+  const hashrate15m = getCaseInsensitive(data, 'hashrate15m');
+  
+  return typeof hashrate15m === 'string';
+}
+
 interface UserData {
   hashrate1m: string;
   hashrate5m: string;
@@ -176,6 +204,28 @@ interface UserData {
 interface MonitoredUser {
   id: number;
   address: string;
+}
+
+/**
+ * Helper to get a value from an object with case-insensitive key matching
+ */
+function getCaseInsensitive(obj: Record<string, unknown>, key: string): unknown {
+  // Try exact match first
+  if (key in obj) return obj[key];
+  
+  // Try lowercase
+  const lowerKey = key.toLowerCase();
+  if (lowerKey in obj) return obj[lowerKey];
+  
+  // Try uppercase first letter
+  const capitalKey = key.charAt(0).toUpperCase() + key.slice(1).toLowerCase();
+  if (capitalKey in obj) return obj[capitalKey];
+  
+  // Try all uppercase
+  const upperKey = key.toUpperCase();
+  if (upperKey in obj) return obj[upperKey];
+  
+  return undefined;
 }
 
 let isCollectorRunning = false;
@@ -226,8 +276,12 @@ async function withRetry<T>(
         if (isAbortError(error)) {
           // Suppress abort error logs - they're expected with timeouts
         } else if (error instanceof HttpError && error.status === 404) {
-          // Concise 404 message with helpful hint
-          console.error(`❌ Endpoint not found${contextMsg} - Check API_URL and endpoint paths in .env`);
+          // 404s for user stats are expected (not all users have data)
+          // Only log 404s for pool-level endpoints
+          if (context && !context.includes('/users/')) {
+            console.error(`❌ Endpoint not found${contextMsg} - Check API_URL and endpoint paths in .env`);
+          }
+          // Silently skip 404s for individual user endpoints
         } else {
           console.log(`Non-retryable error${contextMsg} - ${errorMsg}`);
         }
@@ -253,16 +307,27 @@ async function withRetry<T>(
 
 /**
  * Process users in batches to avoid overwhelming the system
+ * @returns Object containing number of users collected and number deactivated
  */
-async function processBatchedUserStats(users: MonitoredUser[]): Promise<number> {
+async function processBatchedUserStats(users: MonitoredUser[]): Promise<{ collected: number; deactivated: number }> {
+  let totalDeactivated = 0;
+  
   for (let i = 0; i < users.length; i += CONFIG.BATCH_SIZE) {
     const batch = users.slice(i, i + CONFIG.BATCH_SIZE);
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       batch.map(user => collectUserStats(user.id, user.address))
     );
+    
+    // Count deactivations in this batch
+    const batchDeactivated = results.filter(
+      result => result.status === 'fulfilled' && result.value === true
+    ).length;
+    totalDeactivated += batchDeactivated;
+    
     console.log(`Processed batch ${Math.floor(i / CONFIG.BATCH_SIZE) + 1}/${Math.ceil(users.length / CONFIG.BATCH_SIZE)} (${batch.length} users)`);
   }
-  return users.length;
+  
+  return { collected: users.length, deactivated: totalDeactivated };
 }
 
 /**
@@ -293,8 +358,9 @@ function updateUsersInChunks(
 
 /**
  * Fetch user stats and store them in the database
+ * @returns true if user was deactivated, false otherwise
  */
-async function collectUserStats(userId: number, address: string): Promise<void> {
+async function collectUserStats(userId: number, address: string): Promise<boolean> {
   try {
     const response = await withRetry(async () => {
       const apiUrl = process.env.API_URL;
@@ -308,19 +374,20 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
       }
 
-      // Discover endpoint on first run or use cached/configured path
+      // Get or discover the endpoint path (with shared promise pattern)
       if (!discoveredUserStatsPath) {
         const configuredPath = process.env.USER_STATS_ENDPOINT;
         if (configuredPath) {
           discoveredUserStatsPath = configuredPath;
           console.log(`Using configured user stats endpoint: ${configuredPath}`);
         } else {
-          // Auto-discover using the first user address
+          // Use shared promise pattern - all concurrent requests will await the same discovery
           try {
-            discoveredUserStatsPath = await discoverUserStatsEndpoint(apiUrl, headers, address);
+            discoveredUserStatsPath = await getUserStatsEndpoint(apiUrl, headers, address);
           } catch (error) {
-            console.error(error instanceof Error ? error.message : String(error));
-            throw new Error('Could not discover user stats endpoint');
+            // Discovery failed - this is expected if user stats endpoint doesn't exist
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            throw new Error(`Could not discover user stats endpoint: ${errorMsg}`);
           }
         }
       }
@@ -340,10 +407,9 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
             if (body) errorDetail += `: ${body}`;
           } catch {}
           
-          // On 404, clear cached path and try discovery again next time
-          if (res.status === 404) {
-            discoveredUserStatsPath = null;
-          }
+          // Don't clear discoveredUserStatsPath on 404 for individual users
+          // A 404 for a specific user is normal (user may not have stats yet)
+          // Only the discovery process should determine if the endpoint is invalid
           
           // Throw HttpError with status code so retry logic can determine if it's retryable
           throw new HttpError(res.status, `HTTP ${res.status} ${errorDetail}`);
@@ -450,6 +516,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
       updateUserStmt.run(now, userData.authorised, userId);
     })();
 
+    return false; // User stats collected successfully, not deactivated
   } catch {
     // Record failure
     const db = getDb();
@@ -468,8 +535,10 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
     
     if (user && user.failed_attempts >= CONFIG.MAX_FAILED_ATTEMPTS) {
       db.prepare('UPDATE monitored_users SET is_active = 0 WHERE id = ?').run(userId);
-      console.log(`Deactivated user ${address} after ${CONFIG.MAX_FAILED_ATTEMPTS} failed attempts`);
+      return true; // User was deactivated
     }
+    
+    return false; // User failed but not yet deactivated
   }
 }
 
@@ -477,6 +546,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
 let discoveredPoolUsersPath: string | null = null;
 let discoveredPoolStatsPath: string | null = null;
 let discoveredUserStatsPath: string | null = null;
+let userStatsDiscoveryPromise: Promise<string> | null = null; // Shared promise for concurrent discovery
 
 /**
  * Discover the correct pool users endpoint by trying common paths
@@ -567,7 +637,7 @@ async function discoverUserStatsEndpoint(
       if (response.ok) {
         // Extract the base path without the address
         const basePath = path.replace(address, '{address}');
-        console.log(`✓ Discovered user stats endpoint: ${basePath}`);
+        // Don't log here - this gets called concurrently for multiple users
         return basePath;
       }
     } catch {
@@ -576,9 +646,44 @@ async function discoverUserStatsEndpoint(
   }
 
   throw new Error(
-    `Could not find user stats endpoint. Tried: ${possiblePaths.join(', ')}. ` +
-    `Please set USER_STATS_ENDPOINT in your .env file.`
+    `Could not find user stats endpoint. Please set USER_STATS_ENDPOINT in your .env file.`
   );
+}
+
+/**
+ * Get the user stats endpoint, with shared promise pattern to prevent concurrent discovery
+ * Ensures only one discovery runs at a time, all other callers await the same promise
+ */
+async function getUserStatsEndpoint(
+  apiUrl: string,
+  headers: Record<string, string>,
+  address: string
+): Promise<string> {
+  // If already discovered, return immediately
+  if (discoveredUserStatsPath) {
+    return discoveredUserStatsPath;
+  }
+
+  // If another call started discovery, wait for it
+  if (userStatsDiscoveryPromise) {
+    return userStatsDiscoveryPromise;
+  }
+
+  // Start discovery
+  userStatsDiscoveryPromise = (async () => {
+    try {
+      const path = await discoverUserStatsEndpoint(apiUrl, headers, address);
+      discoveredUserStatsPath = path;
+      console.log(`✓ Discovered user stats endpoint: ${path}`);
+      return path;
+    } catch (err) {
+      // Reset promise so future attempts can retry
+      userStatsDiscoveryPromise = null;
+      throw err;
+    }
+  })();
+
+  return userStatsDiscoveryPromise;
 }
 
 /**
@@ -636,27 +741,33 @@ async function collectAllUserStats() {
       return response.text();
     }, 2, 500, `GET ${discoveredPoolUsersPath}`);
 
-    // Parse pool users - handle both newline-delimited and JSON array formats
+    // Parse pool users - handle JSON array, newline-delimited, and comma-separated formats
     let poolUsersArray: string[];
     const trimmedText = poolUsersText.trim();
     
     if (trimmedText.startsWith('[') && trimmedText.endsWith(']')) {
-      // JSON array format
+      // JSON array format: ["addr1", "addr2", "addr3"]
       try {
         poolUsersArray = JSON.parse(trimmedText) as string[];
       } catch (error) {
         console.error('Failed to parse pool users JSON:', error);
         poolUsersArray = [];
       }
-    } else {
-      // Newline-delimited format
+    } else if (trimmedText.includes('\n')) {
+      // Newline-delimited format: addr1\naddr2\naddr3
       poolUsersArray = trimmedText.split('\n');
+    } else if (trimmedText.includes(',')) {
+      // Comma-separated format: "addr1","addr2","addr3" or addr1,addr2,addr3
+      poolUsersArray = trimmedText.split(',');
+    } else {
+      // Single address or unknown format
+      poolUsersArray = [trimmedText];
     }
     
-    // Filter out empty, whitespace-only, or invalid addresses
+    // Filter out empty, whitespace-only, quotes, or invalid addresses
     const poolUsers = new Set(
       poolUsersArray
-        .map(addr => addr.trim())
+        .map(addr => addr.trim().replace(/^["']|["']$/g, '')) // Remove surrounding quotes
         .filter(addr => addr.length > 0 && addr !== '[]' && !addr.startsWith('['))
     );
 
@@ -788,12 +899,15 @@ async function collectAllUserStats() {
       updateTransaction();
     }
 
-    const collectedCount = await processBatchedUserStats(usersToCollect);
+    const { collected: collectedCount, deactivated: failedDeactivatedCount } = await processBatchedUserStats(usersToCollect);
 
     // Log summary
     const lifecycleChanges = addedCount + deactivatedCount + reactivatedCount;
     if (lifecycleChanges > 0) {
       console.log(`User lifecycle: ${addedCount} added, ${deactivatedCount} deactivated, ${reactivatedCount} reactivated`);
+    }
+    if (failedDeactivatedCount > 0) {
+      console.log(`⚠️  Deactivated ${failedDeactivatedCount} users after ${CONFIG.MAX_FAILED_ATTEMPTS} failed attempts`);
     }
     console.log(`Collected stats for ${collectedCount} users at ${new Date().toISOString()}`);
 
@@ -860,11 +974,44 @@ export async function collectPoolStats() {
     }, 2, 500, `GET ${discoveredPoolStatsPath}`);
     
     // Split the response into lines and parse each JSON object
-    const jsonLines = text.trim().split('\n').map(line => JSON.parse(line));
+    const jsonLines = text.trim().split('\n').filter(line => line.trim().length > 0).map(line => JSON.parse(line) as Record<string, unknown>);
+    
+    if (jsonLines.length < 2) {
+      console.error(`Expected at least 2 JSON objects but got ${jsonLines.length}`);
+      console.error('Response:', text.substring(0, 500));
+      throw new Error(`Incomplete response: expected at least 2 JSON objects but got ${jsonLines.length}`);
+    }
     
     // Extract the data from different objects
-    const statsData = jsonLines[0] as StatsData;
-    const hashrateData = jsonLines[1] as HashrateData;
+    const statsData = jsonLines[0] as Record<string, unknown>;
+    const hashrateData = jsonLines[1] as Record<string, unknown>;
+    
+    // Validate using type guards
+    if (!isStatsData(statsData)) {
+      console.error('Invalid stats data structure. Available keys:', Object.keys(statsData));
+      throw new Error('Missing required stats data fields (Users/Workers)');
+    }
+    
+    if (!isHashrateData(hashrateData)) {
+      console.error('Invalid hashrate data structure. Available keys:', Object.keys(hashrateData));
+      throw new Error('Missing required hashrate data (hashrate15m)');
+    }
+    
+    // Now TypeScript knows these are the correct types
+    // Extract values with case-insensitive matching and assert types
+    const runtime = getCaseInsensitive(statsData, 'runtime') as number | undefined;
+    const users = (getCaseInsensitive(statsData, 'Users') ?? getCaseInsensitive(statsData, 'users')) as number;
+    const workers = (getCaseInsensitive(statsData, 'Workers') ?? getCaseInsensitive(statsData, 'workers')) as number;
+    const idle = (getCaseInsensitive(statsData, 'Idle') ?? getCaseInsensitive(statsData, 'idle') ?? 0) as number;
+    const disconnected = (getCaseInsensitive(statsData, 'Disconnected') ?? getCaseInsensitive(statsData, 'disconnected') ?? 0) as number;
+    
+    const hashrate1m = getCaseInsensitive(hashrateData, 'hashrate1m') as string | undefined;
+    const hashrate5m = getCaseInsensitive(hashrateData, 'hashrate5m') as string | undefined;
+    const hashrate15m = getCaseInsensitive(hashrateData, 'hashrate15m') as string;
+    const hashrate1hr = getCaseInsensitive(hashrateData, 'hashrate1hr') as string | undefined;
+    const hashrate6hr = getCaseInsensitive(hashrateData, 'hashrate6hr') as string | undefined;
+    const hashrate1d = getCaseInsensitive(hashrateData, 'hashrate1d') as string | undefined;
+    const hashrate7d = getCaseInsensitive(hashrateData, 'hashrate7d') as string | undefined;
     
     // Insert data into the database
     const db = getDb();
@@ -884,18 +1031,18 @@ export async function collectPoolStats() {
     
     stmt.run(
       timestamp,
-      statsData.runtime,
-      statsData.Users,
-      statsData.Workers,
-      statsData.Idle,
-      statsData.Disconnected,
-      hashrateData.hashrate1m,
-      hashrateData.hashrate5m,
-      hashrateData.hashrate15m,
-      hashrateData.hashrate1hr,
-      hashrateData.hashrate6hr,
-      hashrateData.hashrate1d,
-      hashrateData.hashrate7d
+      runtime ?? 0,
+      users,
+      workers,
+      idle,
+      disconnected,
+      hashrate1m ?? '0',
+      hashrate5m ?? '0',
+      hashrate15m,
+      hashrate1hr ?? '0',
+      hashrate6hr ?? '0',
+      hashrate1d ?? '0',
+      hashrate7d ?? '0'
     );
     
     console.log(`Pool stats collected and stored at ${new Date().toISOString()}`);
