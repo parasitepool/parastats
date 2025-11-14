@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
-    const lightningApiUrl = process.env.LIGHTNING_API_URL || 'https://api.bitbit.bot';
+    const lightningApiUrl = process.env.LIGHTNING_API_URL;
     const identifier = process.env.LIGHTNING_API_IDENTIFIER;
 
     if (!identifier) {

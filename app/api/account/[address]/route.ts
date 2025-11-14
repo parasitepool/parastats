@@ -58,7 +58,7 @@ export async function GET(
     // Fetch lightning data if token is provided
     let lightningData: { walletInfo: WalletInfo; balance: number } | null = null;
     if (lightningToken) {
-      const lightningApiUrl = process.env.LIGHTNING_API_URL || 'https://api.bitbit.bot';
+      const lightningApiUrl = process.env.LIGHTNING_API_URL;
       
       try {
         const [userResponse, balanceResponse] = await Promise.all([
