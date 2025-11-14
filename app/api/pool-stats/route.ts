@@ -21,6 +21,28 @@ const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 let discoveredEndpoint: string | null = null;
 
 /**
+ * Helper to get a value from an object with case-insensitive key matching
+ */
+function getCaseInsensitive(obj: Record<string, unknown>, key: string): unknown {
+  // Try exact match first
+  if (key in obj) return obj[key];
+  
+  // Try lowercase
+  const lowerKey = key.toLowerCase();
+  if (lowerKey in obj) return obj[lowerKey];
+  
+  // Try uppercase first letter
+  const capitalKey = key.charAt(0).toUpperCase() + key.slice(1).toLowerCase();
+  if (capitalKey in obj) return obj[capitalKey];
+  
+  // Try all uppercase
+  const upperKey = key.toUpperCase();
+  if (upperKey in obj) return obj[upperKey];
+  
+  return undefined;
+}
+
+/**
  * Discover the correct pool stats endpoint by trying common paths
  */
 async function discoverPoolStatsEndpoint(apiUrl: string, headers: Record<string, string>): Promise<string> {
@@ -139,7 +161,7 @@ export async function GET() {
         
         const jsonLines = lines.map((line, index) => {
           try {
-            return JSON.parse(line);
+            return JSON.parse(line) as Record<string, unknown>;
           } catch (error) {
             console.error(`Failed to parse JSON line ${index + 1}:`, line.substring(0, 200));
             throw new Error(
@@ -158,17 +180,28 @@ export async function GET() {
         }
         
         // Combine the data from all three objects
-        const [statsData, hashrateData, diffData] = jsonLines;
+        const statsData = jsonLines[0] as Record<string, unknown>;
+        const hashrateData = jsonLines[1] as Record<string, unknown>;
+        const diffData = jsonLines[2] as Record<string, unknown>;
+
+        // Extract values with case-insensitive matching and assert types
+        const users = (getCaseInsensitive(statsData, 'Users') ?? getCaseInsensitive(statsData, 'users')) as number | undefined;
+        const workers = (getCaseInsensitive(statsData, 'Workers') ?? getCaseInsensitive(statsData, 'workers')) as number | undefined;
+        const hashrate15m = getCaseInsensitive(hashrateData, 'hashrate15m') as string | undefined;
+        const bestshare = getCaseInsensitive(diffData, 'bestshare') as number | undefined;
 
         // Validate required fields exist
-        if (!statsData?.Users || !statsData?.Workers) {
-          throw new Error('Missing required stats data fields');
+        if (users === undefined || workers === undefined) {
+          console.error('Missing required stats data fields. Available keys:', Object.keys(statsData));
+          throw new Error('Missing required stats data fields (Users/Workers)');
         }
-        if (!hashrateData?.hashrate15m) {
-          throw new Error('Missing hashrate data');
+        if (hashrate15m === undefined) {
+          console.error('Missing hashrate data. Available keys:', Object.keys(hashrateData));
+          throw new Error('Missing required hashrate data (hashrate15m)');
         }
-        if (!diffData?.bestshare) {
-          throw new Error('Missing difficulty data');
+        if (bestshare === undefined) {
+          console.error('Missing difficulty data. Available keys:', Object.keys(diffData));
+          throw new Error('Missing required difficulty data (bestshare)');
         }
 
         const startTime = new Date('2025-04-20T16:20:00-04:00');
@@ -178,10 +211,10 @@ export async function GET() {
         const poolStats: PoolStats = {
           uptime: formatUptime(uptimeSeconds),
           lastBlockTime: "N/A",
-          highestDifficulty: formatDifficulty(diffData.bestshare),
-          hashrate: parseHashrate(hashrateData.hashrate15m),
-          users: statsData.Users,
-          workers: statsData.Workers
+          highestDifficulty: formatDifficulty(bestshare),
+          hashrate: parseHashrate(hashrate15m),
+          users: users,
+          workers: workers
         };
         
         // Success! Update cache and reset failure counters
