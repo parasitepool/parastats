@@ -12,6 +12,7 @@ interface LightningBalanceProps {
   className?: string;
   compact?: boolean;
   userId?: string;
+  loading?: boolean;
 }
 
 const API_BASE_URL = "https://api.bitbit.bot";
@@ -20,6 +21,7 @@ export default function LightningBalance({
   className = "",
   compact = false,
   userId,
+  loading = false,
 }: LightningBalanceProps) {
   const router = useRouter();
   const {
@@ -177,28 +179,59 @@ export default function LightningBalance({
     }
   };
 
-  if (!isInitialized) {
+  // Show loading shimmer if not initialized or explicitly loading
+  const isLoading = !isInitialized || loading;
+
+  if (isLoading && compact) {
     return (
       <div
         className={`bg-background p-4 shadow-md border border-border ${className}`}
       >
-        <div className="flex items-center">
+        <div className="flex items-center mb-2">
           <div className="mr-2 text-accent-3">
             <LightningIcon />
           </div>
-          <h3 className="text-lg font-semibold">Lightning</h3>
+          <h3 className="text-sm font-medium text-accent-2">Lightning</h3>
         </div>
-        <div
-          className={`flex items-center justify-center ${compact ? "pt-1" : "py-4"
-            }`}
-        >
-          <div className="animate-spin h-6 w-6 border-4 border-accent-3 border-t-transparent rounded-full"></div>
+        <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className={`bg-background p-4 sm:p-6 shadow-md border border-border ${className}`}>
+        <div className="flex items-center mb-4 sm:mb-6">
+          <div className="flex items-center">
+            <div className="mr-2 text-accent-3">
+              <LightningIcon />
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold">Lightning</h2>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 gap-4 sm:gap-6">
+          {/* Lightning Address shimmer */}
+          <div className="flex flex-col">
+            <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
+            <div className="bg-secondary p-3 sm:p-4 border border-border min-h-[4rem] flex items-center">
+              <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
+            </div>
+          </div>
+          
+          {/* Balance shimmer */}
+          <div className="flex flex-col">
+            <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
+            <div className="bg-secondary p-3 sm:p-4 border border-border min-h-[4rem] flex items-center">
+              <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Check if the connected wallet owns this profile
+  // Check if the connected wallet owns this account
   const isOwner = !userId || address === userId;
 
   const displayLnAddress = accountData?.ln_address || null;
@@ -284,12 +317,12 @@ export default function LightningBalance({
           </div>
         ) : addressesMatch ? (
           // If addresses match, show Lightning Address and Balance as separate boxes
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 gap-4 sm:gap-6">
             {/* Lightning Address */}
             <div className="flex flex-col">
               <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
-              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2">
-                <p className="text-lg sm:text-xl font-semibold break-all">{displayLnAddress}</p>
+              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 min-h-[4rem]">
+                <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">{displayLnAddress}</p>
                 {isOwner && isLightningAuthenticated && (
                   <button
                     onClick={() => setIsModalOpen(true)}
@@ -308,8 +341,8 @@ export default function LightningBalance({
             {balance !== null && (
               <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center">
-                  <p className="text-2xl sm:text-3xl font-bold">
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center min-h-[4rem]">
+                  <p className="text-lg sm:text-xl font-semibold">
                     {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
                   </p>
                 </div>
@@ -322,8 +355,8 @@ export default function LightningBalance({
             {displayLnAddress && (
               <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2">
-                  <p className="text-lg sm:text-xl font-semibold break-all flex-1">{displayLnAddress}</p>
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2 min-h-[4rem]">
+                  <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">{displayLnAddress}</p>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {walletInfo?.username && isOwner && (
                       <button
@@ -350,26 +383,6 @@ export default function LightningBalance({
                   </div>
                 </div>
               </div>
-            )}
-            {walletInfo?.username && isOwner && !displayLnAddress && (
-              // If no address set, show activate account button
-              <button
-                onClick={handleResetToDefault}
-                disabled={isResetting}
-                className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isResetting ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span>Activating...</span>
-                  </>
-                ) : (
-                  <span>Activate Account</span>
-                )}
-              </button>
             )}
           </div>
         )}

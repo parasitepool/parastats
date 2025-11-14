@@ -3,7 +3,6 @@
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import UserAddressHelp from '../../components/UserAddressHelp';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
@@ -14,12 +13,18 @@ import SortableTable from '../../components/SortableTable';
 import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/utils/formatters';
 import { parseHashrate } from '@/app/utils/formatters';
 import LightningBalance from '@/app/components/LightningBalance';
+import StratumInfo from '@/app/components/StratumInfo';
+import { useWallet } from '@/app/hooks/useWallet';
+import { useRouter } from 'next/navigation';
+import type { AccountData } from '@/app/api/account/types';
+
+const LIGHTNING_API_BASE_URL = "https://api.bitbit.bot";
 
 export default function UserDashboard() {
   const params = useParams();
+  const router = useRouter();
   const userId = params.id as string;
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
   const [historicalData, setHistoricalData] = useState<HistoricalUserStats[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,51 +32,47 @@ export default function UserDashboard() {
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
+  const [accountData, setAccountData] = useState<AccountData | null>(null);
+  const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
+  
+  const {
+    isLightningAuthenticated,
+    isInitialized,
+    connectWithLightning,
+  } = useWallet();
 
-  // Function to check if the address is valid and fetch user data
+  // Validate Bitcoin address on mount
   useEffect(() => {
+    const isValid = isValidBitcoinAddress(userId.trim());
+    setIsValidAddress(isValid);
+  }, [userId]);
+
+  // Fetch user data and hashrate on mount and every 10 seconds (only if valid address)
+  useEffect(() => {
+    // Don't fetch if address is invalid
+    if (isValidAddress === false) return;
+    // Don't fetch until we've validated the address
+    if (isValidAddress === null) return;
+
     let mounted = true;
 
     const fetchUserData = async () => {
       try {
-        // Only set loading on the very first fetch (initial load)
-        const isInitialLoad = !hasInitiallyLoaded;
-        if (isInitialLoad) {
-          setIsLoading(true);
-        }
-        
-        // First check if the address is valid
-        const isValid = isValidBitcoinAddress(userId.trim());
-        
+        // Fetch user data and hashrate in parallel
+        const [data, hashrateData] = await Promise.all([
+          getUserData(userId),
+          getHashrate()
+        ]);
         if (mounted) {
-          setIsValidAddress(isValid);
-          
-          if (isValid) {
-            // Fetch user data and hashrate in parallel
-            const [data, hashrateData] = await Promise.all([
-              getUserData(userId),
-              getHashrate()
-            ]);
-            if (mounted) {
-              setUserData(data);
-              setHashrate(hashrateData);
-            }
-          }
+          setUserData(data);
+          setHashrate(hashrateData);
         }
       } catch (error) {
         if (mounted) {
           if (error instanceof Error && error.message.includes('404')) {
-            // For 404 errors, check if address is valid
-            // If valid address but 404, user doesn't exist yet
-            const isValid = isValidBitcoinAddress(userId.trim());
-            if (isValid) {
-              setIsValidAddress(true);
-              setUserData(null);
-            } else {
-              // Invalid address
-              setIsValidAddress(false);
-              setUserData(null);
-            }
+            // For 404 errors, user doesn't exist yet - set userData to null
+            setUserData(null);
           } else {
             // Only show error on initial load, not on background updates
             if (!hasInitiallyLoaded) {
@@ -86,7 +87,6 @@ export default function UserDashboard() {
         }
       } finally {
         if (mounted) {
-          setIsLoading(false);
           setHasInitiallyLoaded(true);
         }
       }
@@ -105,15 +105,16 @@ export default function UserDashboard() {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, isValidAddress]);
 
-  // Function to fetch historical data
+  // Fetch historical data on mount and every minute (only if valid address)
   useEffect(() => {
+    // Don't fetch if address is invalid or not yet validated
+    if (!isValidAddress) return;
+
     let mounted = true;
 
     const fetchHistoricalData = async () => {
-      if (!isValidAddress) return;
-      
       try {
         const data = await getHistoricalUserStats(userId, '3d', '5m');
         if (mounted) {
@@ -133,6 +134,39 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
+  // Fetch account data when userId changes (only if valid address)
+  useEffect(() => {
+    // Don't fetch if address is invalid
+    if (isValidAddress === false) {
+      setIsLoadingAccountData(false);
+      return;
+    }
+    // Don't fetch until we've validated the address
+    if (isValidAddress === null) return;
+
+    const fetchAccountData = async () => {
+      setIsLoadingAccountData(true);
+      try {
+        const response = await fetch(`/api/account/${userId}`, {
+          cache: 'no-store',
+        });
+        if (response.ok) {
+          const data: AccountData = await response.json();
+          setAccountData(data);
+        } else {
+          setAccountData(null);
+        }
+      } catch (err) {
+        console.error("Error fetching account data:", err);
+        setAccountData(null);
+      } finally {
+        setIsLoadingAccountData(false);
+      }
+    };
+
+    fetchAccountData();
+  }, [userId, isValidAddress]);
+
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
     if (!userData) return;
@@ -149,9 +183,96 @@ export default function UserDashboard() {
     }
   };
 
-  // TODO: Left for future - determine if the current user is the owner of the dashboard
-  // Check if current user is the owner
-  // const isOwner = connectedAddress && connectedAddress === userId;
+  // Handle account activation
+  const handleActivateAccount = async () => {
+    setIsConnecting(true);
+    setError(null);
+    try {
+      // If not authenticated, just connect the wallet
+      if (!isLightningAuthenticated) {
+        const result = await connectWithLightning();
+        if (result) {
+          router.push(`/user/${result.address}`);
+        } else {
+          setError('Failed to connect wallet');
+        }
+        return;
+      }
+
+      // Already authenticated - do the full activation flow to set Lightning address
+      const result = await connectWithLightning();
+      if (!result || !result.address || !result.token) {
+        setError('Failed to get wallet info');
+        return;
+      }
+
+      // Fetch wallet info to get the username
+      const walletResponse = await fetch(`${LIGHTNING_API_BASE_URL}/wallet_user`, {
+        headers: { Authorization: `Bearer ${result.token}` },
+      });
+
+      if (!walletResponse.ok) {
+        throw new Error('Failed to fetch wallet info');
+      }
+
+      const walletInfo = await walletResponse.json();
+      const usernameAddress = `${walletInfo.username}@sati.pro`;
+
+      // Request signature for the Lightning address using BIP322
+      const { request: satConnectRequest, MessageSigningProtocols } = await import('@sats-connect/core');
+
+      const signResponse = await satConnectRequest('signMessage', {
+        address: result.address,
+        message: usernameAddress,
+        protocol: MessageSigningProtocols.BIP322
+      });
+
+      if (signResponse.status !== 'success') {
+        throw new Error('Failed to sign message');
+      }
+
+      let signature: string;
+      if (typeof signResponse.result === 'string') {
+        signature = signResponse.result;
+      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
+        signature = signResponse.result.signature;
+      } else {
+        throw new Error('Unexpected signature format');
+      }
+
+      // Send update request to set the Lightning address
+      const updateResponse = await fetch('/api/account/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          btc_address: result.address,
+          ln_address: usernameAddress,
+          signature: signature,
+        }),
+      });
+
+      if (!updateResponse.ok) {
+        let errorMessage = 'Failed to activate account';
+        try {
+          const errorData = await updateResponse.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use default error message
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Refresh the page to show updated data
+      window.location.reload();
+    } catch (err) {
+      console.error('Activation error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to activate account');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
   // Stat cards configuration - show placeholders when data is missing
   const statCards = [
@@ -210,18 +331,26 @@ export default function UserDashboard() {
     }
   ];
 
-  // Show loading state only on initial load (before we've loaded anything)
-  if (isLoading && !hasInitiallyLoaded) {
+  // Show error for invalid Bitcoin address
+  if (isValidAddress === false) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center">
-        <div className="animate-spin h-10 w-10 border-4 border-foreground border-t-transparent rounded-full"></div>
-        <p className="mt-4">Loading user data...</p>
+        <div className="text-red-500 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <p className="text-center text-lg font-semibold mb-2">Invalid Bitcoin Address</p>
+        <p className="text-center text-accent-2 mb-4">The address you entered is not a valid Bitcoin address.</p>
+        <Link href="/" className="mt-4 text-accent-3 hover:underline">
+          Return to Home
+        </Link>
       </div>
     );
   }
 
   // Show error message if there was an error fetching data
-  if (error) {
+  if (error && !hasInitiallyLoaded) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center">
         <div className="text-red-500 mb-4">
@@ -233,19 +362,11 @@ export default function UserDashboard() {
         <Link href="/" className="mt-4 text-accent-3 hover:underline">
           Return to Home
         </Link>
-        <Link href="/?help" className="mt-4 text-accent-3 hover:underline">
-          Go to Help
-        </Link>
       </div>
     );
   }
 
-  // Show help component only for invalid addresses
-  if (!isValidAddress) {
-    return <UserAddressHelp address={userId} />;
-  }
-
-  // Show dashboard for valid addresses (best effort - works even without userData)
+  // Show dashboard (works even without userData - will show shimmer or empty states)
   return (
     <>
       <main className="flex min-h-screen flex-col items-start py-8">
@@ -295,16 +416,50 @@ export default function UserDashboard() {
                     </div>
                     <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
                   </div>
-                  <p className="text-2xl font-semibold">{card.value}</p>
+                  {!hasInitiallyLoaded ? (
+                    <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                  ) : (
+                    <p className="text-2xl font-semibold">{card.value}</p>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Lightning Information - Full Width Section */}
+        {/* Account Activation / Lightning & Stratum Information */}
         <div className="w-full mt-4">
-          <LightningBalance userId={userId} />
+          {!isInitialized || !hasInitiallyLoaded || isLoadingAccountData ? (
+            // Loading state - Show shimmer components while data is loading
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <LightningBalance userId={userId} loading={true} />
+              <StratumInfo userId={userId} isLoading={true} />
+            </div>
+          ) : !isLightningAuthenticated || !accountData || !accountData.ln_address ? (
+            // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
+            <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
+              <div className="flex flex-col items-center justify-center py-8">
+                <button
+                  onClick={handleActivateAccount}
+                  disabled={isConnecting}
+                  className="px-8 py-4 bg-foreground text-background text-lg font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isConnecting ? 'Connecting...' : (!isLightningAuthenticated ? 'Connect' : 'Activate Account')}
+                </button>
+                {error && (
+                  <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
+                    {error}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            // Authenticated with account data and lightning address - Show Lightning and Stratum components
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <LightningBalance userId={userId} loading={false} />
+              <StratumInfo userId={userId} isLoading={false} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -343,71 +498,96 @@ export default function UserDashboard() {
         electricityRate={0.10} // Example electricity rate in dollars per kWh
       /> */}
       
-      {/* Workers Table/Cards - only show if we have worker data */}
-      {userData && userData.workerData && userData.workerData.length > 0 && (
+      {/* Workers Table/Cards - show shimmer when loading or actual data when loaded */}
+      {(!hasInitiallyLoaded || (userData && userData.workerData && userData.workerData.length > 0)) && (
         <div className="w-full bg-background pb-6 shadow-md">
-          <h2 className="text-xl font-semibold mb-4">Miners({userData.workerData.length})</h2>
+          <h2 className="text-xl font-semibold mb-4">
+            {!hasInitiallyLoaded ? 'Miners' : `Miners(${userData?.workerData?.length || 0})`}
+          </h2>
 
         {/* Desktop Table - Hidden on mobile */}
         <div className="hidden md:block">
-          <SortableTable
-            data={userData.workerData}
-            columns={[
-              {
-                key: 'name',
-                header: 'Name',
-                render: (value) => (
-                  // <Link href={`/worker/${worker.id}`} className="text-foreground font-bold hover:underline">
-                  <Link href='#' className="text-foreground font-bold hover:underline">
-                    {value as string}
-                  </Link>
-                )
-              },
-              {
-                key: 'hashrate',
-                header: 'Hashrate',
-                render: (value) => formatHashrate(parseHashrate(value as string))
-              },
-              {
-                key: 'bestDifficulty',
-                header: 'Best Difficulty',
-                render: (value) => formatDifficulty(value as string)
-              },
-              {
-                key: 'lastSubmission',
-                header: 'Last Submission',
-                render: (value) => formatRelativeTime(parseInt(value as string))
-              }
-            ]}
-            defaultSortColumn="hashrate"
-            defaultSortDirection="desc"
-          />
+          {!hasInitiallyLoaded ? (
+            <div className="space-y-3">
+              <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+            </div>
+          ) : userData?.workerData ? (
+            <SortableTable
+              data={userData.workerData}
+              columns={[
+                {
+                  key: 'name',
+                  header: 'Name',
+                  render: (value) => (
+                    // <Link href={`/worker/${worker.id}`} className="text-foreground font-bold hover:underline">
+                    <Link href='#' className="text-foreground font-bold hover:underline">
+                      {value as string}
+                    </Link>
+                  )
+                },
+                {
+                  key: 'hashrate',
+                  header: 'Hashrate',
+                  render: (value) => formatHashrate(parseHashrate(value as string))
+                },
+                {
+                  key: 'bestDifficulty',
+                  header: 'Best Difficulty',
+                  render: (value) => formatDifficulty(value as string)
+                },
+                {
+                  key: 'lastSubmission',
+                  header: 'Last Submission',
+                  render: (value) => formatRelativeTime(parseInt(value as string))
+                }
+              ]}
+              defaultSortColumn="hashrate"
+              defaultSortDirection="desc"
+            />
+          ) : null}
         </div>
 
         {/* Mobile Cards - Visible only on mobile */}
         <div className="md:hidden space-y-4">
-          {userData.workerData.map((worker) => (
-            <div key={worker.id} className="bg-background border border-border p-4 shadow-sm">
-              {/* <Link href={`/worker/${worker.id}`} className="text-foreground font-bold text-lg block mb-2 hover:underline"> */}
-              <Link href='#' className="text-foreground font-bold text-lg block mb-2 hover:underline">
-                {worker.name}
-              </Link>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-gray-500">Hashrate</p>
-                  <p className="font-medium">{formatHashrate(parseHashrate(worker.hashrate))}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Best Difficulty</p>
-                  <p className="font-medium">{formatDifficulty(worker.bestDifficulty)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500">Last Submission</p>
-                  <p className="font-medium">{formatRelativeTime(parseInt(worker.lastSubmission))}</p>
+          {!hasInitiallyLoaded ? (
+            <>
+              <div className="bg-background border border-border p-4 shadow-sm space-y-3">
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              </div>
+              <div className="bg-background border border-border p-4 shadow-sm space-y-3">
+                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+              </div>
+            </>
+          ) : userData?.workerData ? (
+            userData.workerData.map((worker) => (
+              <div key={worker.id} className="bg-background border border-border p-4 shadow-sm">
+                {/* <Link href={`/worker/${worker.id}`} className="text-foreground font-bold text-lg block mb-2 hover:underline"> */}
+                <Link href='#' className="text-foreground font-bold text-lg block mb-2 hover:underline">
+                  {worker.name}
+                </Link>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-gray-500">Hashrate</p>
+                    <p className="font-medium">{formatHashrate(parseHashrate(worker.hashrate))}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Best Difficulty</p>
+                    <p className="font-medium">{formatDifficulty(worker.bestDifficulty)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Last Submission</p>
+                    <p className="font-medium">{formatRelativeTime(parseInt(worker.lastSubmission))}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : null}
         </div>
         </div>
       )}
