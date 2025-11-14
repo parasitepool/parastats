@@ -149,8 +149,8 @@ export default function UserDashboard() {
           cache: 'no-store',
         });
         if (response.ok) {
-          const data: AccountData = await response.json();
-          setAccountData(data);
+          const data: CombinedAccountResponse = await response.json();
+          setAccountData(data.account);
         } else {
           setAccountData(null);
         }
