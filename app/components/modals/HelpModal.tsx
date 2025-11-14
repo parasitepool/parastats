@@ -24,11 +24,23 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
     };
   }, [isOpen, onClose]);
 
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="bg-background border border-foreground p-6 max-w-3xl w-full shadow-xl overflow-y-auto max-h-[90vh]">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+      onClick={handleBackdropClick}
+    >
+      <div 
+        className="bg-background border border-foreground p-6 max-w-3xl w-full shadow-xl overflow-y-auto max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-between items-start mb-4">
           <h3 className="text-2xl font-bold text-accent-1">Miner Setup Guide</h3>
           <button 

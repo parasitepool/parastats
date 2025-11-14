@@ -13,12 +13,11 @@ import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty'
 import SortableTable from '../../components/SortableTable';
 import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/utils/formatters';
 import { parseHashrate } from '@/app/utils/formatters';
-import { useWallet } from '@/app/hooks/useWallet';
+import LightningBalance from '@/app/components/LightningBalance';
 
 export default function UserDashboard() {
   const params = useParams();
   const userId = params.id as string;
-  const { lightningToken, isLightningAuthenticated, isInitialized } = useWallet();
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
@@ -27,10 +26,7 @@ export default function UserDashboard() {
   const [hashrate, setHashrate] = useState<Hashrate>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
-  const [lightningBalance, setLightningBalance] = useState<number | null>(null);
-  const [isLoadingLightning, setIsLoadingLightning] = useState<boolean>(false);
-  const [lightningUsername, setLightningUsername] = useState<string | null>(null);
-  const [lightningUrl, setLightningUrl] = useState<string | null>(null);
+  const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
 
   // Function to check if the address is valid and fetch user data
   useEffect(() => {
@@ -38,8 +34,9 @@ export default function UserDashboard() {
 
     const fetchUserData = async () => {
       try {
-        // Only set loading on initial fetch (when userData is null)
-        if (!userData) {
+        // Only set loading on the very first fetch (initial load)
+        const isInitialLoad = !hasInitiallyLoaded;
+        if (isInitialLoad) {
           setIsLoading(true);
         }
         
@@ -64,18 +61,33 @@ export default function UserDashboard() {
       } catch (error) {
         if (mounted) {
           if (error instanceof Error && error.message.includes('404')) {
-            // For 404 errors, treat as invalid address
-            setIsValidAddress(false);
-            setUserData(null);
+            // For 404 errors, check if address is valid
+            // If valid address but 404, user doesn't exist yet
+            const isValid = isValidBitcoinAddress(userId.trim());
+            if (isValid) {
+              setIsValidAddress(true);
+              setUserData(null);
+            } else {
+              // Invalid address
+              setIsValidAddress(false);
+              setUserData(null);
+            }
           } else {
-            console.error('Error fetching user data:', error);
-            setError('Failed to fetch user data. Please try again later.');
-            setUserData(null);
+            // Only show error on initial load, not on background updates
+            if (!hasInitiallyLoaded) {
+              console.error('Error fetching user data:', error);
+              setError('Failed to fetch user data. Please try again later.');
+              setUserData(null);
+            } else {
+              // Silently log background update errors
+              console.error('Background update error:', error);
+            }
           }
         }
       } finally {
         if (mounted) {
           setIsLoading(false);
+          setHasInitiallyLoaded(true);
         }
       }
     };
@@ -121,64 +133,6 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
-  // Fetch Lightning balance
-  useEffect(() => {
-    const fetchLightningBalance = async () => {
-      if (!isInitialized || !isLightningAuthenticated || !lightningToken) {
-        setLightningBalance(null);
-        setLightningUsername(null);
-        setLightningUrl(null);
-        return;
-      }
-
-      setIsLoadingLightning(true);
-      try {
-        const [balanceResponse, userResponse] = await Promise.all([
-          fetch('https://api.bitbit.bot/wallet_user/balance', {
-            headers: {
-              'Authorization': `Bearer ${lightningToken}`
-            }
-          }),
-          fetch('https://api.bitbit.bot/wallet_user', {
-            headers: {
-              'Authorization': `Bearer ${lightningToken}`
-            }
-          })
-        ]);
-
-        if (balanceResponse.ok) {
-          const balanceData = await balanceResponse.json();
-          setLightningBalance(balanceData.balance);
-        } else {
-          setLightningBalance(null);
-        }
-
-        if (userResponse.ok) {
-          const userData = await userResponse.json();
-          setLightningUsername(userData.username || null);
-          setLightningUrl(userData.lightning_ln_url || null);
-        } else {
-          setLightningUsername(null);
-          setLightningUrl(null);
-        }
-      } catch (error) {
-        console.error('Error fetching Lightning balance:', error);
-        setLightningBalance(null);
-        setLightningUsername(null);
-        setLightningUrl(null);
-      } finally {
-        setIsLoadingLightning(false);
-      }
-    };
-
-    fetchLightningBalance();
-    
-    // Refresh balance every 30 seconds
-    const intervalId = setInterval(fetchLightningBalance, 30000);
-    
-    return () => clearInterval(intervalId);
-  }, [isInitialized, isLightningAuthenticated, lightningToken]);
-
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
     if (!userData) return;
@@ -195,51 +149,15 @@ export default function UserDashboard() {
     }
   };
 
-  // Manual refresh for Lightning data
-  const handleRefreshLightning = async () => {
-    if (!isLightningAuthenticated || !lightningToken) return;
-
-    setIsLoadingLightning(true);
-    try {
-      const [balanceResponse, userResponse] = await Promise.all([
-        fetch('https://api.bitbit.bot/wallet_user/balance', {
-          headers: {
-            'Authorization': `Bearer ${lightningToken}`
-          }
-        }),
-        fetch('https://api.bitbit.bot/wallet_user', {
-          headers: {
-            'Authorization': `Bearer ${lightningToken}`
-          }
-        })
-      ]);
-
-      if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        setLightningBalance(balanceData.balance);
-      }
-
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        setLightningUsername(userData.username || null);
-        setLightningUrl(userData.lightning_ln_url || null);
-      }
-    } catch (error) {
-      console.error('Error refreshing Lightning data:', error);
-    } finally {
-      setIsLoadingLightning(false);
-    }
-  };
-
   // TODO: Left for future - determine if the current user is the owner of the dashboard
   // Check if current user is the owner
   // const isOwner = connectedAddress && connectedAddress === userId;
 
-  // Stat cards configuration
+  // Stat cards configuration - show placeholders when data is missing
   const statCards = [
     {
       title: 'Uptime',
-      value: userData?.uptime,
+      value: userData?.uptime || <span className="text-gray-400">-</span>,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
@@ -248,7 +166,7 @@ export default function UserDashboard() {
     },
     {
       title: 'Last Submission',
-      value: userData?.lastSubmission,
+      value: userData?.lastSubmission || <span className="text-gray-400">-</span>,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -274,7 +192,7 @@ export default function UserDashboard() {
             )}
           </span>
         </span> : 
-        '-',
+        <span className="text-gray-400">-</span>,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
@@ -283,32 +201,17 @@ export default function UserDashboard() {
     },
     {
       title: 'Hashrate',
-      value: formatHashrate(userData?.hashrate),
+      value: userData?.hashrate ? formatHashrate(userData.hashrate) : <span className="text-gray-400">-</span>,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
         </svg>
       )
-    },
-    {
-      title: 'Lightning',
-      value: isLoadingLightning 
-        ? '...' 
-        : lightningBalance !== null 
-          ? `${lightningBalance.toLocaleString()} sats` 
-          : isLightningAuthenticated 
-            ? 'Error' 
-            : 'Not Available',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-        </svg>
-      )
     }
   ];
 
-  // Show loading state only on initial load
-  if (isLoading && !userData) {
+  // Show loading state only on initial load (before we've loaded anything)
+  if (isLoading && !hasInitiallyLoaded) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center">
         <div className="animate-spin h-10 w-10 border-4 border-foreground border-t-transparent rounded-full"></div>
@@ -337,51 +240,54 @@ export default function UserDashboard() {
     );
   }
 
-  // Show help component for invalid addresses
-  if (!isValidAddress || !userData) {
+  // Show help component only for invalid addresses
+  if (!isValidAddress) {
     return <UserAddressHelp address={userId} />;
   }
 
-  // Show dashboard for valid addresses
+  // Show dashboard for valid addresses (best effort - works even without userData)
   return (
-    <main className="flex min-h-screen flex-col items-start py-8">
-      <div className="w-full mb-2">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl lg:text-3xl font-bold wrap-anywhere text-ellipsis line-clamp-1">{userId}</h1>
+    <>
+      <main className="flex min-h-screen flex-col items-start py-8">
+        <div className="w-full mb-2">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl lg:text-3xl font-bold wrap-anywhere text-ellipsis line-clamp-1">{userId}</h1>
 
-          {/* Visibility Toggle Button */}
-          {userData && (
-            <button
-              onClick={handleToggleVisibility}
-              disabled={isTogglingVisibility}
-              className="flex items-center gap-2 px-4 py-2 bg-background border border-border hover:bg-accent-1/10 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors"
-            >
-              {userData.isPublic ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm font-medium">Public</span>
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
-                    <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
-                  </svg>
-                  <span className="text-sm font-medium">Private</span>
-                </>
+            <div className="flex items-center gap-2">
+              {/* Visibility Toggle Button - only show if userData exists */}
+              {userData && (
+                <button
+                  onClick={handleToggleVisibility}
+                  disabled={isTogglingVisibility}
+                  className="flex items-center gap-2 px-4 py-2 bg-background border border-border hover:bg-accent-1/10 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors"
+                >
+                  {userData.isPublic ? (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                      </svg>
+                      <span className="text-sm font-medium">Public</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.26l1.514 1.515a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                        <path d="M12.454 16.697L9.75 13.992a4 4 0 01-3.742-3.741L2.335 6.578A9.98 9.98 0 00.458 10c1.274 4.057 5.065 7 9.542 7 .847 0 1.669-.105 2.454-.303z" />
+                      </svg>
+                      <span className="text-sm font-medium">Private</span>
+                    </>
+                  )}
+                </button>
               )}
-            </button>
-          )}
-        </div>
+            </div>
+          </div>
 
         {/* Stats Cards */}
         <div className="w-full">
-          <div className="flex flex-wrap -mx-2">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
             {statCards.map((card, index) => (
-              <div key={index} className="w-1/2 md:w-1/4 p-1 lg:p-2">
+              <div key={index}>
                 <div className="bg-background p-4 shadow-md border border-border h-full">
                   <div className="flex items-center mb-2">
                     <div className="mr-2 text-accent-3">
@@ -395,33 +301,40 @@ export default function UserDashboard() {
             ))}
           </div>
         </div>
+
+        {/* Lightning Information - Full Width Section */}
+        <div className="w-full mt-4">
+          <LightningBalance userId={userId} />
+        </div>
       </div>
 
-      {/* Hashrate Chart */}
-      <div className="w-full mb-6">
-        <HashrateChart
-          data={historicalData ? {
-            timestamps: historicalData.map(d => {
-              const date = new Date(d.timestamp);
-              return date.toLocaleString("en-US", {
-                year: undefined,
-                month: "2-digit",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-                hour12: false,
-              });
-            }),
-            series: [
-              {
-                data: historicalData.map(d => d.hashrate),
-                title: "Hashrate"
-              }
-            ]
-          } : undefined}
-          loading={!historicalData}
-        />
-      </div>
+      {/* Hashrate Chart - only show if we have data */}
+      {userData && (
+        <div className="w-full mb-6">
+          <HashrateChart
+            data={historicalData ? {
+              timestamps: historicalData.map(d => {
+                const date = new Date(d.timestamp);
+                return date.toLocaleString("en-US", {
+                  year: undefined,
+                  month: "2-digit",
+                  day: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                });
+              }),
+              series: [
+                {
+                  data: historicalData.map(d => d.hashrate),
+                  title: "Hashrate"
+                }
+              ]
+            } : undefined}
+            loading={!historicalData}
+          />
+        </div>
+      )}
       
       {/* Mining Projections - Uncomment when UserMiningStats is implemented */}
       {/* <UserMiningStats 
@@ -430,9 +343,10 @@ export default function UserDashboard() {
         electricityRate={0.10} // Example electricity rate in dollars per kWh
       /> */}
       
-      {/* Workers Table/Cards */}
-      <div className="w-full bg-background pb-6 shadow-md">
-        <h2 className="text-xl font-semibold mb-4">Miners({userData.workerData.length})</h2>
+      {/* Workers Table/Cards - only show if we have worker data */}
+      {userData && userData.workerData && userData.workerData.length > 0 && (
+        <div className="w-full bg-background pb-6 shadow-md">
+          <h2 className="text-xl font-semibold mb-4">Miners({userData.workerData.length})</h2>
 
         {/* Desktop Table - Hidden on mobile */}
         <div className="hidden md:block">
@@ -495,7 +409,9 @@ export default function UserDashboard() {
             </div>
           ))}
         </div>
-      </div>
-    </main>
+        </div>
+      )}
+      </main>
+    </>
   );
 }

@@ -36,7 +36,6 @@ export async function GET(
 
     const response = await fetch(`${apiUrl}/account/${address}`, {
       headers,
-      next: { revalidate: 10 } // Cache for 10 seconds
     });
 
     if (!response.ok) {
