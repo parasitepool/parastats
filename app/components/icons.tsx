@@ -228,3 +228,26 @@ export const CheckIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
     />
   </svg>
 );
+
+export const StratumIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    viewBox="0 0 20 20"
+    fill="currentColor"
+  >
+    <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0 2 2 0 011.523-1.943A5.977 5.977 0 0116 10c0 .34-.028.675-.083 1H15a2 2 0 00-2 2v.878A2.996 2.996 0 0110 16a2.996 2.996 0 01-3-2.122V13a2 2 0 00-2-2h-1.092A5.977 5.977 0 014 10c0-.703.087-1.382.252-2.033.148.02.3.033.455.033a1.5 1.5 0 001.5-1.5v-.5a1.5 1.5 0 01-.18-.712z" />
+  </svg>
+);
+
+export const CopyIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    viewBox="0 0 20 20"
+    fill="currentColor"
+  >
+    <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+    <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
+  </svg>
+);
