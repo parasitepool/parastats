@@ -1,232 +1,19 @@
 import cron from 'node-cron';
 import { getDb } from './db';
 import { fetch } from './http-client';
-
-/**
- * Custom error class for HTTP errors with status codes
- */
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string
-  ) {
-    super(message);
-    this.name = 'HttpError';
-  }
-}
-
-/**
- * Check if an error is an abort/timeout error (not retryable)
- */
-function isAbortError(error: unknown): boolean {
-  if (error instanceof Error) {
-    // Check for abort-related error messages
-    const message = error.message.toLowerCase();
-    return (
-      message.includes('abort') ||
-      message.includes('timeout') ||
-      message.includes('timed out') ||
-      error.name === 'AbortError' ||
-      error.name === 'TimeoutError'
-    );
-  }
-  return false;
-}
-
-/**
- * Check if an error is retryable based on HTTP status code or error type
- *
- * Non-retryable errors (fail immediately):
- * - 4xx client errors (400, 401, 403, 404, 409, 422, etc.) - won't change on retry
- * - Abort/timeout errors - request took too long, retrying won't help
- *
- * Retryable errors (should retry with backoff):
- * - 429 Too Many Requests - rate limiting
- * - 5xx server errors (500, 502, 503, 504) - temporary server issues
- * - Network errors (connection refused, DNS failures, socket errors)
- * - ClientDestroyedError (UND_ERR_DESTROYED) - connection pool issues
- */
-function isRetryableError(error: unknown): boolean {
-  // Don't retry abort/timeout errors
-  if (isAbortError(error)) {
-    return false;
-  }
-
-  if (error instanceof HttpError) {
-    const status = error.status;
-
-    // Rate limiting - should retry with backoff
-    if (status === 429) return true;
-
-    // Server errors - temporary issues, should retry
-    if (status >= 500 && status < 600) return true;
-
-    // Client errors - permanent failures, don't retry
-    if (status >= 400 && status < 500) return false;
-
-    // Shouldn't reach here, but default to retryable for unknown status codes
-    return true;
-  }
-
-  // Check for ClientDestroyedError from Undici
-  if (error instanceof Error && 'code' in error && error.code === 'UND_ERR_DESTROYED') {
-    return true; // This is retryable - connection pool issue
-  }
-
-  // Check for Undici socket errors (connection closed, reset, etc.)
-  if (error instanceof Error && 'code' in error) {
-    const errorWithCode = error as { code?: string };
-    const code = errorWithCode.code;
-    if (
-      code === 'UND_ERR_SOCKET' ||
-      code === 'UND_ERR_CONNECT_TIMEOUT' ||
-      code === 'UND_ERR_HEADERS_TIMEOUT' ||
-      code === 'UND_ERR_BODY_TIMEOUT'
-    ) {
-      return true; // Socket errors are retryable
-    }
-  }
-
-  // Check for "fetch failed" errors (usually have a cause with more details)
-  if (error instanceof Error && error.message === 'fetch failed') {
-    // Check the cause for more details
-    const errorWithCause = error as { cause?: unknown };
-    const cause = errorWithCause.cause;
-    if (cause && typeof cause === 'object' && cause !== null) {
-      // Socket errors in the cause are retryable
-      if ('code' in cause) {
-        const causeWithCode = cause as { code?: string; message?: string };
-        const code = causeWithCode.code;
-        if (
-          code === 'UND_ERR_SOCKET' ||
-          code === 'ECONNRESET' ||
-          code === 'ECONNREFUSED' ||
-          code === 'ETIMEDOUT'
-        ) {
-          return true;
-        }
-        // Check message for "other side closed" and similar
-        const message = causeWithCode.message;
-        if (message && typeof message === 'string') {
-          const msg = message.toLowerCase();
-          if (
-            msg.includes('other side closed') ||
-            msg.includes('connection reset') ||
-            msg.includes('connection refused')
-          ) {
-            return true;
-          }
-        }
-      }
-    }
-    return true; // Generic fetch failed - retry
-  }
-
-  // Network errors (ECONNREFUSED, ENOTFOUND, etc.) - should retry
-  if (error instanceof Error) {
-    const message = error.message.toLowerCase();
-    if (
-      message.includes('econnrefused') ||
-      message.includes('enotfound') ||
-      message.includes('econnreset') ||
-      message.includes('etimedout') ||
-      message.includes('network error') ||
-      message.includes('socket') ||
-      message.includes('connection')
-    ) {
-      return true;
-    }
-  }
-
-  // Unknown errors - default to NOT retryable to avoid endless loops
-  return false;
-}
-
-// Type definitions for API response structures
-interface StatsData {
-  runtime: number;
-  lastupdate: number;
-  Users: number;
-  Workers: number;
-  Idle: number;
-  Disconnected: number;
-}
-
-interface HashrateData {
-  hashrate1m: string;
-  hashrate5m: string;
-  hashrate15m: string;
-  hashrate1hr: string;
-  hashrate6hr: string;
-  hashrate1d: string;
-  hashrate7d: string;
-}
-
-/**
- * Type guard to check if an object matches StatsData structure
- */
-function isStatsData(obj: unknown): obj is StatsData {
-  if (!obj || typeof obj !== 'object') return false;
-  const data = obj as Record<string, unknown>;
-  
-  // Check for required numeric fields (case-insensitive)
-  const users = getCaseInsensitive(data, 'Users');
-  const workers = getCaseInsensitive(data, 'Workers');
-  
-  return typeof users === 'number' && typeof workers === 'number';
-}
-
-/**
- * Type guard to check if an object matches HashrateData structure
- */
-function isHashrateData(obj: unknown): obj is HashrateData {
-  if (!obj || typeof obj !== 'object') return false;
-  const data = obj as Record<string, unknown>;
-  
-  // Check for required hashrate field
-  const hashrate15m = getCaseInsensitive(data, 'hashrate15m');
-  
-  return typeof hashrate15m === 'string';
-}
-
-interface UserData {
-  hashrate1m: string;
-  hashrate5m: string;
-  hashrate1hr: string;
-  hashrate1d: string;
-  hashrate7d: string;
-  workers: number;
-  bestshare: number;
-  bestever: number;
-  authorised: number;
-}
-
-interface MonitoredUser {
-  id: number;
-  address: string;
-}
-
-/**
- * Helper to get a value from an object with case-insensitive key matching
- */
-function getCaseInsensitive(obj: Record<string, unknown>, key: string): unknown {
-  // Try exact match first
-  if (key in obj) return obj[key];
-  
-  // Try lowercase
-  const lowerKey = key.toLowerCase();
-  if (lowerKey in obj) return obj[lowerKey];
-  
-  // Try uppercase first letter
-  const capitalKey = key.charAt(0).toUpperCase() + key.slice(1).toLowerCase();
-  if (capitalKey in obj) return obj[capitalKey];
-  
-  // Try all uppercase
-  const upperKey = key.toUpperCase();
-  if (upperKey in obj) return obj[upperKey];
-  
-  return undefined;
-}
+import { HttpError, withRetry } from './retry-utils';
+import {
+  UserData,
+  MonitoredUser,
+  isStatsData,
+  isHashrateData,
+  getCaseInsensitive,
+} from './pool-types';
+import {
+  discoverPoolUsersEndpoint,
+  discoverPoolStatsEndpoint,
+  getUserStatsEndpoint,
+} from './endpoint-discovery';
 
 let isCollectorRunning = false;
 let isUserCollectorRunning = false;
@@ -242,70 +29,6 @@ const CONFIG = {
   SQL_BATCH_SIZE: 500, // Max parameters per SQL statement (SQLite limit is 999)
   COLLECTION_TIMEOUT_MINUTES: parseInt(process.env.COLLECTION_TIMEOUT_MINUTES || '10'), // Force reset if collection hangs
 } as const;
-
-/**
- * Helper function to add delay between retries
- */
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-/**
- * Retry helper function with backoff and jitter
- * Intelligently skips retries for non-retryable errors (4xx client errors, timeouts, aborts)
- */
-async function withRetry<T>(
-  operation: () => Promise<T>,
-  maxRetries = 4,
-  baseDelay = 500,
-  context?: string // Optional context for logging which operation is retrying
-): Promise<T> {
-  let lastError;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-
-      // Check if error is retryable before attempting retry
-      const retryable = isRetryableError(error);
-
-      if (!retryable) {
-        // Non-retryable error (e.g., 404, 400, 403, timeout, abort) - fail immediately
-        const contextMsg = context ? ` [${context}]` : '';
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        
-        // Only log abort/timeout errors at debug level to reduce noise
-        if (isAbortError(error)) {
-          // Suppress abort error logs - they're expected with timeouts
-        } else if (error instanceof HttpError && error.status === 404) {
-          // 404s for user stats are expected (not all users have data)
-          // Only log 404s for pool-level endpoints
-          if (context && !context.includes('/users/')) {
-            console.error(`❌ Endpoint not found${contextMsg} - Check API_URL and endpoint paths in .env`);
-          }
-          // Silently skip 404s for individual user endpoints
-        } else {
-          console.log(`Non-retryable error${contextMsg} - ${errorMsg}`);
-        }
-        throw error;
-      }
-
-      if (attempt < maxRetries) {
-        const backoffDelay = baseDelay + (attempt * baseDelay);
-        // Add jitter: randomize delay between 50% and 150% of backoff delay
-        const jitter = Math.random() + 0.5; // Random value between 0.5 and 1.5
-        const delayWithJitter = Math.floor(backoffDelay * jitter);
-        const contextMsg = context ? ` [${context}]` : '';
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms${contextMsg} - Error: ${errorMsg}`);
-        await delay(delayWithJitter);
-        continue;
-      }
-      throw error;
-    }
-  }
-  throw lastError;
-}
 
 /**
  * Process users in batches to avoid overwhelming the system
@@ -358,6 +81,11 @@ function updateUsersInChunks(
   return totalUpdated;
 }
 
+// Cache for discovered endpoint paths
+let discoveredPoolUsersPath: string | null = null;
+let discoveredPoolStatsPath: string | null = null;
+let discoveredUserStatsPath: string | null = null;
+
 /**
  * Fetch user stats and store them in the database
  * @returns true if user was deactivated, false otherwise
@@ -376,7 +104,7 @@ async function collectUserStats(userId: number, address: string): Promise<boolea
         headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
       }
 
-      // Get or discover the endpoint path (with shared promise pattern)
+      // Get or discover the endpoint path
       if (!discoveredUserStatsPath) {
         const configuredPath = process.env.USER_STATS_ENDPOINT;
         if (configuredPath) {
@@ -414,7 +142,7 @@ async function collectUserStats(userId: number, address: string): Promise<boolea
           // Only the discovery process should determine if the endpoint is invalid
           
           // Throw HttpError with status code so retry logic can determine if it's retryable
-          throw new HttpError(res.status, `HTTP ${res.status} ${errorDetail}`);
+          throw new HttpError(errorDetail, res.status);
         }
         return res;
       } catch (error) {
@@ -428,7 +156,14 @@ async function collectUserStats(userId: number, address: string): Promise<boolea
         }
         throw error;
       }
-    }, 2, 200, `GET /users/${address}`); // Reduced from 6 to 2 retries
+    }, {
+      maxRetries: 2,
+      initialDelay: 200,
+      onRetry: (error, attempt, delay) => {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.log(`Retry attempt ${attempt}/2 after ${delay}ms [GET /users/${address}] - Error: ${errorMsg}`);
+      }
+    });
 
     const userData: UserData = await response.json();
     const now = Math.floor(Date.now() / 1000);
@@ -544,156 +279,6 @@ async function collectUserStats(userId: number, address: string): Promise<boolea
   }
 }
 
-// Cache for discovered endpoint paths
-let discoveredPoolUsersPath: string | null = null;
-let discoveredPoolStatsPath: string | null = null;
-let discoveredUserStatsPath: string | null = null;
-let userStatsDiscoveryPromise: Promise<string> | null = null; // Shared promise for concurrent discovery
-
-/**
- * Discover the correct pool users endpoint by trying common paths
- */
-async function discoverPoolUsersEndpoint(apiUrl: string, headers: Record<string, string>): Promise<string> {
-  const possiblePaths = [
-    '/aggregator/pool/users',
-    '/pool/users',
-    '/api/pool/users',
-    '/users',
-  ];
-
-  for (const path of possiblePaths) {
-    try {
-      const response = await fetch(`${apiUrl}${path}`, { 
-        headers,
-        timeout: 5000 
-      });
-      if (response.ok) {
-        console.log(`✓ Discovered pool users endpoint: ${path}`);
-        return path;
-      }
-    } catch {
-      // Continue trying other paths
-    }
-  }
-
-  throw new Error(
-    `Could not find POOL USERS LIST endpoint (to get list of active mining addresses). ` +
-    `Tried: ${possiblePaths.join(', ')}. ` +
-    `API URL: ${apiUrl}. ` +
-    `Please set POOL_USERS_ENDPOINT in your .env file.`
-  );
-}
-
-/**
- * Discover the correct pool stats endpoint by trying common paths
- */
-async function discoverPoolStatsEndpoint(apiUrl: string, headers: Record<string, string>): Promise<string> {
-  const possiblePaths = [
-    '/aggregator/pool/pool.status',
-    '/pool/pool.status',
-    '/api/pool/pool.status',
-    '/pool.status',
-    '/pool/status',
-  ];
-
-  for (const path of possiblePaths) {
-    try {
-      const response = await fetch(`${apiUrl}${path}`, { 
-        headers,
-        timeout: 5000 
-      });
-      if (response.ok) {
-        console.log(`✓ Discovered pool stats endpoint: ${path}`);
-        return path;
-      }
-    } catch {
-      // Continue trying other paths
-    }
-  }
-
-  throw new Error(
-    `Could not find POOL STATISTICS endpoint (pool-wide hashrate, workers, uptime, etc.). ` +
-    `Tried: ${possiblePaths.join(', ')}. ` +
-    `API URL: ${apiUrl}. ` +
-    `Note: This is separate from the pool users list (${discoveredPoolUsersPath || 'not yet discovered'}). ` +
-    `Please set POOL_STATS_ENDPOINT in your .env file with the correct path for pool statistics.`
-  );
-}
-
-/**
- * Discover the correct user stats endpoint by trying common paths
- * @param address - A test user address to try
- */
-async function discoverUserStatsEndpoint(
-  apiUrl: string, 
-  headers: Record<string, string>,
-  address: string
-): Promise<string> {
-  const possiblePaths = [
-    `/aggregator/users/${address}`,
-    `/users/${address}`,
-    `/api/users/${address}`,
-  ];
-
-  for (const path of possiblePaths) {
-    try {
-      const response = await fetch(`${apiUrl}${path}`, { 
-        headers,
-        timeout: 5000 
-      });
-      if (response.ok) {
-        // Extract the base path without the address
-        const basePath = path.replace(address, '{address}');
-        // Don't log here - this gets called concurrently for multiple users
-        return basePath;
-      }
-    } catch {
-      // Continue trying other paths
-    }
-  }
-
-  throw new Error(
-    `Could not find USER STATISTICS endpoint (individual user hashrate, workers, shares, etc.). ` +
-    `Please set USER_STATS_ENDPOINT in your .env file with a path pattern like '/users/{address}' or '/api/users/{address}'.`
-  );
-}
-
-/**
- * Get the user stats endpoint, with shared promise pattern to prevent concurrent discovery
- * Ensures only one discovery runs at a time, all other callers await the same promise
- */
-async function getUserStatsEndpoint(
-  apiUrl: string,
-  headers: Record<string, string>,
-  address: string
-): Promise<string> {
-  // If already discovered, return immediately
-  if (discoveredUserStatsPath) {
-    return discoveredUserStatsPath;
-  }
-
-  // If another call started discovery, wait for it
-  if (userStatsDiscoveryPromise) {
-    return userStatsDiscoveryPromise;
-  }
-
-  // Start discovery
-  userStatsDiscoveryPromise = (async () => {
-    try {
-      const path = await discoverUserStatsEndpoint(apiUrl, headers, address);
-      discoveredUserStatsPath = path;
-      console.log(`✓ Discovered user stats endpoint: ${path}`);
-      return path;
-    } catch (err) {
-      // Reset promise so future attempts can retry
-      userStatsDiscoveryPromise = null;
-      throw err;
-    }
-  })();
-
-  return userStatsDiscoveryPromise;
-}
-
 /**
  * Collect stats for all monitored users
  */
@@ -761,10 +346,16 @@ async function collectAllUserStats() {
         if (response.status === 404) {
           discoveredPoolUsersPath = null;
         }
-        throw new HttpError(response.status, `Failed to fetch pool users: ${response.statusText}`);
+        throw new HttpError(`Failed to fetch pool users: ${response.statusText}`, response.status);
       }
       return response.text();
-    }, 2, 500, `GET ${discoveredPoolUsersPath}`);
+    }, {
+      maxRetries: 2,
+      initialDelay: 500,
+      onRetry: (error, attempt, delay) => {
+        console.log(`Retry attempt ${attempt}/2 after ${delay}ms [GET ${discoveredPoolUsersPath}]`);
+      }
+    });
 
     // Parse pool users - handle JSON array, newline-delimited, and comma-separated formats
     let poolUsersArray: string[];
@@ -958,7 +549,7 @@ async function collectAllUserStats() {
 
   } catch (error) {
     // Only log if it's not a 404 (404s are already logged by withRetry)
-    if (!(error instanceof HttpError && error.status === 404)) {
+    if (!(error instanceof HttpError && error.statusCode === 404)) {
       console.error("Error collecting user stats:", error);
     }
   } finally {
@@ -1015,10 +606,16 @@ export async function collectPoolStats() {
         if (response.status === 404) {
           discoveredPoolStatsPath = null;
         }
-        throw new HttpError(response.status, `Failed to fetch pool stats: ${response.statusText}`);
+        throw new HttpError(`Failed to fetch pool stats: ${response.statusText}`, response.status);
       }
       return response.text();
-    }, 2, 500, `GET ${discoveredPoolStatsPath}`);
+    }, {
+      maxRetries: 2,
+      initialDelay: 500,
+      onRetry: (error, attempt, delay) => {
+        console.log(`Retry attempt ${attempt}/2 after ${delay}ms [GET ${discoveredPoolStatsPath}]`);
+      }
+    });
     
     // Split the response into lines and parse each JSON object
     const jsonLines = text.trim().split('\n').filter(line => line.trim().length > 0).map(line => JSON.parse(line) as Record<string, unknown>);
@@ -1096,7 +693,7 @@ export async function collectPoolStats() {
     
   } catch (error) {
     // Only log if it's not a 404 (404s are already logged by withRetry)
-    if (!(error instanceof HttpError && error.status === 404)) {
+    if (!(error instanceof HttpError && error.statusCode === 404)) {
       console.error("Error collecting pool stats:", error);
     }
   } finally {
