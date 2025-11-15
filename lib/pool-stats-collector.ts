@@ -230,6 +230,7 @@ function getCaseInsensitive(obj: Record<string, unknown>, key: string): unknown 
 
 let isCollectorRunning = false;
 let isUserCollectorRunning = false;
+let userCollectionStartTime = 0; // Track when collection started for timeout detection
 
 // Configuration constants
 const CONFIG = {
@@ -239,6 +240,7 @@ const CONFIG = {
   AUTO_DISCOVER_USERS: process.env.AUTO_DISCOVER_USERS !== 'false', // Enable automatic user discovery (default: true)
   AUTO_DISCOVER_BATCH_LIMIT: parseInt(process.env.AUTO_DISCOVER_BATCH_LIMIT || '100'), // Max new users to add per cycle
   SQL_BATCH_SIZE: 500, // Max parameters per SQL statement (SQLite limit is 999)
+  COLLECTION_TIMEOUT_MINUTES: parseInt(process.env.COLLECTION_TIMEOUT_MINUTES || '10'), // Force reset if collection hangs
 } as const;
 
 /**
@@ -575,7 +577,9 @@ async function discoverPoolUsersEndpoint(apiUrl: string, headers: Record<string,
   }
 
   throw new Error(
-    `Could not find pool users endpoint. Tried: ${possiblePaths.join(', ')}. ` +
+    `Could not find POOL USERS LIST endpoint (to get list of active mining addresses). ` +
+    `Tried: ${possiblePaths.join(', ')}. ` +
+    `API URL: ${apiUrl}. ` +
     `Please set POOL_USERS_ENDPOINT in your .env file.`
   );
 }
@@ -608,8 +612,11 @@ async function discoverPoolStatsEndpoint(apiUrl: string, headers: Record<string,
   }
 
   throw new Error(
-    `Could not find pool stats endpoint. Tried: ${possiblePaths.join(', ')}. ` +
-    `Please set POOL_STATS_ENDPOINT in your .env file.`
+    `Could not find POOL STATISTICS endpoint (pool-wide hashrate, workers, uptime, etc.). ` +
+    `Tried: ${possiblePaths.join(', ')}. ` +
+    `API URL: ${apiUrl}. ` +
+    `Note: This is separate from the pool users list (${discoveredPoolUsersPath || 'not yet discovered'}). ` +
+    `Please set POOL_STATS_ENDPOINT in your .env file with the correct path for pool statistics.`
   );
 }
 
@@ -646,7 +653,8 @@ async function discoverUserStatsEndpoint(
   }
 
   throw new Error(
-    `Could not find user stats endpoint. Please set USER_STATS_ENDPOINT in your .env file.`
+    `Could not find USER STATISTICS endpoint (individual user hashrate, workers, shares, etc.). ` +
+    `Please set USER_STATS_ENDPOINT in your .env file with a path pattern like '/users/{address}' or '/api/users/{address}'.`
   );
 }
 
@@ -691,13 +699,25 @@ async function getUserStatsEndpoint(
  */
 async function collectAllUserStats() {
   if (isUserCollectorRunning) {
-    console.log("⚠️  User stats collection already running, skipping this cycle");
-    return;
+    // Check if collection has been running too long (hung/stuck)
+    const now = Date.now();
+    const elapsedMinutes = (now - userCollectionStartTime) / (1000 * 60);
+    
+    if (elapsedMinutes > CONFIG.COLLECTION_TIMEOUT_MINUTES) {
+      console.error(
+        `❌ User stats collection has been stuck for ${Math.floor(elapsedMinutes)} minutes! ` +
+        `Force-resetting the lock. This indicates a serious issue that needs investigation.`
+      );
+      isUserCollectorRunning = false;
+      userCollectionStartTime = 0;
+      // Fall through to start a new collection
+    } else {
+      console.log("⚠️  User stats collection already running, skipping this cycle");
+      return;
+    }
   }
 
   try {
-    isUserCollectorRunning = true;
-
     // Get pool users list first to determine who is active
     const apiUrl = process.env.API_URL;
     if (!apiUrl) {
@@ -720,6 +740,7 @@ async function collectAllUserStats() {
         console.log(`Using configured pool users endpoint: ${configuredPath}`);
       } else {
         // Auto-discover
+        console.log(`🔍 Discovering pool users list endpoint...`);
         try {
           discoveredPoolUsersPath = await discoverPoolUsersEndpoint(apiUrl, headers);
         } catch (error) {
@@ -728,6 +749,10 @@ async function collectAllUserStats() {
         }
       }
     }
+
+    // Set the flag AFTER initial checks pass - prevents flag getting stuck on early returns
+    isUserCollectorRunning = true;
+    userCollectionStartTime = Date.now();
 
     const poolUsersText = await withRetry(async () => {
       const response = await fetch(`${apiUrl}${discoveredPoolUsersPath}`, { headers });
@@ -771,7 +796,27 @@ async function collectAllUserStats() {
         .filter(addr => addr.length > 0 && addr !== '[]' && !addr.startsWith('['))
     );
 
+    // SAFETY CHECK: If pool users list is empty or suspiciously small, something is wrong
+    // Don't deactivate all users - skip this cycle and try again next time
+    if (poolUsers.size === 0) {
+      console.error(`❌ Pool users list is EMPTY! API may have returned invalid data. Skipping cycle to prevent deactivating all users.`);
+      console.error(`Raw API response (first 500 chars): ${poolUsersText.substring(0, 500)}`);
+      return;
+    }
+    
+    // Warn if pool users list is suspiciously small (less than 10% of previous known users)
     const db = getDb();
+    const activeUserCount = db.prepare('SELECT COUNT(*) as count FROM monitored_users WHERE is_active = 1').get() as { count: number };
+    if (activeUserCount.count > 100 && poolUsers.size < activeUserCount.count * 0.1) {
+      console.warn(
+        `⚠️  WARNING: Pool users list seems suspiciously small! ` +
+        `Found ${poolUsers.size} users in pool, but we have ${activeUserCount.count} active monitored users. ` +
+        `This may indicate an API issue. Proceeding with caution...`
+      );
+    }
+    
+    // Log pool users count for debugging
+    console.log(`✓ Found ${poolUsers.size} users currently in pool`);
     const now = Math.floor(Date.now() / 1000);
     const backoffThreshold = now - (CONFIG.FAILED_USER_BACKOFF_MINUTES * 60);
 
@@ -918,6 +963,7 @@ async function collectAllUserStats() {
     }
   } finally {
     isUserCollectorRunning = false;
+    userCollectionStartTime = 0;
   }
 }
 
@@ -950,6 +996,7 @@ export async function collectPoolStats() {
         console.log(`Using configured pool stats endpoint: ${configuredPath}`);
       } else {
         // Auto-discover
+        console.log(`🔍 Discovering pool statistics endpoint (pool-wide metrics)...`);
         try {
           discoveredPoolStatsPath = await discoverPoolStatsEndpoint(apiUrl, headers);
         } catch (error) {
