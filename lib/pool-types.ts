@@ -49,8 +49,8 @@ export interface UserData {
  * Monitored user configuration
  */
 export interface MonitoredUser {
+  id: number;
   address: string;
-  name?: string;
 }
 
 /**
