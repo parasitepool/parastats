@@ -4,7 +4,7 @@ import { isValidBitcoinAddress } from '@/app/utils/validators';
 
 export async function POST(request: Request) {
   try {
-    const lightningApiUrl = process.env.LIGHTNING_API_URL || 'https://api.bitbit.bot';
+    const lightningApiUrl = process.env.LIGHTNING_API_URL;
 
     // Get lightning token from header
     const lightningToken = request.headers.get('X-Lightning-Token');
