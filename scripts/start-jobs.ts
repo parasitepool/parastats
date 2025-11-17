@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import 'dotenv/config';
+import { validateEnv } from "../app/lib/env-validation";
 import {
   startPoolStatsCollector,
   purgeOldData,
@@ -6,6 +8,9 @@ import {
 import { startStratumCollector, stopStratumCollector } from "../lib/stratum-collector";
 import { closeDb } from "../lib/db";
 import cron from "node-cron";
+
+// Validate environment variables before starting
+validateEnv();
 
 // Global references to jobs
 let statsCollectorJob = startPoolStatsCollector();

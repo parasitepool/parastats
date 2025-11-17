@@ -3,6 +3,7 @@ import "./globals.css";
 import NavigationWrapper from "./components/NavigationWrapper";
 import Footer from "./components/Footer";
 import { WalletProvider } from "./hooks/useWallet";
+import { validateEnv } from "./lib/env-validation";
 
 export const metadata: Metadata = {
   title: "Parasite",

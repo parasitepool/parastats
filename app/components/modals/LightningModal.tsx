@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/app/hooks/useWallet';
-import type { AccountData } from '@/app/api/account/types';
-import type { WalletInfo, BalanceResponse } from '@/app/components/types/lightning';
+import type { AccountData, WalletInfo, CombinedAccountResponse } from '@/app/api/account/types';
 
 interface LightningModalProps {
   isOpen: boolean;
@@ -11,10 +10,8 @@ interface LightningModalProps {
   onUpdate?: () => void;
 }
 
-const API_BASE_URL = "https://api.bitbit.bot";
-
 export default function LightningModal({ isOpen, onClose, onUpdate }: LightningModalProps) {
-  const { address, lightningToken, isLightningAuthenticated } = useWallet();
+  const { address, lightningToken } = useWallet();
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -24,78 +21,54 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
   const [newLnAddress, setNewLnAddress] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchLightningData = useCallback(async (token: string) => {
-    try {
-      const [userResponse, balanceResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/wallet_user`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${API_BASE_URL}/wallet_user/balance`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
-      if (!userResponse.ok || !balanceResponse.ok) {
-        return null;
-      }
-
-      const userData: WalletInfo = await userResponse.json();
-      const balanceData: BalanceResponse = await balanceResponse.json();
-
-      return {
-        walletInfo: userData,
-        balance: balanceData.balance,
-      };
-    } catch (err) {
-      console.error('Error fetching lightning data:', err);
-      return null;
-    }
-  }, []);
-
-  // Fetch account data when modal opens
-  const fetchAccountData = useCallback(async () => {
+  const fetchCombinedData = useCallback(async () => {
     if (!address) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const accountResponse = await fetch(`/api/account/${address}`, {
-        cache: 'no-store',
-      });
-      let accountData: AccountData | null = null;
-
-      if (accountResponse.ok) {
-        accountData = await accountResponse.json();
-        setAccountData(accountData);
-        setNewLnAddress(accountData?.ln_address || '');
-      } else {
-        // account endpoint returned nothing (404 or error)
-        setAccountData(null);
+      const headers: Record<string, string> = {};
+      if (lightningToken) {
+        headers['X-Lightning-Token'] = lightningToken;
       }
 
-      // Fetch from lightning if authenticated
-      if (isLightningAuthenticated && lightningToken) {
-        const lightningData = await fetchLightningData(lightningToken);
-        if (lightningData) {
-          setWalletInfo(lightningData.walletInfo);
-          setBalance(lightningData.balance);
+      const response = await fetch(`/api/account/${address}`, {
+        cache: 'no-store',
+        headers,
+      });
+
+      if (response.ok) {
+        const data: CombinedAccountResponse = await response.json();
+        setAccountData(data.account);
+        setNewLnAddress(data.account?.ln_address || '');
+        
+        if (data.lightning) {
+          setWalletInfo(data.lightning.walletInfo);
+          setBalance(data.lightning.balance);
+        } else {
+          setWalletInfo(null);
+          setBalance(null);
         }
+      } else {
+        setAccountData(null);
+        setWalletInfo(null);
+        setBalance(null);
       }
     } catch (err) {
-      console.error('Error fetching account data:', err);
+      console.error('Error fetching combined data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load account data');
     } finally {
       setIsLoading(false);
     }
-  }, [address, isLightningAuthenticated, lightningToken, fetchLightningData]);
+  }, [address, lightningToken]);
 
   useEffect(() => {
     if (isOpen && address) {
-      fetchAccountData();
+      fetchCombinedData();
       setIsEditing(false);
     }
-  }, [isOpen, address, fetchAccountData]);
+  }, [isOpen, address, fetchCombinedData]);
 
   // Clean up state when modal closes
   useEffect(() => {
@@ -188,7 +161,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
       setIsEditing(false);
 
       // Re-fetch to ensure we have the latest data
-      await fetchAccountData();
+      await fetchCombinedData();
 
       // Trigger refresh in parent component
       if (onUpdate) {
