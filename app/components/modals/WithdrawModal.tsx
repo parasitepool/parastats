@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface WithdrawModalProps {
   isOpen: boolean;
@@ -30,36 +30,7 @@ export default function WithdrawModal({
   const [quote, setQuote] = useState<WithdrawQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch quote when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      fetchQuote();
-    } else {
-      // Reset state when modal closes
-      setModalState('loading');
-      setQuote(null);
-      setError(null);
-    }
-  }, [isOpen]);
-
-  // Close modal on escape key
-  useEffect(() => {
-    const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && modalState !== 'processing') {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      window.addEventListener('keydown', handleEscKey);
-    }
-
-    return () => {
-      window.removeEventListener('keydown', handleEscKey);
-    };
-  }, [isOpen, onClose, modalState]);
-
-  const fetchQuote = async () => {
+  const fetchQuote = useCallback(async () => {
     setModalState('loading');
     setError(null);
 
@@ -86,7 +57,36 @@ export default function WithdrawModal({
       setError(err instanceof Error ? err.message : 'Failed to get withdraw quote');
       setModalState('error');
     }
-  };
+  }, [btcAddress, lightningToken]);
+
+  // Fetch quote when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchQuote();
+    } else {
+      // Reset state when modal closes
+      setModalState('loading');
+      setQuote(null);
+      setError(null);
+    }
+  }, [isOpen, fetchQuote]);
+
+  // Close modal on escape key
+  useEffect(() => {
+    const handleEscKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && modalState !== 'processing') {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      window.addEventListener('keydown', handleEscKey);
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleEscKey);
+    };
+  }, [isOpen, onClose, modalState]);
 
   const handleConfirm = async () => {
     if (!quote) return;
