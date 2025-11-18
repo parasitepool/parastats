@@ -453,7 +453,7 @@ export default function UserDashboard() {
 
         {/* Stats Cards */}
         <div className="w-full">
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
             {statCards.map((card, index) => (
               <div key={index}>
                 <div className="bg-background p-4 shadow-md border border-border h-full">
