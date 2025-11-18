@@ -9,6 +9,7 @@ export function toAccountData(json: unknown): AccountData {
     past_ln_addresses: Array.isArray(x.past_ln_addresses)
       ? x.past_ln_addresses.map(String)
       : [],
+    total_diff: typeof x.total_diff === 'number' ? x.total_diff : 0,
     last_updated: x.last_updated == null ? null : String(x.last_updated),
   };
 }
