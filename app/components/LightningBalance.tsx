@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { LightningIcon } from "@/app/components/icons";
 import { useWallet } from "@/app/hooks/useWallet";
 import LightningModal from "@/app/components/modals/LightningModal";
-import type { AccountData } from "@/app/api/account/types";
-import type { WalletInfo, BalanceResponse } from "@/app/components/types/lightning";
+import WithdrawModal from "@/app/components/modals/WithdrawModal";
+import type { AccountData, WalletInfo, CombinedAccountResponse } from "@/app/api/account/types";
 
 interface LightningBalanceProps {
   className?: string;
@@ -14,8 +14,6 @@ interface LightningBalanceProps {
   userId?: string;
   loading?: boolean;
 }
-
-const API_BASE_URL = "https://api.bitbit.bot";
 
 export default function LightningBalance({
   className = "",
@@ -37,69 +35,58 @@ export default function LightningBalance({
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState<boolean>(false);
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [isFetching, setIsFetching] = useState<boolean>(false);
 
-  const fetchUserData = useCallback(async (token: string) => {
-    const [userResponse, balanceResponse] = await Promise.all([
-      fetch(`${API_BASE_URL}/wallet_user`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-      fetch(`${API_BASE_URL}/wallet_user/balance`, {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    ]);
-
-    if (!userResponse.ok) {
-      throw new Error("Failed to fetch user info");
-    }
-
-    if (!balanceResponse.ok) {
-      throw new Error("Failed to fetch balance");
-    }
-
-    const userData: WalletInfo = await userResponse.json();
-    const balanceData: BalanceResponse = await balanceResponse.json();
-
-    setWalletInfo(userData);
-    setBalance(balanceData.balance);
-  }, []);
-
-  const fetchAccountData = useCallback(async () => {
+  const fetchCombinedData = useCallback(async () => {
     if (!userId) return;
 
+    setIsFetching(true);
     try {
-      // Add cache-busting to ensure fresh data
+      const headers: Record<string, string> = {};
+      if (lightningToken) {
+        headers['X-Lightning-Token'] = lightningToken;
+      }
+
       const response = await fetch(`/api/account/${userId}`, {
         cache: 'no-store',
+        headers,
       });
+
       if (response.ok) {
-        const data: AccountData = await response.json();
-        setAccountData(data);
+        const data: CombinedAccountResponse = await response.json();
+        setAccountData(data.account);
+        if (data.lightning) {
+          setWalletInfo(data.lightning.walletInfo);
+          setBalance(data.lightning.balance);
+        } else {
+          setWalletInfo(null);
+          setBalance(null);
+        }
       } else {
         setAccountData(null);
+        setWalletInfo(null);
+        setBalance(null);
       }
     } catch (err) {
-      console.error("Error fetching account data:", err);
+      console.error("Error fetching combined data:", err);
+      setError("Failed to load data");
       setAccountData(null);
+      setWalletInfo(null);
+      setBalance(null);
+    } finally {
+      setIsFetching(false);
     }
-  }, [userId]);
+  }, [userId, lightningToken]);
 
   useEffect(() => {
-    if (isInitialized && isLightningAuthenticated && lightningToken) {
-      fetchUserData(lightningToken)
-        .catch((err) => {
-          console.error("Error fetching Lightning data:", err);
-          setError("Failed to load Lightning data");
-        });
+    if (isInitialized) {
+      fetchCombinedData();
     }
-  }, [isInitialized, isLightningAuthenticated, lightningToken, fetchUserData]);
-
-  // Fetch account data when userId changes
-  useEffect(() => {
-    fetchAccountData();
-  }, [fetchAccountData]);
+  }, [isInitialized, fetchCombinedData]);
 
   // Open reset confirmation modal
   const handleResetClick = () => {
@@ -170,7 +157,7 @@ export default function LightningBalance({
       setShowResetConfirm(false);
 
       // Re-fetch to ensure we have the latest data
-      await fetchAccountData();
+      await fetchCombinedData();
     } catch (err) {
       console.error('Error resetting Lightning address:', err);
       setError(err instanceof Error ? err.message : 'Failed to reset Lightning address');
@@ -179,8 +166,8 @@ export default function LightningBalance({
     }
   };
 
-  // Show loading shimmer if not initialized or explicitly loading
-  const isLoading = !isInitialized || loading;
+  // Show loading shimmer if not initialized, explicitly loading, or fetching data
+  const isLoading = !isInitialized || loading || isFetching;
 
   if (isLoading && compact) {
     return (
@@ -341,10 +328,33 @@ export default function LightningBalance({
             {balance !== null && (
               <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center min-h-[4rem]">
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 min-h-[4rem]">
                   <p className="text-lg sm:text-xl font-semibold">
                     {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
                   </p>
+                  {isOwner && isLightningAuthenticated && (
+                    <div className="relative group">
+                      <button
+                        onClick={() => balance >= 8500 && setIsWithdrawModalOpen(true)}
+                        disabled={balance < 8500}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs font-medium flex-shrink-0 ${
+                          balance >= 8500
+                            ? 'bg-foreground text-background hover:bg-gray-700 transition-colors cursor-pointer'
+                            : 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-50'
+                        }`}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Withdraw</span>
+                      </button>
+                      {balance < 8500 && (
+                        <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-48 p-2 bg-background border border-border shadow-lg text-xs z-10">
+                          Minimum balance of 8,500 sats required to withdraw
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -397,8 +407,20 @@ export default function LightningBalance({
       <LightningModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onUpdate={fetchAccountData}
+        onUpdate={fetchCombinedData}
       />
+
+      {/* Withdraw Modal */}
+      {isWithdrawModalOpen && balance !== null && lightningToken && accountData?.btc_address && (
+        <WithdrawModal
+          isOpen={isWithdrawModalOpen}
+          onClose={() => setIsWithdrawModalOpen(false)}
+          onComplete={fetchCombinedData}
+          balance={balance}
+          btcAddress={accountData.btc_address}
+          lightningToken={lightningToken}
+        />
+      )}
 
       {/* Reset Confirmation Modal */}
       {showResetConfirm && (

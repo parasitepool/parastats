@@ -23,8 +23,6 @@ const WALLET_ADDRESS_PUBLIC_KEY = 'parasite_wallet_address_public_key';
 const LIGHTNING_TOKEN_KEY = 'lightning_auth_token';
 const LIGHTNING_TOKEN_TIMESTAMP_KEY = 'lightning_auth_timestamp';
 
-const IDENTIFIER = "de01d4ad-c24a-46fb-a5e8-755f3b7b7ab5";
-const API_BASE_URL = 'https://api.bitbit.bot';
 const TOKEN_VALIDITY_HOURS = 24;
 
 const walletStorage = {
@@ -124,29 +122,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const validateToken = useCallback(async (token: string): Promise<boolean> => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/wallet_user/balance`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }, []);
-
   const requestNonce = useCallback(async (userAddress: string): Promise<string> => {
-    const response = await fetch(
-      `${API_BASE_URL}/login/${userAddress}/auth_nonce/${IDENTIFIER}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-      }
-    );
+    const response = await fetch('/api/lightning/auth/nonce', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ address: userAddress })
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to request nonce: ${response.statusText}`);
@@ -185,22 +168,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     signature: string,
     nonce: string
   ): Promise<string> => {
-    const response = await fetch(
-      `${API_BASE_URL}/login/${userAddress}/auth_sign/${IDENTIFIER}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          signature,
-          nonce,
-          address: userAddress,
-          public_key: publicKey,
-          email: ''
-        })
-      }
-    );
+    const response = await fetch('/api/lightning/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        address: userAddress,
+        public_key: publicKey,
+        signature,
+        nonce
+      })
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -287,12 +266,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const savedLightning = lightningStorage.load();
       if (savedLightning) {
-        const isValid = await validateToken(savedLightning.token);
-        if (isValid) {
-          setLightningToken(savedLightning.token);
-          setIsLightningAuthenticated(true);
-          return { address: paymentAddress.address, token: savedLightning.token };
-        }
+        setLightningToken(savedLightning.token);
+        setIsLightningAuthenticated(true);
+        return { address: paymentAddress.address, token: savedLightning.token };
       }
 
       const token = await performLightningAuth(paymentAddress.address, paymentAddress.publicKey);
@@ -319,7 +295,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       console.error('Failed to connect with Lightning:', error);
       return null;
     }
-  }, [addAddressToMonitoring, validateToken, performLightningAuth]);
+  }, [addAddressToMonitoring, performLightningAuth]);
 
   const refreshLightningAuth = useCallback(async (): Promise<string | null> => {
     if (!address || !addressPublicKey) {
