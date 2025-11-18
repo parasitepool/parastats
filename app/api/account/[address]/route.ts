@@ -61,7 +61,7 @@ export async function GET(
     let lightningTokenExpired = false;
     
     if (lightningToken) {
-      const lightningApiUrl = process.env.LIGHTNING_API_URL || 'https://api.bitbit.bot';
+      const lightningApiUrl = process.env.LIGHTNING_API_URL;
       
       try {
         const [userResponse, balanceResponse] = await Promise.all([
