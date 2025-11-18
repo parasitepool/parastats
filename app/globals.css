@@ -60,6 +60,29 @@ body {
   animation: retroPulse 3s ease-in-out infinite;
 }
 
+/* Soft pulse animation for pending block - synchronized with retroPulse */
+@keyframes pulse-soft {
+  0%, 100% {
+    background-color: rgba(107, 114, 128, 0.05);
+    transform: rotate(0deg) translateY(0px);
+  }
+  45% {
+    transform: rotate(-1deg) translateY(-1px);
+  }
+  50% {
+    background-color: rgba(107, 114, 128, 0.25);
+    transform: rotate(0deg) translateY(0px);
+  }
+  55% {
+    transform: rotate(1deg) translateY(1px);
+  }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s ease-in-out infinite;
+  transform-origin: center center;
+}
+
 /* Hide scrollbar but maintain functionality */
 .scrollbar-hide {
   scrollbar-width: none; /* Firefox */
