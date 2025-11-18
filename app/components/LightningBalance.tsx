@@ -201,7 +201,7 @@ export default function LightningBalance({
           {/* Lightning Address shimmer */}
           <div className="flex flex-col">
             <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
-            <div className="bg-secondary p-3 sm:p-4 border border-border min-h-[4rem] flex items-center">
+            <div className="bg-secondary p-3 sm:p-4 border border-border h-[5rem] flex items-center">
               <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
             </div>
           </div>
@@ -209,7 +209,7 @@ export default function LightningBalance({
           {/* Balance shimmer */}
           <div className="flex flex-col">
             <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
-            <div className="bg-secondary p-3 sm:p-4 border border-border min-h-[4rem] flex items-center">
+            <div className="bg-secondary p-3 sm:p-4 border border-border h-[5rem] flex items-center">
               <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
             </div>
           </div>
@@ -308,8 +308,8 @@ export default function LightningBalance({
             {/* Lightning Address */}
             <div className="flex flex-col">
               <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
-              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 min-h-[4rem]">
-                <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">{displayLnAddress}</p>
+              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
+                <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
                 {isOwner && isLightningAuthenticated && (
                   <button
                     onClick={() => setIsModalOpen(true)}
@@ -328,7 +328,7 @@ export default function LightningBalance({
             {balance !== null && (
               <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 min-h-[4rem]">
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
                   <p className="text-lg sm:text-xl font-semibold">
                     {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
                   </p>
@@ -365,8 +365,8 @@ export default function LightningBalance({
             {displayLnAddress && (
               <div className="flex flex-col">
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2 min-h-[4rem]">
-                  <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">{displayLnAddress}</p>
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2 h-[5rem]">
+                  <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {walletInfo?.username && isOwner && (
                       <button

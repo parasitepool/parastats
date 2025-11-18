@@ -133,7 +133,7 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
-  // Fetch account data when userId changes (only if valid address)
+  // Fetch account data when userId changes and every 10 seconds (only if valid address)
   useEffect(() => {
     // Don't fetch if address is invalid
     if (isValidAddress === false) {
@@ -143,27 +143,61 @@ export default function UserDashboard() {
     // Don't fetch until we've validated the address
     if (isValidAddress === null) return;
 
+    let mounted = true;
+    let hasInitiallyLoadedAccount = false;
+
     const fetchAccountData = async () => {
-      setIsLoadingAccountData(true);
+      // Only show loading on initial load
+      if (!hasInitiallyLoadedAccount && mounted) {
+        setIsLoadingAccountData(true);
+      }
+      
       try {
         const response = await fetch(`/api/account/${userId}`, {
           cache: 'no-store',
         });
         if (response.ok) {
           const data: CombinedAccountResponse = await response.json();
-          setAccountData(data.account);
+          if (mounted) {
+            setAccountData(data.account);
+          }
         } else {
-          setAccountData(null);
+          if (mounted) {
+            setAccountData(null);
+          }
         }
       } catch (err) {
-        console.error("Error fetching account data:", err);
-        setAccountData(null);
+        if (mounted) {
+          // Only show error on initial load, not on background updates
+          if (!hasInitiallyLoadedAccount) {
+            console.error("Error fetching account data:", err);
+          } else {
+            // Silently log background update errors
+            console.error("Background account update error:", err);
+          }
+          setAccountData(null);
+        }
       } finally {
-        setIsLoadingAccountData(false);
+        if (mounted) {
+          hasInitiallyLoadedAccount = true;
+          setIsLoadingAccountData(false);
+        }
       }
     };
 
+    // Initial fetch
     fetchAccountData();
+    
+    // Refresh account data every 10 seconds
+    const intervalId: NodeJS.Timeout = setInterval(fetchAccountData, 10000);
+    
+    // Cleanup function
+    return () => {
+      mounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
   }, [userId, isValidAddress]);
 
   // Handle visibility toggle
@@ -432,7 +466,7 @@ export default function UserDashboard() {
                   {!hasInitiallyLoaded ? (
                     <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
                   ) : (
-                    <p className="text-2xl font-semibold">{card.value}</p>
+                    <div className="text-2xl font-semibold">{card.value}</div>
                   )}
                 </div>
               </div>

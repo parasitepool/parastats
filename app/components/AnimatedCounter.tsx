@@ -107,7 +107,7 @@ export default function AnimatedCounter({
   const chars = formattedValue.split('');
 
   return (
-    <div className="inline-flex">
+    <span className="inline-flex">
       {chars.map((char, index) => {
         const isRolling = rollingDigits.has(index);
         
@@ -164,6 +164,6 @@ export default function AnimatedCounter({
           animation: digit-roll 0.8s ease-in-out;
         }
       `}</style>
-    </div>
+    </span>
   );
 }
