@@ -132,36 +132,17 @@ export default function AnimatedCounter({
       <style jsx>{`
         @keyframes digit-roll {
           0% { 
-            transform: translateY(0);
             opacity: 1;
-          }
-          25% { 
-            transform: translateY(-30%);
-            opacity: 0.3;
-          }
-          26% { 
-            transform: translateY(30%);
-            opacity: 0.3;
           }
           50% { 
-            transform: translateY(0);
-            opacity: 1;
-          }
-          75% { 
-            transform: translateY(-15%);
-            opacity: 0.6;
-          }
-          76% { 
-            transform: translateY(15%);
-            opacity: 0.6;
+            opacity: 0.5;
           }
           100% { 
-            transform: translateY(0);
             opacity: 1;
           }
         }
         .animate-digit-roll {
-          animation: digit-roll 0.8s ease-in-out;
+          animation: digit-roll 0.5s ease-in-out;
         }
       `}</style>
     </span>
