@@ -49,11 +49,14 @@ body {
   padding: 0 0.5rem;
 }
 
-/* RetroProgressBar pulse animation */
+/* RetroProgressBar pulse animation - synchronized with pulse-soft */
 @keyframes retroPulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.4; }
-  100% { opacity: 1; }
+  0%, 100% { 
+    opacity: 0.05;
+  }
+  50% { 
+    opacity: 1;
+  }
 }
 
 .retro-pulse {
@@ -64,23 +67,15 @@ body {
 @keyframes pulse-soft {
   0%, 100% {
     background-color: rgba(107, 114, 128, 0.05);
-    transform: rotate(0deg) translateY(0px);
-  }
-  45% {
-    transform: rotate(-1deg) translateY(-1px);
   }
   50% {
-    background-color: rgba(107, 114, 128, 0.25);
-    transform: rotate(0deg) translateY(0px);
-  }
-  55% {
-    transform: rotate(1deg) translateY(1px);
+    background-color: rgba(107, 114, 128, 0.7);
   }
 }
 
 .animate-pulse-soft {
   animation: pulse-soft 3s ease-in-out infinite;
-  transform-origin: center center;
+  background-color: rgba(107, 114, 128, 0.05);
 }
 
 /* Hide scrollbar but maintain functionality */

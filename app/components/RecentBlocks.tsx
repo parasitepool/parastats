@@ -13,13 +13,12 @@ function PendingBlockCard({ nextHeight, isCompact }: { nextHeight: number; isCom
   return (
     <Link
       href="/template"
-      className={`flex-shrink-0 border border-dashed border-gray-500/50 p-2 hover:bg-gray-500/10 transition-all duration-300 ease-in-out snap-start animate-pulse-soft ${
+      className={`flex-shrink-0 border border-dashed border-gray-500/50 p-2 snap-start animate-pulse-soft ${
         isCompact ? 'w-28' : 'w-48'
       }`}
       style={{
         maxHeight: isCompact ? '85px' : '200px', 
         transition: 'max-height 0.3s ease-in-out, width 0.3s ease-in-out',
-        transformOrigin: 'center center'
       }}
     >
       <div className={`${isCompact ? 'flex-col' : 'flex justify-between'} items-start mb-2`}>
