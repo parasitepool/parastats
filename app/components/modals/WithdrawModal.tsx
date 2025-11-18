@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 interface WithdrawModalProps {
   isOpen: boolean;
@@ -29,6 +29,8 @@ export default function WithdrawModal({
   const [modalState, setModalState] = useState<ModalState>('loading');
   const [quote, setQuote] = useState<WithdrawQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const successTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchQuote = useCallback(async () => {
     setModalState('loading');
@@ -68,13 +70,14 @@ export default function WithdrawModal({
       setModalState('loading');
       setQuote(null);
       setError(null);
+      setIsSubmitting(false);
     }
   }, [isOpen, fetchQuote]);
 
   // Close modal on escape key
   useEffect(() => {
     const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && modalState !== 'processing') {
+      if (e.key === 'Escape' && modalState !== 'processing' && modalState !== 'success') {
         onClose();
       }
     };
@@ -88,9 +91,20 @@ export default function WithdrawModal({
     };
   }, [isOpen, onClose, modalState]);
 
-  const handleConfirm = async () => {
-    if (!quote) return;
+  // Cleanup timer on unmount or modal close
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) {
+        clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+    };
+  }, []);
 
+  const handleConfirm = async () => {
+    if (!quote || isSubmitting) return;
+
+    setIsSubmitting(true);
     setModalState('processing');
     setError(null);
 
@@ -111,7 +125,7 @@ export default function WithdrawModal({
 
       setModalState('success');
       // Wait a moment to show success message, then close and refresh
-      setTimeout(() => {
+      successTimerRef.current = setTimeout(() => {
         onClose();
         onComplete();
       }, 2000);
@@ -119,6 +133,7 @@ export default function WithdrawModal({
       console.error('Error executing withdraw:', err);
       setError(err instanceof Error ? err.message : 'Failed to execute withdraw');
       setModalState('error');
+      setIsSubmitting(false);
     }
   };
 
@@ -130,14 +145,15 @@ export default function WithdrawModal({
   };
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget && modalState !== 'processing') {
+    if (e.target === e.currentTarget && modalState !== 'processing' && modalState !== 'success') {
       onClose();
     }
   };
 
   if (!isOpen) return null;
 
-  const amountAfterFee = quote ? quote.quantity - quote.fee : 0;
+  // Note: quote.quantity already represents the amount after fee deduction
+  const amountAfterFee = quote ? quote.quantity : 0;
 
   return (
     <div
@@ -152,7 +168,7 @@ export default function WithdrawModal({
           <h2 className="text-2xl font-bold text-accent-3">Withdraw</h2>
           <button
             onClick={onClose}
-            disabled={modalState === 'processing'}
+            disabled={modalState === 'processing' || modalState === 'success'}
             className="text-gray-400 hover:text-gray-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
