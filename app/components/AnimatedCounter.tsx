@@ -14,7 +14,7 @@ export default function AnimatedCounter({
   const [displayValue, setDisplayValue] = useState(0);
   const [rollingDigits, setRollingDigits] = useState<Set<number>>(new Set());
   const prevValueRef = useRef(0);
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const isInitialMount = useRef(true);
 
   useEffect(() => {
