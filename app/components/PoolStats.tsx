@@ -81,21 +81,6 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
 
   const statCards = [
     {
-      title: "Pool Uptime",
-      value: poolStats?.uptime,
-      icon: <ClockIcon />,
-    },
-    {
-      title: "Avg to Find Block",
-      value: formatExpectedBlockTime(poolStats?.hashrate, hashrate?.currentDifficulty),
-      icon: <LightningIcon />,
-    },
-    {
-      title: "Last Block Found",
-      value: poolStats?.lastBlockTime,
-      icon: <BookmarkIcon />,
-    },
-    {
       title: "Pool's Highest Diff",
       value: poolStats?.highestDifficulty && hashrate?.currentDifficulty ? (
         <span className='flex gap-1'>
@@ -146,6 +131,21 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
         </div>
       ),
       icon: <TrendingUpIcon />,
+    },
+    {
+      title: "Avg to Find Block",
+      value: formatExpectedBlockTime(poolStats?.hashrate, hashrate?.currentDifficulty),
+      icon: <LightningIcon />,
+    },
+    {
+      title: "Last Block Found",
+      value: poolStats?.lastBlockTime,
+      icon: <BookmarkIcon />,
+    },
+    {
+      title: "Pool Uptime",
+      value: poolStats?.uptime,
+      icon: <ClockIcon />,
     },
     {
       title: "Bitcoin Price",

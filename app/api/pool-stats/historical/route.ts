@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '../../../../lib/db';
 import { parseHashrate } from '../../../utils/formatters';
 
-// Enable caching based on interval
-export const revalidate = 60; // Default to 1 minute
+export const dynamic = 'force-dynamic';
 
 export interface HistoricalPoolStats {
   timestamp: number;

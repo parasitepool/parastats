@@ -40,7 +40,7 @@ export default function StratumInfo({ userId, isLoading = false }: StratumInfoPr
           {/* Stratum URL shimmer */}
           <div className="flex flex-col">
             <h3 className="text-sm font-medium text-accent-2 mb-2">Stratum URL</h3>
-            <div className="bg-secondary p-3 sm:p-4 border border-border min-h-[4rem] flex items-center">
+            <div className="bg-secondary p-3 sm:p-4 border border-border h-[5rem] flex items-center">
               <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
             </div>
           </div>
@@ -48,7 +48,7 @@ export default function StratumInfo({ userId, isLoading = false }: StratumInfoPr
           {/* Stratum Username shimmer */}
           <div className="flex flex-col">
             <h3 className="text-sm font-medium text-accent-2 mb-2">Stratum Username</h3>
-            <div className="bg-secondary p-3 sm:p-4 border border-border min-h-[4rem] flex items-center">
+            <div className="bg-secondary p-3 sm:p-4 border border-border h-[5rem] flex items-center">
               <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
             </div>
           </div>
@@ -72,8 +72,8 @@ export default function StratumInfo({ userId, isLoading = false }: StratumInfoPr
         {/* Stratum URL */}
         <div className="flex flex-col">
           <h3 className="text-sm font-medium text-accent-2 mb-2">Stratum URL</h3>
-          <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 min-h-[4rem]">
-            <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">
+          <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
+            <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">
               {stratumUrl}
             </p>
             <button
@@ -99,8 +99,8 @@ export default function StratumInfo({ userId, isLoading = false }: StratumInfoPr
         {/* Stratum Username */}
         <div className="flex flex-col">
           <h3 className="text-sm font-medium text-accent-2 mb-2">Stratum Username</h3>
-          <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 min-h-[4rem]">
-            <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1">
+          <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
+            <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">
               {stratumUsername}
             </p>
             <button

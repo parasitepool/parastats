@@ -14,6 +14,7 @@ import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/util
 import { parseHashrate } from '@/app/utils/formatters';
 import LightningBalance from '@/app/components/LightningBalance';
 import StratumInfo from '@/app/components/StratumInfo';
+import AnimatedCounter from '@/app/components/AnimatedCounter';
 import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
@@ -132,7 +133,7 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
-  // Fetch account data when userId changes (only if valid address)
+  // Fetch account data when userId changes and every 10 seconds (only if valid address)
   useEffect(() => {
     // Don't fetch if address is invalid
     if (isValidAddress === false) {
@@ -142,27 +143,61 @@ export default function UserDashboard() {
     // Don't fetch until we've validated the address
     if (isValidAddress === null) return;
 
+    let mounted = true;
+    let hasInitiallyLoadedAccount = false;
+
     const fetchAccountData = async () => {
-      setIsLoadingAccountData(true);
+      // Only show loading on initial load
+      if (!hasInitiallyLoadedAccount && mounted) {
+        setIsLoadingAccountData(true);
+      }
+      
       try {
         const response = await fetch(`/api/account/${userId}`, {
           cache: 'no-store',
         });
         if (response.ok) {
           const data: CombinedAccountResponse = await response.json();
-          setAccountData(data.account);
+          if (mounted) {
+            setAccountData(data.account);
+          }
         } else {
-          setAccountData(null);
+          if (mounted) {
+            setAccountData(null);
+          }
         }
       } catch (err) {
-        console.error("Error fetching account data:", err);
-        setAccountData(null);
+        if (mounted) {
+          // Only show error on initial load, not on background updates
+          if (!hasInitiallyLoadedAccount) {
+            console.error("Error fetching account data:", err);
+          } else {
+            // Silently log background update errors
+            console.error("Background account update error:", err);
+          }
+          setAccountData(null);
+        }
       } finally {
-        setIsLoadingAccountData(false);
+        if (mounted) {
+          hasInitiallyLoadedAccount = true;
+          setIsLoadingAccountData(false);
+        }
       }
     };
 
+    // Initial fetch
     fetchAccountData();
+    
+    // Refresh account data every 10 seconds
+    const intervalId: NodeJS.Timeout = setInterval(fetchAccountData, 10000);
+    
+    // Cleanup function
+    return () => {
+      mounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
   }, [userId, isValidAddress]);
 
   // Handle visibility toggle
@@ -280,20 +315,11 @@ export default function UserDashboard() {
   // Stat cards configuration - show placeholders when data is missing
   const statCards = [
     {
-      title: 'Uptime',
-      value: userData?.uptime || <span className="text-gray-400">-</span>,
+      title: 'Hashrate',
+      value: userData?.hashrate ? formatHashrate(userData.hashrate) : <span className="text-gray-400">-</span>,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-        </svg>
-      )
-    },
-    {
-      title: 'Last Submission',
-      value: userData?.lastSubmission || <span className="text-gray-400">-</span>,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
         </svg>
       )
     },
@@ -324,11 +350,29 @@ export default function UserDashboard() {
       )
     },
     {
-      title: 'Hashrate',
-      value: userData?.hashrate ? formatHashrate(userData.hashrate) : <span className="text-gray-400">-</span>,
+      title: 'Total Work',
+      value: accountData?.total_diff ? <AnimatedCounter value={accountData.total_diff} /> : <span className="text-gray-400">-</span>,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
+          <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </svg>
+      )
+    },
+    {
+      title: 'Last Submission',
+      value: userData?.lastSubmission || <span className="text-gray-400">-</span>,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        </svg>
+      )
+    },
+    {
+      title: 'Uptime',
+      value: userData?.uptime || <span className="text-gray-400">-</span>,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
         </svg>
       )
     }
@@ -409,7 +453,7 @@ export default function UserDashboard() {
 
         {/* Stats Cards */}
         <div className="w-full">
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
             {statCards.map((card, index) => (
               <div key={index}>
                 <div className="bg-background p-4 shadow-md border border-border h-full">
@@ -419,10 +463,10 @@ export default function UserDashboard() {
                     </div>
                     <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
                   </div>
-                  {!hasInitiallyLoaded ? (
+                  {!hasInitiallyLoaded || isLoadingAccountData ? (
                     <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
                   ) : (
-                    <p className="text-2xl font-semibold">{card.value}</p>
+                    <div className="text-2xl font-semibold">{card.value}</div>
                   )}
                 </div>
               </div>
@@ -435,8 +479,8 @@ export default function UserDashboard() {
           {!isInitialized || !hasInitiallyLoaded || isLoadingAccountData ? (
             // Loading state - Show shimmer components while data is loading
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <LightningBalance userId={userId} loading={true} />
               <StratumInfo userId={userId} isLoading={true} />
+              <LightningBalance userId={userId} loading={true} />
             </div>
           ) : !isLightningAuthenticated || !accountData || !accountData.ln_address ? (
             // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
@@ -459,8 +503,8 @@ export default function UserDashboard() {
           ) : (
             // Authenticated with account data and lightning address - Show Lightning and Stratum components
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <LightningBalance userId={userId} loading={false} />
               <StratumInfo userId={userId} isLoading={false} />
+              <LightningBalance userId={userId} loading={false} />
             </div>
           )}
         </div>
