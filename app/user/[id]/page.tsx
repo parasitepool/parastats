@@ -353,7 +353,7 @@ export default function UserDashboard() {
       title: 'Total Work',
       value: accountData?.total_diff ? (
         <span className="block whitespace-nowrap">
-          <AnimatedCounter value={accountData.total_diff} />
+          <AnimatedCounter value={Number(accountData.total_diff)} />
         </span>
       ) : (
         <span className="text-gray-400">-</span>
