@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import type { AccountUpdate } from '@/app/api/account/types';
-import { toAccountData } from '@/app/api/account/shared';
 
 export async function POST(request: Request) {
   try {
@@ -53,9 +52,8 @@ export async function POST(request: Request) {
         { status: response.status }
       );
     }
-    const json = await response.json();
 
-    const accountData = toAccountData(json);
+    const accountData = await response.json();
 
     return NextResponse.json(accountData);
   } catch (error) {

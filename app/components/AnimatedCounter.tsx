@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 
 interface AnimatedCounterProps {
-  value: number;
+  value: bigint;
   duration?: number;
 }
 
@@ -11,9 +11,9 @@ export default function AnimatedCounter({
   value, 
   duration = 2000
 }: AnimatedCounterProps) {
-  const [displayValue, setDisplayValue] = useState(0);
+  const [displayValue, setDisplayValue] = useState<bigint>(BigInt(0));
   const [rollingDigits, setRollingDigits] = useState<Set<number>>(new Set());
-  const prevValueRef = useRef(0);
+  const prevValueRef = useRef<bigint>(BigInt(0));
   const animationFrameRef = useRef<number | undefined>(undefined);
   const isInitialMount = useRef(true);
 
@@ -36,7 +36,7 @@ export default function AnimatedCounter({
         
         // Ease-out cubic
         const easeOut = 1 - Math.pow(1 - progress, 3);
-        const currentValue = Math.floor(value * easeOut);
+        const currentValue = BigInt(Math.floor(Number(value) * easeOut));
         setDisplayValue(currentValue);
 
         if (progress < 1) {
@@ -81,7 +81,8 @@ export default function AnimatedCounter({
       
       // Ease-out cubic
       const easeOut = 1 - Math.pow(1 - progress, 3);
-      const currentValue = Math.floor(startValue + (endValue - startValue) * easeOut);
+      const diff = Number(endValue - startValue);
+      const currentValue = startValue + BigInt(Math.floor(diff * easeOut));
       setDisplayValue(currentValue);
 
       if (progress < 1) {
