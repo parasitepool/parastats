@@ -463,7 +463,7 @@ export default function UserDashboard() {
                     </div>
                     <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
                   </div>
-                  {!hasInitiallyLoaded ? (
+                  {!hasInitiallyLoaded || isLoadingAccountData ? (
                     <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
                   ) : (
                     <div className="text-2xl font-semibold">{card.value}</div>
