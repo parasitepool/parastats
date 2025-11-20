@@ -2,7 +2,7 @@ export interface AccountData {
   btc_address: string;
   ln_address: string | null;
   past_ln_addresses: string[];
-  total_diff: number;
+  total_diff: bigint;
   last_updated: string | null;
 }
 
