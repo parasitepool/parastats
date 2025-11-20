@@ -40,13 +40,13 @@ export function formatHashrate(value: number | string | undefined): string {
   
   const scaledValue = numValue / Math.pow(1000, unitIndex);
   
-  // Always show 3 significant digits
+  // Always show 3 significant digits with space before unit
   if (scaledValue >= 100) {
-    return `${Math.round(scaledValue)}${units[unitIndex]}`;
+    return `${Math.round(scaledValue)} ${units[unitIndex]}`;
   } else if (scaledValue >= 10) {
-    return `${scaledValue.toFixed(1)}${units[unitIndex]}`;
+    return `${scaledValue.toFixed(1)} ${units[unitIndex]}`;
   } else {
-    return `${scaledValue.toFixed(2)}${units[unitIndex]}`;
+    return `${scaledValue.toFixed(2)} ${units[unitIndex]}`;
   }
 }
 

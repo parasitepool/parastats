@@ -50,42 +50,46 @@ body {
 }
 
 /* RetroProgressBar pulse animation - synchronized with pulse-soft */
-@keyframes retroPulse {
-  0%, 100% { 
-    opacity: 0.3;
+@layer components {
+  @keyframes retroPulse {
+    0%, 100% { 
+      opacity: 0.3;
+    }
+    50% { 
+      opacity: 1;
+    }
   }
-  50% { 
-    opacity: 1;
+
+  .retro-pulse {
+    animation: retroPulse 3s ease-in-out infinite;
   }
-}
 
-.retro-pulse {
-  animation: retroPulse 3s ease-in-out infinite;
-}
+  /* Soft pulse animation for pending block - synchronized with retroPulse */
+  @keyframes pulse-soft {
+    0%, 100% {
+      background-color: rgba(107, 114, 128, 0.1);
+    }
+    50% {
+      background-color: rgba(107, 114, 128, 0.4);
+    }
+  }
 
-/* Soft pulse animation for pending block - synchronized with retroPulse */
-@keyframes pulse-soft {
-  0%, 100% {
+  .animate-pulse-soft {
+    animation: pulse-soft 3s ease-in-out infinite;
     background-color: rgba(107, 114, 128, 0.1);
   }
-  50% {
-    background-color: rgba(107, 114, 128, 0.4);
-  }
-}
-
-.animate-pulse-soft {
-  animation: pulse-soft 3s ease-in-out infinite;
-  background-color: rgba(107, 114, 128, 0.1);
 }
 
 /* Hide scrollbar but maintain functionality */
-.scrollbar-hide {
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE and Edge */
-}
+@layer utilities {
+  .scrollbar-hide {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
 
-.scrollbar-hide::-webkit-scrollbar {
-  display: none; /* Chrome, Safari and Opera */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
 }
 
 /* Custom Scrollbar Styling */

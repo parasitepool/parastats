@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { toAccountData } from '@/app/api/account/shared';
 import type { CombinedAccountResponse, AccountData, WalletInfo, BalanceResponse } from '@/app/api/account/types';
 import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
 
@@ -47,8 +46,7 @@ export async function GET(
       });
 
       if (response.ok) {
-        const json = await response.json();
-        accountData = toAccountData(json);
+        accountData = await response.json();
       }
       // If response is not ok (e.g., 404), accountData stays null
     } catch (error) {
