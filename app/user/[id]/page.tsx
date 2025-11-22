@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility, getPoolStats } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -18,6 +18,7 @@ import AnimatedCounter from '@/app/components/AnimatedCounter';
 import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
+import type { PoolStats as PoolStatsType } from '@/app/utils/api';
 
 export default function UserDashboard() {
   const params = useParams();
@@ -34,6 +35,8 @@ export default function UserDashboard() {
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [poolStats, setPoolStats] = useState<PoolStatsType | null>(null);
+  const [isLoadingPoolStats, setIsLoadingPoolStats] = useState(true);
   
   const {
     isLightningAuthenticated,
@@ -199,6 +202,34 @@ export default function UserDashboard() {
       }
     };
   }, [userId, isValidAddress]);
+
+  // Fetch pool stats on mount and every 20 seconds
+  useEffect(() => {
+    let mounted = true;
+
+    const fetchPoolStats = async () => {
+      try {
+        const stats = await getPoolStats();
+        if (mounted) {
+          setPoolStats(stats);
+        }
+      } catch (error) {
+        console.error('Error fetching pool stats:', error);
+      } finally {
+        if (mounted) {
+          setIsLoadingPoolStats(false);
+        }
+      }
+    };
+
+    fetchPoolStats();
+    const intervalId = setInterval(fetchPoolStats, 20000); // Update every 20 seconds
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, []);
 
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
@@ -374,8 +405,17 @@ export default function UserDashboard() {
       )
     },
     {
-      title: 'Uptime',
+      title: 'Miner Uptime',
       value: userData?.uptime || <span className="text-gray-400">-</span>,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+        </svg>
+      )
+    },
+    {
+      title: 'Pool Uptime',
+      value: poolStats?.uptime || <span className="text-gray-400">-</span>,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
@@ -459,7 +499,7 @@ export default function UserDashboard() {
 
         {/* Stats Cards */}
         <div className="w-full">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
             {statCards.map((card, index) => (
               <div key={index}>
                 <div className="bg-background p-4 shadow-md border border-border h-full">
@@ -469,16 +509,15 @@ export default function UserDashboard() {
                     </div>
                     <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
                   </div>
-                  {!hasInitiallyLoaded || isLoadingAccountData ? (
+                  {!hasInitiallyLoaded || isLoadingAccountData || (card.title === 'Pool Uptime' && isLoadingPoolStats) ? (
                     <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                  ) : card.title === 'Total Work' ? (
+                  ) : (
                     <div 
-                      className="font-semibold w-full text-left text-lg whitespace-nowrap text-base"
+                      className="font-semibold whitespace-nowrap w-full overflow-hidden text-left"
+                      style={{ fontSize: 'clamp(0.625rem, 1.8vw, 1.5rem)' }}
                     >
                       {card.value}
                     </div>
-                  ) : (
-                    <div className="text-2xl font-semibold">{card.value}</div>
                   )}
                 </div>
               </div>
