@@ -471,13 +471,14 @@ export default function UserDashboard() {
                   </div>
                   {!hasInitiallyLoaded || isLoadingAccountData ? (
                     <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                  ) : (
+                  ) : card.title === 'Total Work' ? (
                     <div 
-                      className="font-semibold whitespace-nowrap w-full overflow-hidden text-left"
-                      style={{ fontSize: 'clamp(0.625rem, 1.8vw, 1.5rem)' }}
+                      className="font-semibold w-full text-left text-lg whitespace-nowrap text-base"
                     >
                       {card.value}
                     </div>
+                  ) : (
+                    <div className="text-2xl font-semibold">{card.value}</div>
                   )}
                 </div>
               </div>
