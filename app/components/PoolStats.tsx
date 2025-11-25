@@ -12,6 +12,7 @@ import {
   getHashrate, 
   getDifficultyAdjustment, 
   getBitcoinPrice,
+  getUserData,
   type PoolStats as PoolStatsType
 } from "../utils/api";
 import { Hashrate, Adjustment } from "@mempool/mempool.js/lib/interfaces/bitcoin/difficulty";
@@ -23,6 +24,7 @@ import {
   WalletIcon,
   InfoIcon 
 } from "./icons";
+import { useWallet } from "../hooks/useWallet";
 
 interface PoolStatsProps {
   poolStats?: PoolStatsType;
@@ -36,6 +38,9 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [highestDiffTooltipVisible, setHighestDiffTooltipVisible] = useState(false);
   const [localLoading, setLocalLoading] = useState(true);
+  const [minerUptime, setMinerUptime] = useState<string | null>(null);
+  
+  const { isConnected, address: walletAddress } = useWallet();
 
   useEffect(() => {
     async function fetchData() {
@@ -64,6 +69,32 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
     // Clean up the interval when component unmounts
     return () => clearInterval(intervalId);
   }, []);
+
+  // Fetch miner uptime when wallet is connected
+  useEffect(() => {
+    async function fetchMinerUptime() {
+      if (!isConnected || !walletAddress) {
+        setMinerUptime(null);
+        return;
+      }
+
+      try {
+        const userData = await getUserData(walletAddress);
+        setMinerUptime(userData.uptime || null);
+      } catch (error) {
+        console.error("Error fetching miner uptime:", error);
+        setMinerUptime(null);
+      }
+    }
+
+    fetchMinerUptime();
+
+    // Refresh miner uptime every 20 seconds when wallet is connected
+    if (isConnected && walletAddress) {
+      const intervalId = setInterval(fetchMinerUptime, 20000);
+      return () => clearInterval(intervalId);
+    }
+  }, [isConnected, walletAddress]);
 
   // Calculate expected difficulty at next adjustment
   const calculateExpectedDifficulty = () => {
@@ -147,6 +178,12 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
       value: poolStats?.uptime,
       icon: <ClockIcon />,
     },
+    // Conditionally add Miner Uptime card when wallet is connected
+    ...(isConnected && walletAddress ? [{
+      title: "Miner Uptime",
+      value: minerUptime || <span className="text-gray-400">-</span>,
+      icon: <ClockIcon />,
+    }] : []),
     {
       title: "Bitcoin Price",
       value: formatPrice(bitcoinPrice),
