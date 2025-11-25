@@ -358,7 +358,8 @@ export default function UserDashboard() {
     {
       title: 'Best Difficulty',
       value: userData?.bestDifficulty && hashrate?.currentDifficulty ? 
-        <span className='flex gap-1'>{userData.bestDifficulty} 
+        <span className='flex gap-1 text-base sm:text-lg md:text-sm lg:text-base xl:text-xl'>
+          <span className="md:text-base lg:text-lg xl:text-xl">{userData.bestDifficulty}</span>
           <span 
             className="relative inline-block"
             onMouseEnter={() => setTooltipVisible(true)}
@@ -384,7 +385,7 @@ export default function UserDashboard() {
     {
       title: 'Total Work',
       value: accountData?.total_diff ? (
-        <span className="block whitespace-nowrap">
+        <span className="block whitespace-nowrap text-base sm:text-lg md:text-sm lg:text-base xl:text-xl">
           <AnimatedCounter value={Number(accountData.total_diff)} />
         </span>
       ) : (
@@ -429,6 +430,7 @@ export default function UserDashboard() {
         <VerboseUptime 
           uptimeString={userData.uptime}
           firstSeenTimestamp={userData.authorised}
+          stacked={true}
         />
       ) : (
         <span className="text-gray-400">-</span>
@@ -522,9 +524,9 @@ export default function UserDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
             {statCards.map((card, index) => (
               <div key={index}>
-                <div className="bg-background p-4 shadow-md border border-border h-full">
-                  <div className="flex items-center mb-2">
-                    <div className="mr-2 text-accent-3">
+                <div className="bg-background p-4 shadow-md border border-border h-full flex flex-col">
+                  <div className="flex items-center mb-3">
+                    <div className="mr-2 text-accent-3 flex-shrink-0">
                       {card.icon}
                     </div>
                     <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
@@ -533,7 +535,7 @@ export default function UserDashboard() {
                     <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
                   ) : (
                     <div 
-                      className="text-xl font-semibold whitespace-nowrap w-full overflow-hidden text-left"
+                      className="text-xl font-semibold w-full text-left flex-grow flex items-center"
                     >
                       {card.value}
                     </div>
