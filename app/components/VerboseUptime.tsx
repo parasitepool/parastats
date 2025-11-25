@@ -6,6 +6,7 @@ interface VerboseUptimeProps {
   uptimeString: string; // e.g., "160d 20h"
   firstSeenTimestamp?: number; // Unix timestamp in seconds when miner first connected
   duration?: number;
+  stacked?: boolean; // New prop to enable two-row layout
 }
 
 interface UptimeValues {
@@ -20,7 +21,8 @@ interface UptimeValues {
 export default function VerboseUptime({ 
   uptimeString,
   firstSeenTimestamp,
-  duration = 2000 
+  duration = 2000,
+  stacked = false
 }: VerboseUptimeProps) {
   const [displayValues, setDisplayValues] = useState<UptimeValues>({
     years: 0,
@@ -229,14 +231,29 @@ export default function VerboseUptime({
           }
         `}
       </style>
-      <span className="flex items-center gap-2 font-mono text-sm">
-        {formatUnit(displayValues.seconds, 'seconds', 's')}
-        {formatUnit(displayValues.minutes, 'minutes', 'm')}
-        {formatUnit(displayValues.hours, 'hours', 'h')}
-        {formatUnit(displayValues.days, 'days', 'd')}
-        {formatUnit(displayValues.months, 'months', 'mo')}
-        {formatUnit(displayValues.years, 'years', 'y')}
-      </span>
+      {stacked ? (
+        <div className="flex flex-col font-mono text-sm leading-tight">
+          <span className="flex items-center gap-2">
+            {formatUnit(displayValues.seconds, 'seconds', 's')}
+            {formatUnit(displayValues.minutes, 'minutes', 'm')}
+            {formatUnit(displayValues.hours, 'hours', 'h')}
+          </span>
+          <span className="flex items-center gap-2">
+            {formatUnit(displayValues.days, 'days', 'd')}
+            {formatUnit(displayValues.months, 'months', 'mo')}
+            {formatUnit(displayValues.years, 'years', 'y')}
+          </span>
+        </div>
+      ) : (
+        <span className="flex items-center gap-2 font-mono text-sm">
+          {formatUnit(displayValues.seconds, 'seconds', 's')}
+          {formatUnit(displayValues.minutes, 'minutes', 'm')}
+          {formatUnit(displayValues.hours, 'hours', 'h')}
+          {formatUnit(displayValues.days, 'days', 'd')}
+          {formatUnit(displayValues.months, 'months', 'mo')}
+          {formatUnit(displayValues.years, 'years', 'y')}
+        </span>
+      )}
     </>
   );
 }
