@@ -55,7 +55,7 @@ export default function Navigation({
     <header className={`bg-background text-foreground py-4`}>
       <div className="container mx-auto flex items-end gap-4">
         {/* Left: Logo */}
-        <Link href="/" className="hidden sm:flex flex-shrink-0 w-[200px] lg:w-[300px] justify-start">
+        <Link href="/" className="flex flex-shrink-0 w-[200px] lg:w-[300px] justify-start">
           <Image src={parasiteLogo} alt="Parasite Logo" height={64} />
         </Link>
 
