@@ -53,14 +53,25 @@ export default function Navigation({
 
   return (
     <header className={`bg-background text-foreground py-4`}>
-      <div className="container mx-auto flex items-end gap-4">
-        {/* Left: Logo */}
-        <Link href="/" className="flex flex-shrink-0 w-[200px] lg:w-[300px] justify-start">
-          <Image src={parasiteLogo} alt="Parasite Logo" height={64} />
-        </Link>
+      <div className="container mx-auto flex flex-col gap-4">
+        {/* Top row: Logo and Connect Button */}
+        <div className="flex sm:flex-row items-end justify-between gap-4">
+          {/* Left: Logo */}
+          <Link href="/" className="flex flex-shrink-0 w-[200px] lg:w-[300px] justify-start">
+            <Image src={parasiteLogo} alt="Parasite Logo" height={64} />
+          </Link>
+
+          {/* Right: Connect Button */}
+          <div className="flex-shrink-0 flex items-center space-x-4 w-auto sm:w-[200px] lg:w-[300px] justify-end">
+            <ConnectButton />
+            {/* <Link href="/" className="hidden sm:block">
+              <Image src={parasiteBug} alt="Parasite Bug" height={64} className='h-10 sm:h-12 w-auto' />
+            </Link> */}
+          </div>
+        </div>
 
         {/* Center: Search input or user/worker name */}
-        <div className="flex-grow flex justify-center">
+        <div className="flex justify-center">
             <div className="relative w-full max-w-md">
               <input
                 ref={inputRef}
@@ -81,14 +92,6 @@ export default function Navigation({
                 </svg>
               </button>
             </div>
-        </div>
-
-        {/* Right: Connect Button */}
-        <div className="flex-shrink-0 flex items-center space-x-4 w-auto sm:w-[200px] lg:w-[300px] justify-end">
-          <ConnectButton />
-          {/* <Link href="/" className="hidden sm:block">
-            <Image src={parasiteBug} alt="Parasite Bug" height={64} className='h-10 sm:h-12 w-auto' />
-          </Link> */}
         </div>
 
         {/* Right: Pool status */}
