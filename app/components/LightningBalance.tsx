@@ -350,7 +350,7 @@ export default function LightningBalance({
                       </button>
                       {balance < 8000 && (
                         <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-48 p-2 bg-background border border-border shadow-lg text-xs z-10">
-                          Minimum balance of 8,500 sats required to withdraw
+                          Minimum balance of 8,000 sats required to withdraw
                         </div>
                       )}
                     </div>
