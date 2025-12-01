@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Image from 'next/image';
 
 interface WithdrawModalProps {
   isOpen: boolean;
@@ -302,9 +303,11 @@ export default function WithdrawModal({
             rel="noopener noreferrer"
             className="flex items-center gap-1 hover:text-foreground/80 transition-colors"
           >
-            <img
+            <Image
               src="https://parasite.sati.pro/icon-512.png"
               alt="Sati"
+              width={16}
+              height={16}
               className="h-4 w-4"
             />
             <span>Sati</span>
@@ -316,9 +319,11 @@ export default function WithdrawModal({
             rel="noopener noreferrer"
             className="flex items-center gap-1 hover:text-foreground/80 transition-colors"
           >
-            <img
+            <Image
               src="https://parasite.sati.pro/xverse-logo.png"
               alt="Xverse"
+              width={16}
+              height={16}
               className="h-4 w-4"
             />
             <span>Xverse</span>
