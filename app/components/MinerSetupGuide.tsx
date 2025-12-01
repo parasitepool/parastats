@@ -5,7 +5,6 @@ import Link from 'next/link';
 export default function MinerSetupGuide() {
   return (
     <div className="space-y-4">
-      {/* Account Setup Options */}
       <div className="border border-foreground/20 rounded-lg p-4 space-y-3">
         <p className="text-sm text-foreground/60 uppercase tracking-wide">Choose your setup:</p>
         <div className="grid gap-3">
@@ -48,7 +47,6 @@ export default function MinerSetupGuide() {
         </div>
       </div>
 
-      {/* Mining Setup Steps */}
       <ol className="list-decimal pl-4 space-y-2 ml-6">
         <li>Connect your Bitcoin miner and go to the &quot;Pool Settings&quot; tab</li>
         <li>
