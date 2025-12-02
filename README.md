@@ -92,6 +92,7 @@ The stats collector can be configured using environment variables:
 - `HTTP2_HEADERS_TIMEOUT` - Response headers timeout in ms (default: `10000`)
 - `HTTP2_BODY_TIMEOUT` - Response body timeout in ms (default: `10000`)
 - `HTTP2_KEEPALIVE_TIMEOUT` - Keep-alive timeout in ms (default: `60000`)
+- `HTTP2_REQUEST_TIMEOUT` - Hard request timeout in ms (default: `18000`)
 
 ### Examples
 
