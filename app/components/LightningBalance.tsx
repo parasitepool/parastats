@@ -335,10 +335,10 @@ export default function LightningBalance({
                   {isOwner && isLightningAuthenticated && (
                     <div className="relative group">
                       <button
-                        onClick={() => balance >= 8500 && setIsWithdrawModalOpen(true)}
-                        disabled={balance < 8500}
+                        onClick={() => balance >= 8000 && setIsWithdrawModalOpen(true)}
+                        disabled={balance < 8000}
                         className={`flex items-center gap-1 px-2 py-1 text-xs font-medium flex-shrink-0 ${
-                          balance >= 8500
+                          balance >= 8000
                             ? 'bg-foreground text-background hover:bg-gray-700 transition-colors cursor-pointer'
                             : 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-50'
                         }`}
@@ -348,9 +348,9 @@ export default function LightningBalance({
                         </svg>
                         <span>Withdraw</span>
                       </button>
-                      {balance < 8500 && (
+                      {balance < 8000 && (
                         <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-48 p-2 bg-background border border-border shadow-lg text-xs z-10">
-                          Minimum balance of 8,500 sats required to withdraw
+                          Minimum balance of 8,000 sats required to withdraw
                         </div>
                       )}
                     </div>
