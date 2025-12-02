@@ -29,7 +29,7 @@ const CONFIG = {
   // Keep-alive timeout in milliseconds (should match server's keep-alive setting)
   KEEPALIVE_TIMEOUT: parseInt(process.env.HTTP2_KEEPALIVE_TIMEOUT || '60000'),
   // Hard timeout for entire request duration (abort via AbortController)
-  REQUEST_TIMEOUT: parseInt(process.env.HTTP2_REQUEST_TIMEOUT || '30000'),
+  REQUEST_TIMEOUT: parseInt(process.env.HTTP2_REQUEST_TIMEOUT || '18000'),
 } as const;
 
 /**
