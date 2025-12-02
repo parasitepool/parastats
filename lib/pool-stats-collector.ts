@@ -184,7 +184,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         }
         throw error;
       }
-    }, 6, 200, `GET /users/${address}`);
+    }, 5, 300, `GET /users/${address}`);
 
     const userData: UserData = await response.json();
     const now = Math.floor(Date.now() / 1000);
@@ -326,7 +326,7 @@ export async function collectAllUserStats() {
         const data = await response.json();
         // API returns array of address strings
         return new Set<string>(data as string[]);
-      }, 5, 250, 'GET /users');
+      }, 5, 300, 'GET /users');
     } catch (error) {
       console.error('Error fetching pool users:', error);
       poolUsers = new Set<string>();
@@ -524,7 +524,7 @@ export async function collectPoolStats() {
         throw new HttpError(response.status, response.statusText, url);
       }
       return response.text();
-    }, 4, 500, 'GET /pool/pool.status');
+    }, 5, 300, 'GET /pool/pool.status');
     
     // Split the response into lines and parse each JSON object
     const jsonLines = text.trim().split('\n').map(line => JSON.parse(line));

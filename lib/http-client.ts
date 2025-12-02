@@ -157,13 +157,26 @@ const TIMEOUT_ABORT_REASON = Symbol('http-client-timeout');
 
 /**
  * Check if an error is a timeout error from this client
+ * Handles multiple cases:
+ * - TimeoutError instance (our wrapped error)
+ * - Raw TIMEOUT_ABORT_REASON symbol (undici may throw the abort reason directly)
+ * - AbortError with our symbol as cause
  */
-export function isTimeoutError(error: unknown): error is Error {
+export function isTimeoutError(error: unknown): boolean {
   if (error instanceof TimeoutError) return true;
-  if (error instanceof Error && error.name === 'AbortError') {
-    // Check if it was our timeout that caused this
-    return (error as Error & { cause?: unknown }).cause === TIMEOUT_ABORT_REASON;
+  // Handle case where undici throws the raw abort reason symbol
+  if (error === TIMEOUT_ABORT_REASON) return true;
+  if (error instanceof Error) {
+    // Check abort errors with our symbol as cause
+    if (error.name === 'AbortError') {
+      const cause = (error as Error & { cause?: unknown }).cause;
+      return cause === TIMEOUT_ABORT_REASON;
+    }
+    // Check if the error message contains our symbol's description
+    if (error.message.includes('http-client-timeout')) return true;
   }
+  // Check string representation of the error
+  if (typeof error === 'symbol' && error.description === 'http-client-timeout') return true;
   return false;
 }
 
@@ -252,10 +265,21 @@ export const fetch = (
     dispatcher: http2Agent,
     signal: controller.signal,
   })
-    .catch((error: Error) => {
+    .catch((error: unknown) => {
       // Transform timeout aborts into TimeoutError for better error handling
-      if (didTimeout && throwOnTimeout && error.name === 'AbortError') {
-        throw new TimeoutError(timeoutMs, urlString);
+      // Handle multiple cases:
+      // 1. Standard AbortError with our symbol as cause
+      // 2. Raw symbol thrown directly (some undici versions)
+      // 3. Error with symbol in message
+      if (didTimeout && throwOnTimeout) {
+        const isAbortError = error instanceof Error && error.name === 'AbortError';
+        const isRawSymbol = error === TIMEOUT_ABORT_REASON;
+        const hasSymbolCause = error instanceof Error && 
+          (error as Error & { cause?: unknown }).cause === TIMEOUT_ABORT_REASON;
+        
+        if (isAbortError || isRawSymbol || hasSymbolCause) {
+          throw new TimeoutError(timeoutMs, urlString);
+        }
       }
       throw error;
     })
