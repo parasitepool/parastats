@@ -13,23 +13,87 @@ import { Agent, Pool, fetch as undiciFetch, type Dispatcher } from 'undici';
  * - Better resource utilization: Fewer connections needed for high concurrency
  */
 
+/**
+ * Custom error class for request timeouts
+ * Allows distinguishing timeout errors from other abort/network errors
+ */
+export class TimeoutError extends Error {
+  public readonly timeoutMs: number;
+  public readonly url: string | undefined;
+
+  constructor(timeoutMs: number, url?: string) {
+    const urlInfo = url ? ` for ${url}` : '';
+    super(`Request timed out after ${timeoutMs}ms${urlInfo}`);
+    this.name = 'TimeoutError';
+    this.timeoutMs = timeoutMs;
+    this.url = url;
+  }
+}
+
+/**
+ * Custom error class for HTTP errors with status codes
+ * Provides structured error information for better error handling
+ */
+export class HttpError extends Error {
+  public readonly status: number;
+  public readonly statusText: string;
+  public readonly url: string | undefined;
+  public readonly detail: string | undefined;
+
+  constructor(status: number, statusText: string, url?: string, detail?: string) {
+    const urlInfo = url ? ` for ${url}` : '';
+    const detailInfo = detail ? `: ${detail}` : '';
+    super(`HTTP ${status} ${statusText}${urlInfo}${detailInfo}`);
+    this.name = 'HttpError';
+    this.status = status;
+    this.statusText = statusText;
+    this.url = url;
+    this.detail = detail;
+  }
+
+  /**
+   * Check if this error is retryable based on HTTP status code
+   * 
+   * Retryable: 429 (rate limit), 5xx (server errors)
+   * Non-retryable: 4xx client errors (except 429)
+   */
+  get isRetryable(): boolean {
+    if (this.status === 429) return true;
+    if (this.status >= 500 && this.status < 600) return true;
+    return false;
+  }
+}
+
+/**
+ * Parse integer from environment variable with validation and fallback
+ */
+function parseEnvInt(envValue: string | undefined, defaultValue: number): number {
+  if (!envValue) return defaultValue;
+  const parsed = parseInt(envValue, 10);
+  if (Number.isNaN(parsed) || parsed < 0) {
+    console.warn(`Invalid env value "${envValue}", using default ${defaultValue}`);
+    return defaultValue;
+  }
+  return parsed;
+}
+
 // Configuration from environment variables with sensible defaults
 const CONFIG = {
   // Maximum number of concurrent connections per origin
-  MAX_CONNECTIONS: parseInt(process.env.HTTP2_MAX_CONNECTIONS || '30'),
+  MAX_CONNECTIONS: parseEnvInt(process.env.HTTP2_MAX_CONNECTIONS, 30),
   // Time to live for connections in milliseconds (graceful shutdown after this time)
   // Default: 120s to ensure connections survive between 1-minute cron cycles
-  CLIENT_TTL: parseInt(process.env.HTTP2_CLIENT_TTL || '120000'),
+  CLIENT_TTL: parseEnvInt(process.env.HTTP2_CLIENT_TTL, 120000),
   // Connection timeout in milliseconds (time to establish initial connection)
-  CONNECT_TIMEOUT: parseInt(process.env.HTTP2_CONNECT_TIMEOUT || '1500'),
+  CONNECT_TIMEOUT: parseEnvInt(process.env.HTTP2_CONNECT_TIMEOUT, 1500),
   // Headers timeout in milliseconds (time to receive response headers)
-  HEADERS_TIMEOUT: parseInt(process.env.HTTP2_HEADERS_TIMEOUT || '10000'),
+  HEADERS_TIMEOUT: parseEnvInt(process.env.HTTP2_HEADERS_TIMEOUT, 10000),
   // Body timeout in milliseconds (time to receive response body)
-  BODY_TIMEOUT: parseInt(process.env.HTTP2_BODY_TIMEOUT || '10000'),
+  BODY_TIMEOUT: parseEnvInt(process.env.HTTP2_BODY_TIMEOUT, 10000),
   // Keep-alive timeout in milliseconds (should match server's keep-alive setting)
-  KEEPALIVE_TIMEOUT: parseInt(process.env.HTTP2_KEEPALIVE_TIMEOUT || '60000'),
+  KEEPALIVE_TIMEOUT: parseEnvInt(process.env.HTTP2_KEEPALIVE_TIMEOUT, 60000),
   // Hard timeout for entire request duration (abort via AbortController)
-  REQUEST_TIMEOUT: parseInt(process.env.HTTP2_REQUEST_TIMEOUT || '18000'),
+  REQUEST_TIMEOUT: parseEnvInt(process.env.HTTP2_REQUEST_TIMEOUT, 18000),
 } as const;
 
 /**
@@ -81,24 +145,80 @@ const http2Agent: Dispatcher = new Agent({
  *   headers: { 'Authorization': 'Bearer token' }
  * });
  */
-type ExtendedRequestInit = RequestInit & { timeout?: number };
+export type ExtendedRequestInit = RequestInit & { 
+  /** Request timeout in milliseconds. Set to 0 to disable. Default: CONFIG.REQUEST_TIMEOUT */
+  timeout?: number;
+  /** If true, throws TimeoutError on timeout instead of generic AbortError */
+  throwOnTimeout?: boolean;
+};
+
+// Unique symbol to identify our timeout aborts
+const TIMEOUT_ABORT_REASON = Symbol('http-client-timeout');
+
+/**
+ * Check if an error is a timeout error from this client
+ */
+export function isTimeoutError(error: unknown): error is Error {
+  if (error instanceof TimeoutError) return true;
+  if (error instanceof Error && error.name === 'AbortError') {
+    // Check if it was our timeout that caused this
+    return (error as Error & { cause?: unknown }).cause === TIMEOUT_ABORT_REASON;
+  }
+  return false;
+}
+
+/**
+ * Check if an error is retryable (network errors, timeouts, 5xx, 429)
+ */
+export function isRetryableError(error: unknown): boolean {
+  // Timeout errors are retryable
+  if (isTimeoutError(error)) return true;
+  
+  // HTTP errors - delegate to the error's own logic
+  if (error instanceof HttpError) return error.isRetryable;
+  
+  // Network/connection errors are retryable
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('fetch failed') || 
+        msg.includes('network') || 
+        msg.includes('econnrefused') ||
+        msg.includes('econnreset') ||
+        msg.includes('etimedout') ||
+        msg.includes('enotfound')) {
+      return true;
+    }
+  }
+  
+  return false;
+}
 
 export const fetch = (
   input: string | URL | Request,
   init?: ExtendedRequestInit
-) => {
+): Promise<Response> => {
   const {
     timeout: timeoutOverride,
     signal: userSignal,
+    throwOnTimeout = true,
     ...restInit
   } = init ?? {};
 
   const controller = new AbortController();
   const timeoutMs = timeoutOverride ?? CONFIG.REQUEST_TIMEOUT;
+  
+  // Extract URL for error messages
+  const urlString = typeof input === 'string' 
+    ? input 
+    : input instanceof URL 
+      ? input.toString() 
+      : input.url;
 
   let timeoutHandle: NodeJS.Timeout | undefined;
   let removeUserSignalListener: (() => void) | undefined;
+  let didTimeout = false;
 
+  // Forward user's abort signal to our controller
   if (userSignal) {
     if (userSignal.aborted) {
       controller.abort(userSignal.reason);
@@ -109,8 +229,13 @@ export const fetch = (
     }
   }
 
+  // Set up timeout with identifiable abort reason
   if (timeoutMs > 0) {
-    timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+    timeoutHandle = setTimeout(() => {
+      didTimeout = true;
+      controller.abort(TIMEOUT_ABORT_REASON);
+    }, timeoutMs);
+    // Don't keep the process alive just for this timeout
     timeoutHandle.unref?.();
   }
 
@@ -126,8 +251,63 @@ export const fetch = (
     ...restInit,
     dispatcher: http2Agent,
     signal: controller.signal,
-  }).finally(cleanup) as unknown as Promise<Response>;
+  })
+    .catch((error: Error) => {
+      // Transform timeout aborts into TimeoutError for better error handling
+      if (didTimeout && throwOnTimeout && error.name === 'AbortError') {
+        throw new TimeoutError(timeoutMs, urlString);
+      }
+      throw error;
+    })
+    .finally(cleanup) as unknown as Promise<Response>;
 };
+
+/**
+ * Convenience wrapper that validates response status and throws HttpError for non-ok responses
+ * 
+ * @example
+ * const data = await fetchJson<UserData>('https://api.example.com/user/1');
+ */
+export async function fetchJson<T>(
+  input: string | URL | Request,
+  init?: ExtendedRequestInit
+): Promise<T> {
+  const response = await fetch(input, init);
+  
+  const urlString = typeof input === 'string' 
+    ? input 
+    : input instanceof URL 
+      ? input.toString() 
+      : input.url;
+
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, urlString);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+/**
+ * Convenience wrapper that validates response status and returns text
+ */
+export async function fetchText(
+  input: string | URL | Request,
+  init?: ExtendedRequestInit
+): Promise<string> {
+  const response = await fetch(input, init);
+  
+  const urlString = typeof input === 'string' 
+    ? input 
+    : input instanceof URL 
+      ? input.toString() 
+      : input.url;
+
+  if (!response.ok) {
+    throw new HttpError(response.status, response.statusText, urlString);
+  }
+
+  return response.text();
+}
 
 /**
  * Export the agent for advanced use cases where direct access is needed
