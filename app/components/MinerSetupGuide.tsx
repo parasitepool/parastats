@@ -65,11 +65,11 @@ export default function MinerSetupGuide() {
               </span>
             </li>
             <li>
-              Depending on your miner it will look something like this:<br/>
-              <span className="font-mono bg-foreground/10 px-2 py-0.33 rounded">
+              Depending on your miner it will look something like this:<br />
+              <span className="font-mono bg-foreground/10 px-2 py-0.25 rounded">
                 parasite.wtf:42069<br />
               </span>
-              <span className="font-mono bg-foreground/10 px-2 py-0.33 rounded">
+              <span className="font-mono bg-foreground/10 px-2 py-0.25 rounded">
                 stratum+tcp://parasite.wtf:42069
               </span>
             </li>
@@ -91,10 +91,11 @@ export default function MinerSetupGuide() {
         <li>
           Once your miner is up and running:
           <ul className="list-disc pl-4 mt-2">
-            <li>Head to your account page to see your stats</li>
-            <p className="text-sm mt-2 italic break-words">
-              You can either put your BTC_ADDRESS in the search bar or press the account button on the connect menu item
-            </p>
+            <li>Head to your account page to see your stats
+              <p className="text-sm mt-2 italic break-words">
+                You can either put your BTC_ADDRESS in the search bar or press the account button on the connect menu item
+              </p>
+            </li>
           </ul>
         </li>
       </ol>
