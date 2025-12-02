@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import Image from 'next/image';
 
 interface WithdrawModalProps {
   isOpen: boolean;
@@ -30,7 +31,7 @@ export default function WithdrawModal({
   const [quote, setQuote] = useState<WithdrawQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const successTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [txid, setTxid] = useState<string | null>(null);
 
   const fetchQuote = useCallback(async () => {
     setModalState('loading');
@@ -71,6 +72,7 @@ export default function WithdrawModal({
       setQuote(null);
       setError(null);
       setIsSubmitting(false);
+      setTxid(null);
     }
   }, [isOpen, fetchQuote]);
 
@@ -90,16 +92,6 @@ export default function WithdrawModal({
       window.removeEventListener('keydown', handleEscKey);
     };
   }, [isOpen, onClose, modalState]);
-
-  // Cleanup timer on unmount or modal close
-  useEffect(() => {
-    return () => {
-      if (successTimerRef.current) {
-        clearTimeout(successTimerRef.current);
-        successTimerRef.current = null;
-      }
-    };
-  }, []);
 
   const handleConfirm = async () => {
     if (!quote || isSubmitting) return;
@@ -123,12 +115,9 @@ export default function WithdrawModal({
         throw new Error(errorData.error || 'Failed to execute withdraw');
       }
 
+      const data = await response.json();
+      setTxid(data.hash || null);
       setModalState('success');
-      // Wait a moment to show success message, then close and refresh
-      successTimerRef.current = setTimeout(() => {
-        onClose();
-        onComplete();
-      }, 2000);
     } catch (err) {
       console.error('Error executing withdraw:', err);
       setError(err instanceof Error ? err.message : 'Failed to execute withdraw');
@@ -152,7 +141,6 @@ export default function WithdrawModal({
 
   if (!isOpen) return null;
 
-  // Note: quote.quantity already represents the amount after fee deduction
   const amountAfterFee = quote ? quote.quantity : 0;
 
   return (
@@ -252,6 +240,35 @@ export default function WithdrawModal({
             </div>
             <p className="text-foreground font-semibold">Withdrawal Successful!</p>
             <p className="text-sm text-foreground/70">Your funds are on the way.</p>
+            
+            {txid && (
+              <div className="w-full">
+                <h3 className="text-sm font-medium text-accent-2 mb-2 text-center">Transaction ID</h3>
+                <a
+                  href={`https://mempool.space/tx/${txid}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-secondary p-3 border border-border hover:border-accent-3 transition-colors group"
+                >
+                  <p className="text-foreground break-all text-sm font-mono group-hover:text-accent-3 transition-colors">
+                    {txid}
+                  </p>
+                  <p className="text-xs text-foreground/50 mt-1 group-hover:text-accent-3/70 transition-colors">
+                    Click to view on mempool.space →
+                  </p>
+                </a>
+              </div>
+            )}
+
+            <button
+              onClick={() => {
+                onClose();
+                onComplete();
+              }}
+              className="mt-2 px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground"
+            >
+              Close
+            </button>
           </div>
         )}
 
@@ -276,6 +293,42 @@ export default function WithdrawModal({
             </div>
           </div>
         )}
+
+        {/* Powered by footer */}
+        <div className="mt-6 pt-4 border-t border-border flex items-center justify-center gap-1 text-xs text-foreground/50">
+          <span>Powered by</span>
+          <a
+            href="https://x.com/heySati"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 hover:text-foreground/80 transition-colors"
+          >
+            <Image
+              src="https://parasite.sati.pro/icon-512.png"
+              alt="Sati"
+              width={16}
+              height={16}
+              className="h-4 w-4"
+            />
+            <span>Sati</span>
+          </a>
+          <span>and</span>
+          <a
+            href="https://www.xverse.app/download"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 hover:text-foreground/80 transition-colors"
+          >
+            <Image
+              src="https://parasite.sati.pro/xverse-logo.png"
+              alt="Xverse"
+              width={16}
+              height={16}
+              className="h-4 w-4"
+            />
+            <span>Xverse</span>
+          </a>
+        </div>
       </div>
     </div>
   );
