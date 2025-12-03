@@ -1,90 +1,23 @@
 import cron from 'node-cron';
 import { getDb } from './db';
 import { fetch } from './http-client';
-
-/**
- * Custom error class for HTTP errors with status codes
- */
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string
-  ) {
-    super(message);
-    this.name = 'HttpError';
-  }
-}
-
-/**
- * Check if an error is retryable based on HTTP status code or error type
- *
- * Non-retryable errors (fail immediately):
- * - 4xx client errors (400, 401, 403, 404, 409, 422, etc.) - won't change on retry
- *
- * Retryable errors (should retry with backoff):
- * - 429 Too Many Requests - rate limiting
- * - 5xx server errors (500, 502, 503, 504) - temporary server issues
- * - Network errors (connection refused, timeout, DNS failures)
- */
-function isRetryableError(error: unknown): boolean {
-  if (error instanceof HttpError) {
-    const status = error.status;
-
-    // Rate limiting - should retry with backoff
-    if (status === 429) return true;
-
-    // Server errors - temporary issues, should retry
-    if (status >= 500 && status < 600) return true;
-
-    // Client errors - permanent failures, don't retry
-    if (status >= 400 && status < 500) return false;
-
-    // Shouldn't reach here, but default to retryable for unknown status codes
-    return true;
-  }
-
-  // Network errors and other non-HTTP errors - should retry
-  return true;
-}
-
-interface StatsData {
-  runtime: number;
-  lastupdate: number;
-  Users: number;
-  Workers: number;
-  Idle: number;
-  Disconnected: number;
-}
-
-interface HashrateData {
-  hashrate1m: string;
-  hashrate5m: string;
-  hashrate15m: string;
-  hashrate1hr: string;
-  hashrate6hr: string;
-  hashrate1d: string;
-  hashrate7d: string;
-}
-
-interface UserData {
-  hashrate1m: string;
-  hashrate5m: string;
-  hashrate1hr: string;
-  hashrate1d: string;
-  hashrate7d: string;
-  workers: number;
-  bestshare: number;
-  bestever: number;
-  authorised: number;
-}
-
-interface MonitoredUser {
-  id: number;
-  address: string;
-}
+import { HttpError, withRetry } from './retry-utils';
+import {
+  UserData,
+  MonitoredUser,
+  isStatsData,
+  isHashrateData,
+  getCaseInsensitive,
+} from './pool-types';
+import {
+  discoverPoolUsersEndpoint,
+  discoverPoolStatsEndpoint,
+  getUserStatsEndpoint,
+} from './endpoint-discovery';
 
 let isCollectorRunning = false;
 let isUserCollectorRunning = false;
+let userCollectionStartTime = 0; // Track when collection started for timeout detection
 
 // Configuration constants
 const CONFIG = {
@@ -94,71 +27,32 @@ const CONFIG = {
   AUTO_DISCOVER_USERS: process.env.AUTO_DISCOVER_USERS !== 'false', // Enable automatic user discovery (default: true)
   AUTO_DISCOVER_BATCH_LIMIT: parseInt(process.env.AUTO_DISCOVER_BATCH_LIMIT || '100'), // Max new users to add per cycle
   SQL_BATCH_SIZE: 500, // Max parameters per SQL statement (SQLite limit is 999)
+  COLLECTION_TIMEOUT_MINUTES: parseInt(process.env.COLLECTION_TIMEOUT_MINUTES || '10'), // Force reset if collection hangs
 } as const;
 
 /**
- * Helper function to add delay between retries
- */
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-/**
- * Retry helper function with backoff and jitter
- * Intelligently skips retries for non-retryable errors (4xx client errors)
- */
-async function withRetry<T>(
-  operation: () => Promise<T>,
-  maxRetries = 4,
-  baseDelay = 500,
-  context?: string // Optional context for logging which operation is retrying
-): Promise<T> {
-  let lastError;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-
-      // Check if error is retryable before attempting retry
-      const retryable = isRetryableError(error);
-
-      if (!retryable) {
-        // Non-retryable error (e.g., 404, 400, 403) - fail immediately
-        const contextMsg = context ? ` [${context}]` : '';
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.log(`Non-retryable error${contextMsg} - ${errorMsg}`);
-        throw error;
-      }
-
-      if (attempt < maxRetries) {
-        const backoffDelay = baseDelay + (attempt * baseDelay);
-        // Add jitter: randomize delay between 50% and 150% of backoff delay
-        const jitter = Math.random() + 0.5; // Random value between 0.5 and 1.5
-        const delayWithJitter = Math.floor(backoffDelay * jitter);
-        const contextMsg = context ? ` [${context}]` : '';
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.log(`Retry attempt ${attempt + 1}/${maxRetries} after ${delayWithJitter}ms${contextMsg} - Error: ${errorMsg}`);
-        await delay(delayWithJitter);
-        continue;
-      }
-      throw error;
-    }
-  }
-  throw lastError;
-}
-
-/**
  * Process users in batches to avoid overwhelming the system
+ * @returns Object containing number of users collected and number deactivated
  */
-async function processBatchedUserStats(users: MonitoredUser[]): Promise<number> {
+async function processBatchedUserStats(users: MonitoredUser[]): Promise<{ collected: number; deactivated: number }> {
+  let totalDeactivated = 0;
+  
   for (let i = 0; i < users.length; i += CONFIG.BATCH_SIZE) {
     const batch = users.slice(i, i + CONFIG.BATCH_SIZE);
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       batch.map(user => collectUserStats(user.id, user.address))
     );
+    
+    // Count deactivations in this batch
+    const batchDeactivated = results.filter(
+      result => result.status === 'fulfilled' && result.value === true
+    ).length;
+    totalDeactivated += batchDeactivated;
+    
     console.log(`Processed batch ${Math.floor(i / CONFIG.BATCH_SIZE) + 1}/${Math.ceil(users.length / CONFIG.BATCH_SIZE)} (${batch.length} users)`);
   }
-  return users.length;
+  
+  return { collected: users.length, deactivated: totalDeactivated };
 }
 
 /**
@@ -187,10 +81,16 @@ function updateUsersInChunks(
   return totalUpdated;
 }
 
+// Cache for discovered endpoint paths
+let discoveredPoolUsersPath: string | null = null;
+let discoveredPoolStatsPath: string | null = null;
+let discoveredUserStatsPath: string | null = null;
+
 /**
  * Fetch user stats and store them in the database
+ * @returns true if user was deactivated, false otherwise
  */
-async function collectUserStats(userId: number, address: string): Promise<void> {
+async function collectUserStats(userId: number, address: string): Promise<boolean> {
   try {
     const response = await withRetry(async () => {
       const apiUrl = process.env.API_URL;
@@ -204,8 +104,29 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
       }
 
+      // Get or discover the endpoint path
+      if (!discoveredUserStatsPath) {
+        const configuredPath = process.env.USER_STATS_ENDPOINT;
+        if (configuredPath) {
+          discoveredUserStatsPath = configuredPath;
+          console.log(`Using configured user stats endpoint: ${configuredPath}`);
+        } else {
+          // Use shared promise pattern - all concurrent requests will await the same discovery
+          try {
+            discoveredUserStatsPath = await getUserStatsEndpoint(apiUrl, headers, address);
+          } catch (error) {
+            // Discovery failed - this is expected if user stats endpoint doesn't exist
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            throw new Error(`Could not discover user stats endpoint: ${errorMsg}`);
+          }
+        }
+      }
+
+      // Replace {address} placeholder with actual address
+      const endpoint = discoveredUserStatsPath.replace('{address}', address);
+
       try {
-        const res = await fetch(`${apiUrl}/aggregator/users/${address}`, {
+        const res = await fetch(`${apiUrl}${endpoint}`, {
           headers,
         });
         if (!res.ok) {
@@ -215,8 +136,13 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
             const body = await res.text();
             if (body) errorDetail += `: ${body}`;
           } catch {}
+          
+          // Don't clear discoveredUserStatsPath on 404 for individual users
+          // A 404 for a specific user is normal (user may not have stats yet)
+          // Only the discovery process should determine if the endpoint is invalid
+          
           // Throw HttpError with status code so retry logic can determine if it's retryable
-          throw new HttpError(res.status, `HTTP ${res.status} ${errorDetail}`);
+          throw new HttpError(errorDetail, res.status);
         }
         return res;
       } catch (error) {
@@ -230,7 +156,14 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         }
         throw error;
       }
-    }, 6, 200, `GET /users/${address}`);
+    }, {
+      maxRetries: 2,
+      initialDelay: 200,
+      onRetry: (error, attempt, delay) => {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.log(`Retry attempt ${attempt}/2 after ${delay}ms [GET /users/${address}] - Error: ${errorMsg}`);
+      }
+    });
 
     const userData: UserData = await response.json();
     const now = Math.floor(Date.now() / 1000);
@@ -255,7 +188,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
           created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-
+      
       historyStmt.run(
         userId,
         userData.hashrate1m,
@@ -269,145 +202,222 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         now
       );
 
-      // Update monitored_users with latest bestever and earliest authorised_at
-      // bestever: only increase (higher is better)
-      // authorised_at: only decrease to earlier timestamp (earlier = more loyal), but never to 0
-      // Also reset failed_attempts since we succeeded
-      const updateStmt = db.prepare(`
-        UPDATE monitored_users
-        SET
-          bestever = CASE WHEN bestever < ? THEN ? ELSE bestever END,
-          authorised_at = CASE
-            WHEN ? > 0 AND (authorised_at = 0 OR authorised_at > ?)
-            THEN ?
-            ELSE authorised_at
-          END,
-          failed_attempts = 0,
-          updated_at = ?
-        WHERE id = ?
+      // Update current stats (upsert)
+      const currentStmt = db.prepare(`
+        INSERT INTO user_stats_current (
+          user_id,
+          hashrate1m,
+          hashrate5m,
+          hashrate1hr,
+          hashrate1d,
+          hashrate7d,
+          workers,
+          bestshare,
+          bestever,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+          hashrate1m = excluded.hashrate1m,
+          hashrate5m = excluded.hashrate5m,
+          hashrate1hr = excluded.hashrate1hr,
+          hashrate1d = excluded.hashrate1d,
+          hashrate7d = excluded.hashrate7d,
+          workers = excluded.workers,
+          bestshare = excluded.bestshare,
+          bestever = excluded.bestever,
+          updated_at = excluded.updated_at
       `);
-
-      updateStmt.run(
+      
+      currentStmt.run(
+        userId,
+        userData.hashrate1m,
+        userData.hashrate5m,
+        userData.hashrate1hr,
+        userData.hashrate1d,
+        userData.hashrate7d,
+        userData.workers,
+        userData.bestshare,
         userData.bestever,
-        userData.bestever,
-        userData.authorised,     // Check if API value is valid (> 0)
-        userData.authorised,     // Compare against existing value
-        userData.authorised,     // Set to this value if conditions met
-        now,
-        userId
+        now
       );
-    })();
 
-  } catch (error) {
-    console.error(`Error collecting stats for user ${address}:`, error);
-    
-    // Increment failed attempts and deactivate if threshold reached
-    const db = getDb();
-    db.transaction(() => {
-      // First get the current failed attempts count
-      const user = db.prepare('SELECT failed_attempts FROM monitored_users WHERE id = ?').get(userId) as { failed_attempts: number };
-      const newFailedAttempts = (user?.failed_attempts ?? 0) + 1;
-      const now = Math.floor(Date.now() / 1000);
-
-      // Then update based on the new count
-      const updateStmt = db.prepare(`
+      // Update the user record (mark as successful, reset failed attempts)
+      const updateUserStmt = db.prepare(`
         UPDATE monitored_users 
-        SET 
-          failed_attempts = ?,
-          is_active = ?,
-          updated_at = ?
+        SET updated_at = ?, 
+            failed_attempts = 0,
+            authorised_at = ?
         WHERE id = ?
       `);
-
-      // If we hit max failures, deactivate and reset counter, otherwise just increment
-      updateStmt.run(
-        newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS ? 0 : newFailedAttempts,
-        newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS ? 0 : 1,
-        now,
-        userId
-      );
-
-      if (newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS) {
-        console.log(`Deactivating user ${address} after ${CONFIG.MAX_FAILED_ATTEMPTS} failed attempts`);
-      }
+      
+      updateUserStmt.run(now, userData.authorised, userId);
     })();
+
+    return false; // User stats collected successfully, not deactivated
+  } catch {
+    // Record failure
+    const db = getDb();
+    const updateFailStmt = db.prepare(`
+      UPDATE monitored_users 
+      SET failed_attempts = failed_attempts + 1,
+          updated_at = ?
+      WHERE id = ?
+    `);
+    
+    const now = Math.floor(Date.now() / 1000);
+    updateFailStmt.run(now, userId);
+
+    // Check if we should deactivate this user
+    const user = db.prepare('SELECT failed_attempts FROM monitored_users WHERE id = ?').get(userId) as { failed_attempts: number };
+    
+    if (user && user.failed_attempts >= CONFIG.MAX_FAILED_ATTEMPTS) {
+      db.prepare('UPDATE monitored_users SET is_active = 0 WHERE id = ?').run(userId);
+      return true; // User was deactivated
+    }
+    
+    return false; // User failed but not yet deactivated
   }
 }
 
 /**
- * Fetch stats for all monitored users and manage user lifecycle
- * Handles auto-discovery, deactivation, and reactivation of users
+ * Collect stats for all monitored users
  */
-export async function collectAllUserStats() {
+async function collectAllUserStats() {
   if (isUserCollectorRunning) {
-    console.warn('⚠️  User stats collection already running, skipping this cycle');
-    return;
+    // Check if collection has been running too long (hung/stuck)
+    const now = Date.now();
+    const elapsedMinutes = (now - userCollectionStartTime) / (1000 * 60);
+    
+    if (elapsedMinutes > CONFIG.COLLECTION_TIMEOUT_MINUTES) {
+      console.error(
+        `❌ User stats collection has been stuck for ${Math.floor(elapsedMinutes)} minutes! ` +
+        `Force-resetting the lock. This indicates a serious issue that needs investigation.`
+      );
+      isUserCollectorRunning = false;
+      userCollectionStartTime = 0;
+      // Fall through to start a new collection
+    } else {
+      console.log("⚠️  User stats collection already running, skipping this cycle");
+      return;
+    }
   }
 
   try {
-    isUserCollectorRunning = true;
-    const db = getDb();
-    const now = Math.floor(Date.now() / 1000);
-    const backoffThreshold = now - (CONFIG.FAILED_USER_BACKOFF_MINUTES * 60);
-
-    // Fetch current pool users list directly from API
-    let poolUsers: Set<string>;
-    try {
-      poolUsers = await withRetry(async () => {
-        const apiUrl = process.env.API_URL;
-        if (!apiUrl) {
-          throw new Error('API_URL is not defined in environment variables');
-        }
-
-        const headers: Record<string, string> = {};
-        if (process.env.API_TOKEN) {
-          headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
-        }
-
-        const response = await fetch(`${apiUrl}/aggregator/users`, { headers });
-        if (!response.ok) {
-          throw new HttpError(response.status, `Failed to fetch users: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        // API returns array of address strings
-        return new Set<string>(data as string[]);
-      }, 5, 250, 'GET /users');
-    } catch (error) {
-      console.error('Error fetching pool users:', error);
-      poolUsers = new Set<string>();
-    }
-
-    if (poolUsers.size === 0) {
-      console.warn('⚠️  Pool users API returned empty - either API failed or pool is actually empty');
-      console.log('Skipping auto-discovery and lifecycle management, collecting stats for known active users only');
-
-      // Collect stats for existing active users even when API is down
-      const knownUsers = db.prepare(`
-        SELECT id, address, updated_at, failed_attempts
-        FROM monitored_users
-        WHERE is_active = 1
-      `).all() as Array<{ id: number; address: string; updated_at: number; failed_attempts: number }>;
-
-      // Apply backoff for users with recent failures
-      const usersToCollect = knownUsers.filter(user => {
-        return user.failed_attempts === 0 || user.updated_at < backoffThreshold;
-      });
-
-      const collectedCount = await processBatchedUserStats(usersToCollect);
-      console.log(`Collected stats for ${collectedCount} known users at ${new Date().toISOString()}`);
+    // Get pool users list first to determine who is active
+    const apiUrl = process.env.API_URL;
+    if (!apiUrl) {
+      console.error("Error fetching pool users: No API_URL defined in env");
       return;
     }
 
-    // Track lifecycle changes for logging
+    // Fetch the pool user list
+    const headers: Record<string, string> = {};
+    if (process.env.API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+    }
+
+    // Discover endpoint on first run or use cached/configured path
+    if (!discoveredPoolUsersPath) {
+      // Check if user configured it via env var
+      const configuredPath = process.env.POOL_USERS_ENDPOINT;
+      if (configuredPath) {
+        discoveredPoolUsersPath = configuredPath;
+        console.log(`Using configured pool users endpoint: ${configuredPath}`);
+      } else {
+        // Auto-discover
+        console.log(`🔍 Discovering pool users list endpoint...`);
+        try {
+          discoveredPoolUsersPath = await discoverPoolUsersEndpoint(apiUrl, headers);
+        } catch (error) {
+          console.error(error instanceof Error ? error.message : String(error));
+          return; // Skip this cycle
+        }
+      }
+    }
+
+    // Set the flag AFTER initial checks pass - prevents flag getting stuck on early returns
+    isUserCollectorRunning = true;
+    userCollectionStartTime = Date.now();
+
+    const poolUsersText = await withRetry(async () => {
+      const response = await fetch(`${apiUrl}${discoveredPoolUsersPath}`, { headers });
+      if (!response.ok) {
+        // On 404, clear cached path and try discovery again next time
+        if (response.status === 404) {
+          discoveredPoolUsersPath = null;
+        }
+        throw new HttpError(`Failed to fetch pool users: ${response.statusText}`, response.status);
+      }
+      return response.text();
+    }, {
+      maxRetries: 2,
+      initialDelay: 500,
+      onRetry: (error, attempt, delay) => {
+        console.log(`Retry attempt ${attempt}/2 after ${delay}ms [GET ${discoveredPoolUsersPath}]`);
+      }
+    });
+
+    // Parse pool users - handle JSON array, newline-delimited, and comma-separated formats
+    let poolUsersArray: string[];
+    const trimmedText = poolUsersText.trim();
+    
+    if (trimmedText.startsWith('[') && trimmedText.endsWith(']')) {
+      // JSON array format: ["addr1", "addr2", "addr3"]
+      try {
+        poolUsersArray = JSON.parse(trimmedText) as string[];
+      } catch (error) {
+        console.error('Failed to parse pool users JSON:', error);
+        poolUsersArray = [];
+      }
+    } else if (trimmedText.includes('\n')) {
+      // Newline-delimited format: addr1\naddr2\naddr3
+      poolUsersArray = trimmedText.split('\n');
+    } else if (trimmedText.includes(',')) {
+      // Comma-separated format: "addr1","addr2","addr3" or addr1,addr2,addr3
+      poolUsersArray = trimmedText.split(',');
+    } else {
+      // Single address or unknown format
+      poolUsersArray = [trimmedText];
+    }
+    
+    // Filter out empty, whitespace-only, quotes, or invalid addresses
+    const poolUsers = new Set(
+      poolUsersArray
+        .map(addr => addr.trim().replace(/^["']|["']$/g, '')) // Remove surrounding quotes
+        .filter(addr => addr.length > 0 && addr !== '[]' && !addr.startsWith('['))
+    );
+
+    // SAFETY CHECK: If pool users list is empty or suspiciously small, something is wrong
+    // Don't deactivate all users - skip this cycle and try again next time
+    if (poolUsers.size === 0) {
+      console.error(`❌ Pool users list is EMPTY! API may have returned invalid data. Skipping cycle to prevent deactivating all users.`);
+      console.error(`Raw API response (first 500 chars): ${poolUsersText.substring(0, 500)}`);
+      return;
+    }
+    
+    // Warn if pool users list is suspiciously small (less than 10% of previous known users)
+    const db = getDb();
+    const activeUserCount = db.prepare('SELECT COUNT(*) as count FROM monitored_users WHERE is_active = 1').get() as { count: number };
+    if (activeUserCount.count > 100 && poolUsers.size < activeUserCount.count * 0.1) {
+      console.warn(
+        `⚠️  WARNING: Pool users list seems suspiciously small! ` +
+        `Found ${poolUsers.size} users in pool, but we have ${activeUserCount.count} active monitored users. ` +
+        `This may indicate an API issue. Proceeding with caution...`
+      );
+    }
+    
+    // Log pool users count for debugging
+    console.log(`✓ Found ${poolUsers.size} users currently in pool`);
+    const now = Math.floor(Date.now() / 1000);
+    const backoffThreshold = now - (CONFIG.FAILED_USER_BACKOFF_MINUTES * 60);
+
     let addedCount = 0;
     let deactivatedCount = 0;
     let reactivatedCount = 0;
 
-    // Get all monitored users (active and inactive) with all needed fields
-    // We fetch this once and reuse for both auto-discovery and lifecycle management
+    // Get all monitored users
     const allUsers = db.prepare(`
-      SELECT id, address, is_active, updated_at, failed_attempts
+      SELECT id, address, is_active, updated_at, failed_attempts 
       FROM monitored_users
     `).all() as Array<{
       id: number;
@@ -525,19 +535,26 @@ export async function collectAllUserStats() {
       updateTransaction();
     }
 
-    const collectedCount = await processBatchedUserStats(usersToCollect);
+    const { collected: collectedCount, deactivated: failedDeactivatedCount } = await processBatchedUserStats(usersToCollect);
 
     // Log summary
     const lifecycleChanges = addedCount + deactivatedCount + reactivatedCount;
     if (lifecycleChanges > 0) {
       console.log(`User lifecycle: ${addedCount} added, ${deactivatedCount} deactivated, ${reactivatedCount} reactivated`);
     }
+    if (failedDeactivatedCount > 0) {
+      console.log(`⚠️  Deactivated ${failedDeactivatedCount} users after ${CONFIG.MAX_FAILED_ATTEMPTS} failed attempts`);
+    }
     console.log(`Collected stats for ${collectedCount} users at ${new Date().toISOString()}`);
 
   } catch (error) {
-    console.error("Error collecting user stats:", error);
+    // Only log if it's not a 404 (404s are already logged by withRetry)
+    if (!(error instanceof HttpError && error.statusCode === 404)) {
+      console.error("Error collecting user stats:", error);
+    }
   } finally {
     isUserCollectorRunning = false;
+    userCollectionStartTime = 0;
   }
 }
 
@@ -550,33 +567,95 @@ export async function collectPoolStats() {
   try {
     isCollectorRunning = true;
     
+    const apiUrl = process.env.API_URL;
+    if (!apiUrl) {
+      console.error("Error fetching pool stats: No API_URL defined in env");
+      return;
+    }
+
+    const headers: Record<string, string> = {};
+    if (process.env.API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+    }
+
+    // Discover endpoint on first run or use cached/configured path
+    if (!discoveredPoolStatsPath) {
+      // Check if user configured it via env var
+      const configuredPath = process.env.POOL_STATS_ENDPOINT;
+      if (configuredPath) {
+        discoveredPoolStatsPath = configuredPath;
+        console.log(`Using configured pool stats endpoint: ${configuredPath}`);
+      } else {
+        // Auto-discover
+        console.log(`🔍 Discovering pool statistics endpoint (pool-wide metrics)...`);
+        try {
+          discoveredPoolStatsPath = await discoverPoolStatsEndpoint(apiUrl, headers);
+        } catch (error) {
+          console.error(error instanceof Error ? error.message : String(error));
+          return; // Skip this cycle
+        }
+      }
+    }
+
     const text = await withRetry(async () => {
-      const apiUrl = process.env.API_URL;
-      if (!apiUrl) {
-        console.error("Error fetching pool stats: No API_URL defined in env");
-        throw new Error('API_URL is not defined in environment variables');
-      }
-
-      const headers: Record<string, string> = {};
-      if (process.env.API_TOKEN) {
-        headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
-      }
-
-      const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
+      const response = await fetch(`${apiUrl}${discoveredPoolStatsPath}`, {
         headers,
       });
       if (!response.ok) {
-        throw new HttpError(response.status, `Failed to fetch pool stats: ${response.statusText}`);
+        // On 404, clear cached path and try discovery again next time
+        if (response.status === 404) {
+          discoveredPoolStatsPath = null;
+        }
+        throw new HttpError(`Failed to fetch pool stats: ${response.statusText}`, response.status);
       }
       return response.text();
-    }, 4, 500, 'GET /pool/pool.status');
+    }, {
+      maxRetries: 2,
+      initialDelay: 500,
+      onRetry: (error, attempt, delay) => {
+        console.log(`Retry attempt ${attempt}/2 after ${delay}ms [GET ${discoveredPoolStatsPath}]`);
+      }
+    });
     
     // Split the response into lines and parse each JSON object
-    const jsonLines = text.trim().split('\n').map(line => JSON.parse(line));
+    const jsonLines = text.trim().split('\n').filter(line => line.trim().length > 0).map(line => JSON.parse(line) as Record<string, unknown>);
+    
+    if (jsonLines.length < 2) {
+      console.error(`Expected at least 2 JSON objects but got ${jsonLines.length}`);
+      console.error('Response:', text.substring(0, 500));
+      throw new Error(`Incomplete response: expected at least 2 JSON objects but got ${jsonLines.length}`);
+    }
     
     // Extract the data from different objects
-    const statsData = jsonLines[0] as StatsData;
-    const hashrateData = jsonLines[1] as HashrateData;
+    const statsData = jsonLines[0] as Record<string, unknown>;
+    const hashrateData = jsonLines[1] as Record<string, unknown>;
+    
+    // Validate using type guards
+    if (!isStatsData(statsData)) {
+      console.error('Invalid stats data structure. Available keys:', Object.keys(statsData));
+      throw new Error('Missing required stats data fields (Users/Workers)');
+    }
+    
+    if (!isHashrateData(hashrateData)) {
+      console.error('Invalid hashrate data structure. Available keys:', Object.keys(hashrateData));
+      throw new Error('Missing required hashrate data (hashrate15m)');
+    }
+    
+    // Now TypeScript knows these are the correct types
+    // Extract values with case-insensitive matching and assert types
+    const runtime = getCaseInsensitive(statsData, 'runtime') as number | undefined;
+    const users = (getCaseInsensitive(statsData, 'Users') ?? getCaseInsensitive(statsData, 'users')) as number;
+    const workers = (getCaseInsensitive(statsData, 'Workers') ?? getCaseInsensitive(statsData, 'workers')) as number;
+    const idle = (getCaseInsensitive(statsData, 'Idle') ?? getCaseInsensitive(statsData, 'idle') ?? 0) as number;
+    const disconnected = (getCaseInsensitive(statsData, 'Disconnected') ?? getCaseInsensitive(statsData, 'disconnected') ?? 0) as number;
+    
+    const hashrate1m = getCaseInsensitive(hashrateData, 'hashrate1m') as string | undefined;
+    const hashrate5m = getCaseInsensitive(hashrateData, 'hashrate5m') as string | undefined;
+    const hashrate15m = getCaseInsensitive(hashrateData, 'hashrate15m') as string;
+    const hashrate1hr = getCaseInsensitive(hashrateData, 'hashrate1hr') as string | undefined;
+    const hashrate6hr = getCaseInsensitive(hashrateData, 'hashrate6hr') as string | undefined;
+    const hashrate1d = getCaseInsensitive(hashrateData, 'hashrate1d') as string | undefined;
+    const hashrate7d = getCaseInsensitive(hashrateData, 'hashrate7d') as string | undefined;
     
     // Insert data into the database
     const db = getDb();
@@ -596,24 +675,27 @@ export async function collectPoolStats() {
     
     stmt.run(
       timestamp,
-      statsData.runtime,
-      statsData.Users,
-      statsData.Workers,
-      statsData.Idle,
-      statsData.Disconnected,
-      hashrateData.hashrate1m,
-      hashrateData.hashrate5m,
-      hashrateData.hashrate15m,
-      hashrateData.hashrate1hr,
-      hashrateData.hashrate6hr,
-      hashrateData.hashrate1d,
-      hashrateData.hashrate7d
+      runtime ?? 0,
+      users,
+      workers,
+      idle,
+      disconnected,
+      hashrate1m ?? '0',
+      hashrate5m ?? '0',
+      hashrate15m,
+      hashrate1hr ?? '0',
+      hashrate6hr ?? '0',
+      hashrate1d ?? '0',
+      hashrate7d ?? '0'
     );
     
     console.log(`Pool stats collected and stored at ${new Date().toISOString()}`);
     
   } catch (error) {
-    console.error("Error collecting pool stats:", error);
+    // Only log if it's not a 404 (404s are already logged by withRetry)
+    if (!(error instanceof HttpError && error.statusCode === 404)) {
+      console.error("Error collecting pool stats:", error);
+    }
   } finally {
     isCollectorRunning = false;
   }
