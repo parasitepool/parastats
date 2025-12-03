@@ -3,16 +3,24 @@
 import React, { useEffect, useState, useRef } from 'react';
 
 interface AnimatedCounterProps {
-  value: number;
+  value: bigint | number;
   duration?: number;
   maxAnimatedDigits?: number; // Maximum number of digits from the right to animate
+  revealedDigits?: number; // Number of trailing digits to reveal (others cycle like slot machine)
 }
+
+// Generate a random digit 0-9
+const randomDigit = () => Math.floor(Math.random() * 10).toString();
 
 export default function AnimatedCounter({ 
   value, 
   duration = 2000,
-  maxAnimatedDigits
+  maxAnimatedDigits,
+  revealedDigits
 }: AnimatedCounterProps) {
+  // Convert value to number for calculations
+  const numValue = typeof value === 'bigint' ? Number(value) : value;
+
   // Dynamically determine how many digits to animate based on value magnitude
   const getMaxAnimatedDigits = (num: number): number => {
     if (maxAnimatedDigits !== undefined) {
@@ -29,40 +37,99 @@ export default function AnimatedCounter({
     }
   };
 
-  const effectiveMaxDigits = getMaxAnimatedDigits(value);
+  const effectiveMaxDigits = getMaxAnimatedDigits(numValue);
 
-  const [displayValue, setDisplayValue] = useState(value);
+  const [displayValue, setDisplayValue] = useState<bigint>(typeof value === 'bigint' ? value : BigInt(value));
   const [isAnimating, setIsAnimating] = useState(false);
-  const prevValueRef = useRef(value);
-  const startValueRef = useRef(value); // Track where animation started from
+  const [rollingDigits, setRollingDigits] = useState<Set<number>>(new Set());
+  const [cyclingDigits, setCyclingDigits] = useState<Map<number, string>>(new Map());
+  const prevValueRef = useRef<bigint>(typeof value === 'bigint' ? value : BigInt(value));
+  const startValueRef = useRef<bigint>(typeof value === 'bigint' ? value : BigInt(value));
   const animationFrameRef = useRef<number | undefined>(undefined);
+  const cycleIntervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const isInitialMount = useRef(true);
 
+  // Handle the slot machine cycling for hidden digits
   useEffect(() => {
+    if (revealedDigits === undefined) return;
+
+    const formattedValue = displayValue.toLocaleString();
+    const chars = formattedValue.split('');
+    
+    // Count only actual digits (not commas) from the end
+    let digitCount = 0;
+    const revealedIndices = new Set<number>();
+    
+    for (let i = chars.length - 1; i >= 0 && digitCount < revealedDigits; i--) {
+      if (chars[i] !== ',') {
+        digitCount++;
+      }
+      revealedIndices.add(i);
+    }
+
+    // Find indices that should cycle (digits that aren't revealed)
+    const hiddenDigitIndices: number[] = [];
+    for (let i = 0; i < chars.length; i++) {
+      if (!revealedIndices.has(i) && chars[i] !== ',') {
+        hiddenDigitIndices.push(i);
+      }
+    }
+
+    // Start cycling animation for hidden digits
+    const cycle = () => {
+      const newCycling = new Map<number, string>();
+      for (const idx of hiddenDigitIndices) {
+        newCycling.set(idx, randomDigit());
+      }
+      setCyclingDigits(newCycling);
+    };
+
+    // Initial cycle
+    cycle();
+    
+    // Cycle every 80ms for smooth slot machine effect
+    cycleIntervalRef.current = setInterval(cycle, 80);
+
+    return () => {
+      if (cycleIntervalRef.current) {
+        clearInterval(cycleIntervalRef.current);
+      }
+    };
+  }, [displayValue, revealedDigits]);
+
+  useEffect(() => {
+    // Convert value to bigint
+    const targetValue = typeof value === 'bigint' ? value : BigInt(value);
+
     // On initial mount, animate from rounded value to actual value
     if (isInitialMount.current) {
       isInitialMount.current = false;
       
       // Round down to nearest value based on magnitude
-      const roundToNearest = (num: number): number => {
+      const roundToNearest = (num: number): bigint => {
         if (num >= 1_000_000_000_000) { // Trillion+
           // Round to nearest billion (zero out last 9 digits)
-          return Math.floor(num / 1_000_000_000) * 1_000_000_000;
+          return BigInt(Math.floor(num / 1_000_000_000) * 1_000_000_000);
         } else if (num >= 1_000_000_000) { // Billion+
           // Round to nearest million (zero out last 6 digits)
-          return Math.floor(num / 1_000_000) * 1_000_000;
+          return BigInt(Math.floor(num / 1_000_000) * 1_000_000);
         } else {
           // Round to nearest thousand (zero out last 3 digits)
-          return Math.floor(num / 1_000) * 1_000;
+          return BigInt(Math.floor(num / 1_000) * 1_000);
         }
       };
       
-      const startValue = roundToNearest(value);
+      const startValue = roundToNearest(numValue);
       setDisplayValue(startValue);
-      startValueRef.current = startValue; // Track start value for comparison
+      startValueRef.current = startValue;
       
       // Trigger animation
       setIsAnimating(true);
+      
+      // Shuffle all digits on first load
+      const formattedValue = targetValue.toString();
+      const digitIndices = new Set(Array.from({ length: formattedValue.length }, (_, i) => i));
+      setRollingDigits(digitIndices);
       
       // Animate from rounded value to actual value
       const startTime = Date.now();
@@ -73,15 +140,17 @@ export default function AnimatedCounter({
         
         // Ease-out cubic
         const easeOut = 1 - Math.pow(1 - progress, 3);
-        const currentValue = Math.floor(startValue + (value - startValue) * easeOut);
+        const diff = Number(targetValue - startValue);
+        const currentValue = startValue + BigInt(Math.floor(diff * easeOut));
         setDisplayValue(currentValue);
 
         if (progress < 1) {
           animationFrameRef.current = requestAnimationFrame(animate);
         } else {
-          setDisplayValue(value);
+          setDisplayValue(targetValue);
           setIsAnimating(false);
-          prevValueRef.current = value;
+          setRollingDigits(new Set());
+          prevValueRef.current = targetValue;
         }
       };
       
@@ -89,16 +158,27 @@ export default function AnimatedCounter({
       return;
     }
 
-    // On value changes, animate from old to new
-    if (prevValueRef.current === value) {
+    // On value changes, only animate changed digits
+    if (prevValueRef.current === targetValue) {
       return;
     }
 
+    const oldStr = prevValueRef.current.toString().padStart(targetValue.toString().length, '0');
+    const newStr = targetValue.toString();
+    
+    // Find which digit positions changed
+    const changedIndices = new Set<number>();
+    for (let i = 0; i < newStr.length; i++) {
+      if (oldStr[i] !== newStr[i]) {
+        changedIndices.add(i);
+      }
+    }
+    
+    setRollingDigits(changedIndices);
     setIsAnimating(true);
 
     const startValue = prevValueRef.current;
-    startValueRef.current = startValue; // Track start value for comparison
-    const endValue = value;
+    startValueRef.current = startValue;
     const startTime = Date.now();
 
     const animate = () => {
@@ -108,15 +188,17 @@ export default function AnimatedCounter({
       
       // Ease-out cubic
       const easeOut = 1 - Math.pow(1 - progress, 3);
-      const currentValue = Math.floor(startValue + (endValue - startValue) * easeOut);
+      const diff = Number(targetValue - startValue);
+      const currentValue = startValue + BigInt(Math.floor(diff * easeOut));
       setDisplayValue(currentValue);
 
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
-        setDisplayValue(endValue);
+        setDisplayValue(targetValue);
         setIsAnimating(false);
-        prevValueRef.current = endValue;
+        setRollingDigits(new Set());
+        prevValueRef.current = targetValue;
       }
     };
 
@@ -127,11 +209,23 @@ export default function AnimatedCounter({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [value, duration]);
+  }, [value, duration, numValue]);
 
   // Format the display value
   const formattedValue = displayValue.toLocaleString();
   const chars = formattedValue.split('');
+
+  // Calculate which indices are revealed (counting from the end, only digits)
+  const revealedIndices = new Set<number>();
+  if (revealedDigits !== undefined) {
+    let digitCount = 0;
+    for (let i = chars.length - 1; i >= 0 && digitCount < revealedDigits; i--) {
+      if (chars[i] !== ',') {
+        digitCount++;
+      }
+      revealedIndices.add(i);
+    }
+  }
 
   // Helper to determine if a character at index should show rolling animation
   const shouldShowRolling = (index: number): boolean => {
@@ -163,9 +257,11 @@ export default function AnimatedCounter({
   };
 
   return (
-    <span className="flex">
+    <span className="inline-flex">
       {chars.map((char, index) => {
         const isRolling = shouldShowRolling(index);
+        const isHidden = revealedDigits !== undefined && !revealedIndices.has(index) && char !== ',';
+        const cycledChar = isHidden ? cyclingDigits.get(index) || char : char;
         
         return (
           <span
@@ -175,33 +271,45 @@ export default function AnimatedCounter({
               overflow-hidden
               relative
               ${isRolling ? 'animate-digit-roll' : ''}
+              ${isHidden ? 'text-accent-3/70 animate-slot-reel' : ''}
             `}
             style={{
               minWidth: char === ',' ? '0.3em' : '0.6em',
               textAlign: 'center'
             }}
           >
-            {char}
+            {isHidden ? cycledChar : char}
           </span>
         );
       })}
       <style jsx>{`
         @keyframes digit-roll {
           0% { 
-            filter: blur(0px);
-            opacity: 0.7;
+            opacity: 1;
           }
-          50% {
-            filter: blur(0.5px);
-            opacity: 0.85;
+          50% { 
+            opacity: 0.5;
           }
           100% { 
-            filter: blur(0px);
             opacity: 1;
           }
         }
         .animate-digit-roll {
-          animation: digit-roll 0.3s ease-in-out;
+          animation: digit-roll 0.5s ease-in-out;
+        }
+        @keyframes slot-reel {
+          0%, 100% {
+            transform: translateY(0);
+          }
+          25% {
+            transform: translateY(-2px);
+          }
+          75% {
+            transform: translateY(2px);
+          }
+        }
+        .animate-slot-reel {
+          animation: slot-reel 0.15s ease-in-out infinite;
         }
       `}</style>
     </span>
