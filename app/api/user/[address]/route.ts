@@ -37,6 +37,7 @@ export interface ProcessedUserData {
   lastSubmission: string;
   bestDifficulty: string;
   uptime: string;
+  authorised: number; // Unix timestamp of first connection
   isPublic: boolean;
   workerData: ProcessedWorkerData[];
 }
@@ -94,6 +95,7 @@ export async function GET(
       lastSubmission: formatRelativeTime(userData.lastshare),
       bestDifficulty: formatDifficulty(userData.bestever),
       uptime: calculateUptime(userData.authorised),
+      authorised: userData.authorised, // Pass through the authorised timestamp
       isPublic: dbUser ? Boolean(dbUser.is_public) : true, // Default to public if not in DB
       workerData: processWorkerData(userData.worker),
     };
@@ -166,4 +168,4 @@ export async function PATCH(
       { status: 500 }
     );
   }
-} 
+}

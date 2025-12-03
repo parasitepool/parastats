@@ -15,6 +15,8 @@ import { parseHashrate } from '@/app/utils/formatters';
 import LightningBalance from '@/app/components/LightningBalance';
 import StratumInfo from '@/app/components/StratumInfo';
 import AnimatedCounter from '@/app/components/AnimatedCounter';
+import GamifiedMinerStats from '@/app/components/GamifiedMinerStats';
+import EnhancedGamifiedMinerStats from '@/app/components/EnhancedGamifiedMinerStats';
 import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
@@ -351,7 +353,13 @@ export default function UserDashboard() {
     },
     {
       title: 'Total Work',
-      value: accountData?.total_diff ? <AnimatedCounter value={accountData.total_diff} /> : <span className="text-gray-400">-</span>,
+      value: accountData?.total_diff ? (
+        <span className="block whitespace-nowrap">
+          <AnimatedCounter value={Number(accountData.total_diff)} />
+        </span>
+      ) : (
+        <span className="text-gray-400">-</span>
+      ),
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -368,7 +376,7 @@ export default function UserDashboard() {
       )
     },
     {
-      title: 'Uptime',
+      title: 'Miner Uptime',
       value: userData?.uptime || <span className="text-gray-400">-</span>,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -466,13 +474,94 @@ export default function UserDashboard() {
                   {!hasInitiallyLoaded || isLoadingAccountData ? (
                     <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
                   ) : (
-                    <div className="text-2xl font-semibold">{card.value}</div>
+                    <div 
+                      className="text-xl font-semibold whitespace-nowrap w-full overflow-hidden text-left"
+                    >
+                      {card.value}
+                    </div>
                   )}
                 </div>
               </div>
             ))}
           </div>
         </div>
+
+        {/* Gamified Miner Stats - Both Versions for Comparison */}
+        {userData && accountData && (() => {
+          // Calculate total shares from worker data
+          const totalShares = userData.workerData?.reduce((sum, worker) => {
+            return sum + (parseInt(worker.lastSubmission) || 0);
+          }, 0) || 0;
+          
+          return (
+            <div className="w-full mt-6 space-y-8">
+              {/* Version 1: Regular Gamified Stats */}
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <h2 className="text-xl font-semibold">⚡ Version 1: Simple Gamified Stats</h2>
+                  <span className="text-xs bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full border border-blue-500/50">
+                    Clean & Straightforward
+                  </span>
+                </div>
+                <GamifiedMinerStats
+                  authorisedTimestamp={userData.authorised}
+                  totalShares={totalShares}
+                  currentHashrate={userData.hashrate / 1e12}
+                  lastSubmission={Math.floor(Date.now() / 1000) - 5}
+                />
+              </div>
+
+              {/* Divider */}
+              <div className="border-t-2 border-dashed border-gray-700 my-8"></div>
+
+              {/* Version 2: Enhanced Gamified Stats */}
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <h2 className="text-xl font-semibold">🎰 Version 2: Enhanced Gamified Stats</h2>
+                  <span className="text-xs bg-purple-500/20 text-purple-400 px-3 py-1 rounded-full border border-purple-500/50">
+                    Mystery Counter + Achievements
+                  </span>
+                </div>
+                <EnhancedGamifiedMinerStats
+                  authorisedTimestamp={userData.authorised}
+                  totalShares={totalShares}
+                  totalWork={BigInt(accountData.total_diff || 0)}
+                  currentHashrate={userData.hashrate / 1e12}
+                  lastSubmission={Math.floor(Date.now() / 1000) - 5}
+                />
+              </div>
+
+              {/* Comparison Note */}
+              <div className="bg-gray-900/50 border border-gray-700 p-6 rounded">
+                <h3 className="text-sm font-semibold mb-3 text-yellow-400">📊 Quick Comparison:</h3>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <h4 className="font-medium text-blue-400 mb-2">Version 1 (Simple):</h4>
+                    <ul className="space-y-1 text-gray-300 text-xs">
+                      <li>✓ Clean progress bars</li>
+                      <li>✓ Live countdowns</li>
+                      <li>✓ Level system</li>
+                      <li>✓ Streak tracking</li>
+                      <li>✓ Hashrate stability</li>
+                      <li>✓ Minimal UI clutter</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-purple-400 mb-2">Version 2 (Enhanced):</h4>
+                    <ul className="space-y-1 text-gray-300 text-xs">
+                      <li>✓ Everything from Version 1</li>
+                      <li>✓ 🎰 Slot machine mystery counter</li>
+                      <li>✓ Progressive digit reveal by level</li>
+                      <li>✓ Badge emoji progression</li>
+                      <li>✓ Achievement grid (6 badges)</li>
+                      <li>✓ More animations & effects</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Account Activation / Lightning & Stratum Information */}
         <div className="w-full mt-4">
