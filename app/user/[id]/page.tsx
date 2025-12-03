@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility, getPoolStats } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -15,11 +15,11 @@ import { parseHashrate } from '@/app/utils/formatters';
 import LightningBalance from '@/app/components/LightningBalance';
 import StratumInfo from '@/app/components/StratumInfo';
 import AnimatedCounter from '@/app/components/AnimatedCounter';
-import VerboseUptime from '@/app/components/VerboseUptime';
+import GamifiedMinerStats from '@/app/components/GamifiedMinerStats';
+import EnhancedGamifiedMinerStats from '@/app/components/EnhancedGamifiedMinerStats';
 import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
-import type { PoolStats as PoolStatsType } from '@/app/utils/api';
 
 export default function UserDashboard() {
   const params = useParams();
@@ -36,8 +36,6 @@ export default function UserDashboard() {
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [poolStats, setPoolStats] = useState<PoolStatsType | null>(null);
-  const [isLoadingPoolStats, setIsLoadingPoolStats] = useState(true);
   
   const {
     isLightningAuthenticated,
@@ -204,34 +202,6 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
-  // Fetch pool stats on mount and every 20 seconds
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchPoolStats = async () => {
-      try {
-        const stats = await getPoolStats();
-        if (mounted) {
-          setPoolStats(stats);
-        }
-      } catch (error) {
-        console.error('Error fetching pool stats:', error);
-      } finally {
-        if (mounted) {
-          setIsLoadingPoolStats(false);
-        }
-      }
-    };
-
-    fetchPoolStats();
-    const intervalId = setInterval(fetchPoolStats, 20000); // Update every 20 seconds
-
-    return () => {
-      mounted = false;
-      clearInterval(intervalId);
-    };
-  }, []);
-
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
     if (!userData) return;
@@ -358,8 +328,7 @@ export default function UserDashboard() {
     {
       title: 'Best Difficulty',
       value: userData?.bestDifficulty && hashrate?.currentDifficulty ? 
-        <span className='flex gap-1 text-base sm:text-lg md:text-sm lg:text-base xl:text-xl'>
-          <span className="md:text-base lg:text-lg xl:text-xl">{userData.bestDifficulty}</span>
+        <span className='flex gap-1'>{userData.bestDifficulty} 
           <span 
             className="relative inline-block"
             onMouseEnter={() => setTooltipVisible(true)}
@@ -385,7 +354,7 @@ export default function UserDashboard() {
     {
       title: 'Total Work',
       value: accountData?.total_diff ? (
-        <span className="block whitespace-nowrap text-base sm:text-lg md:text-sm lg:text-base xl:text-xl">
+        <span className="block whitespace-nowrap">
           <AnimatedCounter value={Number(accountData.total_diff)} />
         </span>
       ) : (
@@ -412,35 +381,6 @@ export default function UserDashboard() {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-        </svg>
-      )
-    },
-    {
-      title: 'Pool Uptime',
-      value: poolStats?.uptime || <span className="text-gray-400">-</span>,
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-        </svg>
-      )
-    },
-    {
-      title: 'Verbose Uptime',
-      value: userData?.uptime ? (
-        <VerboseUptime 
-          uptimeString={userData.uptime}
-          firstSeenTimestamp={userData.authorised}
-          stacked={true}
-        />
-      ) : (
-        <span className="text-gray-400">-</span>
-      ),
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14.531 12.469 6.619 20.38a1 1 0 1 1-3-3l7.912-7.912" />
-          <path d="M15.686 4.314A12.5 12.5 0 0 0 5.461 2.958 1 1 0 0 0 5.58 4.71a22 22 0 0 1 6.318 3.393" />
-          <path d="M17.7 3.7a1 1 0 0 0-1.4 0l-4.6 4.6a1 1 0 0 0 0 1.4l2.6 2.6a1 1 0 0 0 1.4 0l4.6-4.6a1 1 0 0 0 0-1.4z" />
-          <path d="M19.686 8.314a12.501 12.501 0 0 1 1.356 10.225 1 1 0 0 1-1.751-.119 22 22 0 0 0-3.393-6.319" />
         </svg>
       )
     }
@@ -524,18 +464,18 @@ export default function UserDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
             {statCards.map((card, index) => (
               <div key={index}>
-                <div className="bg-background p-4 shadow-md border border-border h-full flex flex-col">
-                  <div className="flex items-center mb-3">
-                    <div className="mr-2 text-accent-3 flex-shrink-0">
+                <div className="bg-background p-4 shadow-md border border-border h-full">
+                  <div className="flex items-center mb-2">
+                    <div className="mr-2 text-accent-3">
                       {card.icon}
                     </div>
                     <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
                   </div>
-                  {!hasInitiallyLoaded || isLoadingAccountData || (card.title === 'Pool Uptime' && isLoadingPoolStats) ? (
+                  {!hasInitiallyLoaded || isLoadingAccountData ? (
                     <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
                   ) : (
                     <div 
-                      className="text-xl font-semibold w-full text-left flex-grow flex items-center"
+                      className="text-xl font-semibold whitespace-nowrap w-full overflow-hidden text-left"
                     >
                       {card.value}
                     </div>
@@ -545,6 +485,83 @@ export default function UserDashboard() {
             ))}
           </div>
         </div>
+
+        {/* Gamified Miner Stats - Both Versions for Comparison */}
+        {userData && accountData && (() => {
+          // Calculate total shares from worker data
+          const totalShares = userData.workerData?.reduce((sum, worker) => {
+            return sum + (parseInt(worker.lastSubmission) || 0);
+          }, 0) || 0;
+          
+          return (
+            <div className="w-full mt-6 space-y-8">
+              {/* Version 1: Regular Gamified Stats */}
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <h2 className="text-xl font-semibold">⚡ Version 1: Simple Gamified Stats</h2>
+                  <span className="text-xs bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full border border-blue-500/50">
+                    Clean & Straightforward
+                  </span>
+                </div>
+                <GamifiedMinerStats
+                  authorisedTimestamp={userData.authorised}
+                  totalShares={totalShares}
+                  currentHashrate={userData.hashrate / 1e12}
+                  lastSubmission={Math.floor(Date.now() / 1000) - 5}
+                />
+              </div>
+
+              {/* Divider */}
+              <div className="border-t-2 border-dashed border-gray-700 my-8"></div>
+
+              {/* Version 2: Enhanced Gamified Stats */}
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <h2 className="text-xl font-semibold">🎰 Version 2: Enhanced Gamified Stats</h2>
+                  <span className="text-xs bg-purple-500/20 text-purple-400 px-3 py-1 rounded-full border border-purple-500/50">
+                    Mystery Counter + Achievements
+                  </span>
+                </div>
+                <EnhancedGamifiedMinerStats
+                  authorisedTimestamp={userData.authorised}
+                  totalShares={totalShares}
+                  totalWork={BigInt(accountData.total_diff || 0)}
+                  currentHashrate={userData.hashrate / 1e12}
+                  lastSubmission={Math.floor(Date.now() / 1000) - 5}
+                />
+              </div>
+
+              {/* Comparison Note */}
+              <div className="bg-gray-900/50 border border-gray-700 p-6 rounded">
+                <h3 className="text-sm font-semibold mb-3 text-yellow-400">📊 Quick Comparison:</h3>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <h4 className="font-medium text-blue-400 mb-2">Version 1 (Simple):</h4>
+                    <ul className="space-y-1 text-gray-300 text-xs">
+                      <li>✓ Clean progress bars</li>
+                      <li>✓ Live countdowns</li>
+                      <li>✓ Level system</li>
+                      <li>✓ Streak tracking</li>
+                      <li>✓ Hashrate stability</li>
+                      <li>✓ Minimal UI clutter</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-purple-400 mb-2">Version 2 (Enhanced):</h4>
+                    <ul className="space-y-1 text-gray-300 text-xs">
+                      <li>✓ Everything from Version 1</li>
+                      <li>✓ 🎰 Slot machine mystery counter</li>
+                      <li>✓ Progressive digit reveal by level</li>
+                      <li>✓ Badge emoji progression</li>
+                      <li>✓ Achievement grid (6 badges)</li>
+                      <li>✓ More animations & effects</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Account Activation / Lightning & Stratum Information */}
         <div className="w-full mt-4">
