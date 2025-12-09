@@ -33,8 +33,6 @@
     "@eslint/eslintrc": "^3.3.3",
     "@tailwindcss/postcss": "^4.1.17",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/bitcoinjs-lib": "^5.0.4",
-    "@types/echarts": "5.0.0",
     "@types/node": "^24.10.2",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19.2.7",
