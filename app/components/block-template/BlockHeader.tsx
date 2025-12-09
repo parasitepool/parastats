@@ -24,7 +24,7 @@ export default function BlockHeader({ notification }: BlockHeaderProps) {
       
       // Parse coinbase transaction to get block height
       const tx = getTransaction(coinbaseRaw);
-      const scriptSigInfo = decodeCoinbaseScriptSigInfo(tx.ins[0].script);
+      const scriptSigInfo = decodeCoinbaseScriptSigInfo(Buffer.from(tx.ins[0].script));
       
       // Calculate difficulty from nBits
       const difficulty = calculateDifficultyFromNBits(notification.nBits);
