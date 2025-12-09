@@ -147,7 +147,8 @@ function updateUsersInChunks(
  */
 async function collectUserStats(userId: number, address: string): Promise<void> {
   try {
-    const response = await withRetry(async () => {
+    // Include response.json() inside retry wrapper to handle connection errors during body reading
+    const userData = await withRetry(async () => {
       const apiUrl = process.env.API_URL;
       if (!apiUrl) {
         console.error("Failed to fetch user data: No API_URL defined in env");
@@ -172,7 +173,8 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
           // Throw HttpError with status code so retry logic can determine if it's retryable
           throw new HttpError(res.status, res.statusText, `${apiUrl}/aggregator/users/${address}`, responseBody || undefined);
         }
-        return res;
+        // Parse JSON inside retry wrapper to handle connection errors during body reading
+        return await res.json() as UserData;
       } catch (error) {
         // Re-throw HttpError as-is to preserve status code
         if (error instanceof HttpError) {
@@ -185,8 +187,6 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         throw error;
       }
     }, 5, 300, `GET /users/${address}`);
-
-    const userData: UserData = await response.json();
     const now = Math.floor(Date.now() / 1000);
 
     // Insert data into the database
