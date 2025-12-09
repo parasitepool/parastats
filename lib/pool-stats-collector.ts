@@ -1,51 +1,6 @@
 import cron from 'node-cron';
 import { getDb } from './db';
-import { fetch } from './http-client';
-
-/**
- * Custom error class for HTTP errors with status codes
- */
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string
-  ) {
-    super(message);
-    this.name = 'HttpError';
-  }
-}
-
-/**
- * Check if an error is retryable based on HTTP status code or error type
- *
- * Non-retryable errors (fail immediately):
- * - 4xx client errors (400, 401, 403, 404, 409, 422, etc.) - won't change on retry
- *
- * Retryable errors (should retry with backoff):
- * - 429 Too Many Requests - rate limiting
- * - 5xx server errors (500, 502, 503, 504) - temporary server issues
- * - Network errors (connection refused, timeout, DNS failures)
- */
-function isRetryableError(error: unknown): boolean {
-  if (error instanceof HttpError) {
-    const status = error.status;
-
-    // Rate limiting - should retry with backoff
-    if (status === 429) return true;
-
-    // Server errors - temporary issues, should retry
-    if (status >= 500 && status < 600) return true;
-
-    // Client errors - permanent failures, don't retry
-    if (status >= 400 && status < 500) return false;
-
-    // Shouldn't reach here, but default to retryable for unknown status codes
-    return true;
-  }
-
-  // Network errors and other non-HTTP errors - should retry
-  return true;
-}
+import { fetch, HttpError, isRetryableError } from './http-client';
 
 interface StatsData {
   runtime: number;
@@ -192,7 +147,8 @@ function updateUsersInChunks(
  */
 async function collectUserStats(userId: number, address: string): Promise<void> {
   try {
-    const response = await withRetry(async () => {
+    // Include response.json() inside retry wrapper to handle connection errors during body reading
+    const userData = await withRetry(async () => {
       const apiUrl = process.env.API_URL;
       if (!apiUrl) {
         console.error("Failed to fetch user data: No API_URL defined in env");
@@ -210,15 +166,15 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         });
         if (!res.ok) {
           // Try to get response body for more details
-          let errorDetail = res.statusText;
+          let responseBody: string | undefined;
           try {
-            const body = await res.text();
-            if (body) errorDetail += `: ${body}`;
+            responseBody = await res.text();
           } catch {}
           // Throw HttpError with status code so retry logic can determine if it's retryable
-          throw new HttpError(res.status, `HTTP ${res.status} ${errorDetail}`);
+          throw new HttpError(res.status, res.statusText, `${apiUrl}/aggregator/users/${address}`, responseBody || undefined);
         }
-        return res;
+        // Parse JSON inside retry wrapper to handle connection errors during body reading
+        return await res.json() as UserData;
       } catch (error) {
         // Re-throw HttpError as-is to preserve status code
         if (error instanceof HttpError) {
@@ -230,9 +186,7 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         }
         throw error;
       }
-    }, 6, 200, `GET /users/${address}`);
-
-    const userData: UserData = await response.json();
+    }, 5, 300, `GET /users/${address}`);
     const now = Math.floor(Date.now() / 1000);
 
     // Insert data into the database
@@ -366,13 +320,13 @@ export async function collectAllUserStats() {
 
         const response = await fetch(`${apiUrl}/aggregator/users`, { headers });
         if (!response.ok) {
-          throw new HttpError(response.status, `Failed to fetch users: ${response.statusText}`);
+          throw new HttpError(response.status, response.statusText, `${apiUrl}/aggregator/users`);
         }
 
         const data = await response.json();
         // API returns array of address strings
         return new Set<string>(data as string[]);
-      }, 5, 250, 'GET /users');
+      }, 5, 300, 'GET /users');
     } catch (error) {
       console.error('Error fetching pool users:', error);
       poolUsers = new Set<string>();
@@ -562,14 +516,15 @@ export async function collectPoolStats() {
         headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
       }
 
-      const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
+      const url = `${apiUrl}/aggregator/pool/pool.status`;
+      const response = await fetch(url, {
         headers,
       });
       if (!response.ok) {
-        throw new HttpError(response.status, `Failed to fetch pool stats: ${response.statusText}`);
+        throw new HttpError(response.status, response.statusText, url);
       }
       return response.text();
-    }, 4, 500, 'GET /pool/pool.status');
+    }, 5, 300, 'GET /pool/pool.status');
     
     // Split the response into lines and parse each JSON object
     const jsonLines = text.trim().split('\n').map(line => JSON.parse(line));
