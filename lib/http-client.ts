@@ -169,12 +169,6 @@ function recreateAgent(): Dispatcher {
   return globalForHttp2.__http2Agent;
 }
 
-// For backwards compatibility, expose http2Agent as a getter
-const http2Agent: Dispatcher = new Proxy({} as Dispatcher, {
-  get(_target, prop) {
-    return (getAgent() as Record<string | symbol, unknown>)[prop];
-  },
-});
 
 /**
  * HTTP/2-enabled fetch function
@@ -495,6 +489,6 @@ export async function fetchText(
 }
 
 /**
- * Export the agent for advanced use cases where direct access is needed
+ * Export agent getter for advanced use cases where direct access is needed
  */
-export { http2Agent };
+export { getAgent };
