@@ -19,10 +19,12 @@ jobs:
     - name: Install dependencies
       run: pnpm install
 
+    - name: Security audit
+      run: pnpm audit --audit-level=high
+
     - name: Lint
       run: pnpm lint
 
     - name: Build
       run: pnpm build
-
 
