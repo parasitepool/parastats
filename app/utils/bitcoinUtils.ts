@@ -104,7 +104,7 @@ export function computeCoinbaseOutputValue(coinbaseRaw: string): number {
   
   try {
     const tx = getTransaction(coinbaseRaw);
-    const totalValue = tx.outs.reduce((sum, out) => sum + out.value, 0);
+    const totalValue = tx.outs.reduce((sum, out) => sum + Number(out.value), 0);
     
     coinbaseOutputValueCache.set(coinbaseRaw, totalValue);
     manageCacheSize(coinbaseOutputValueCache);
@@ -268,7 +268,7 @@ export function computeCoinbaseOutputs(coinbaseRaw: string): CoinbaseOutput[] {
     const outputs: CoinbaseOutput[] = [];
     
     for (const out of tx.outs) {
-      const scriptHex = out.script.toString('hex');
+      const scriptHex = Buffer.from(out.script).toString('hex');
       let outputType: 'address' | 'nulldata' | 'unknown' = 'unknown';
       let outputAddress: string | undefined;
       let decodedData: OpReturnData | null = null;
@@ -280,7 +280,7 @@ export function computeCoinbaseOutputs(coinbaseRaw: string): CoinbaseOutput[] {
       } else {
         // Try to decode as address
         try {
-          outputAddress = address.fromOutputScript(out.script, networks.bitcoin);
+          outputAddress = address.fromOutputScript(Buffer.from(out.script), networks.bitcoin);
           outputType = 'address';
         } catch {
           // If we can't decode as address, check for known script patterns
@@ -291,7 +291,7 @@ export function computeCoinbaseOutputs(coinbaseRaw: string): CoinbaseOutput[] {
       
       outputs.push({
         type: outputType,
-        value: out.value,
+        value: Number(out.value),
         address: outputAddress,
         hex: scriptHex,
         decodedData
@@ -360,7 +360,7 @@ export function getFormattedCoinbaseAsciiTag(
   
   try {
     const cbRaw = coinbase1 + extranonce1 + ('00'.repeat(extranonce2Length)) + coinbase2;
-    const { remainingScriptHex } = decodeCoinbaseScriptSigInfo(getTransaction(cbRaw).ins[0].script);
+    const { remainingScriptHex } = decodeCoinbaseScriptSigInfo(Buffer.from(getTransaction(cbRaw).ins[0].script));
     
     const formatted = formatScriptAsAscii(remainingScriptHex);
     
@@ -494,10 +494,10 @@ export function getCoinbaseTxDetails(coinbaseRaw: string): CoinbaseTxDetails {
     if (tx.ins && tx.ins.length > 0 && tx.ins[0].witness && tx.ins[0].witness.length === 1) {
       // Double-check by ensuring a witness commitment output actually exists
       const hasWitnessCommitmentOutput = tx.outs.some(out => 
-        out.script.toString('hex').startsWith('6a24aa21a9ed')
+        Buffer.from(out.script).toString('hex').startsWith('6a24aa21a9ed')
       );
       if (hasWitnessCommitmentOutput) {
-        witnessCommitmentNonce = tx.ins[0].witness[0].toString('hex');
+        witnessCommitmentNonce = Buffer.from(tx.ins[0].witness[0]).toString('hex');
       }
     }
 
