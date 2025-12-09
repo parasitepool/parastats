@@ -13,7 +13,10 @@ const FooterWithSearchParams = () => {
 
     useEffect(() => {
         if (searchParams.has('help')) {
-            setShowHelpModal(true);
+            // Use queueMicrotask to avoid synchronous setState in effect
+            queueMicrotask(() => {
+                setShowHelpModal(true);
+            });
 
             const newSearchParams = new URLSearchParams(searchParams);
             newSearchParams.delete('help');

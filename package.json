@@ -7,8 +7,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "lint:fix": "next lint --fix",
+    "lint": "eslint --config eslint.config.mjs",
+    "lint:fix": "eslint --config eslint.config.mjs --fix",
     "collect-stats": "tsx scripts/start-jobs.ts"
   },
   "dependencies": {

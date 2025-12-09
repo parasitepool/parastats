@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { ClockIcon, CalendarIcon, LightningIcon, CurrencyDollarIcon } from './icons';
 
 interface UserMiningStatsProps {
@@ -14,13 +14,22 @@ export default function UserMiningStats({
   minerWattages,
   electricityRate: initialElectricityRate = 0.12 // Default electricity rate if not provided
 }: UserMiningStatsProps) {
-  const [monthlyChance, setMonthlyChance] = useState<string>("Calculating...");
-  const [yearlyChance, setYearlyChance] = useState<string>("Calculating...");
-  const [dailyCost, setDailyCost] = useState<string>("Calculating...");
-  const [monthlyCost, setMonthlyCost] = useState<string>("Calculating...");
-  const [electricityRate, setElectricityRate] = useState<number>(initialElectricityRate);
+  // Use lazy initialization to load from localStorage without causing setState in effect
+  const [electricityRate, setElectricityRate] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const savedRate = localStorage.getItem('electricityRate');
+      if (savedRate) {
+        const parsedRate = parseFloat(savedRate);
+        if (!isNaN(parsedRate) && parsedRate > 0) {
+          return parsedRate;
+        }
+      }
+    }
+    return initialElectricityRate;
+  });
+  
   const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [inputValue, setInputValue] = useState<string>(initialElectricityRate.toString());
+  const [inputValue, setInputValue] = useState<string>(() => electricityRate.toString());
   
   // Current network difficulty - in a real app this would be fetched from an API
   const [networkDifficulty, setNetworkDifficulty] = useState<number>(72e12); // 72 trillion (example)
@@ -31,21 +40,6 @@ export default function UserMiningStats({
 
   // Calculate total wattage from all miners
   const totalWattage = minerWattages.reduce((sum, wattage) => sum + wattage, 0);
-  
-  // Load saved electricity rate from localStorage on initial mount
-  useEffect(() => {
-    // Only run in the browser, not during SSR
-    if (typeof window !== 'undefined') {
-      const savedRate = localStorage.getItem('electricityRate');
-      if (savedRate) {
-        const parsedRate = parseFloat(savedRate);
-        if (!isNaN(parsedRate) && parsedRate > 0) {
-          setElectricityRate(parsedRate);
-          setInputValue(parsedRate.toString());
-        }
-      }
-    }
-  }, []);
   
   useEffect(() => {
     // Simulate API fetch for network difficulty
@@ -70,8 +64,28 @@ export default function UserMiningStats({
     fetchNetworkData();
   }, []);
 
-  useEffect(() => {
-    if (isLoading) return;
+  // Helper function to format probability in a readable way
+  const formatProbability = (probability: number): string => {
+    if (probability >= 0.01) {
+      // Show as percentage if >= 1%
+      return `${(probability * 100).toFixed(2)}%`;
+    } else {
+      // Show as "1 in X" format for small probabilities
+      const oneInX = Math.round(1 / probability);
+      return `1 in ${oneInX.toLocaleString()}`;
+    }
+  };
+
+  // Use useMemo to calculate mining statistics instead of useEffect with setState
+  const miningStats = useMemo(() => {
+    if (isLoading) {
+      return {
+        monthlyChance: "Calculating...",
+        yearlyChance: "Calculating...",
+        dailyCost: "Calculating...",
+        monthlyCost: "Calculating..."
+      };
+    }
     
     // Parse hashrate (remove 'TH/s' and convert to number)
     const hashrateValue = parseFloat(userHashrate.replace(" TH/s", ""));
@@ -92,10 +106,6 @@ export default function UserMiningStats({
     const blocksPerYear = 144 * 365;
     const yearlyProbability = (hashrateValue / networkHashrate) * blocksPerYear;
     
-    // Format probabilities as percentages with appropriate precision
-    setMonthlyChance(formatProbability(monthlyProbability));
-    setYearlyChance(formatProbability(yearlyProbability));
-    
     // Calculate electricity costs
     // Daily cost: (wattage / 1000) * 24 hours * electricity rate
     const dailyKwh = (totalWattage / 1000) * 24;
@@ -104,23 +114,13 @@ export default function UserMiningStats({
     // Monthly cost (30 days)
     const monthlyElectricityCost = dailyElectricityCost * 30;
     
-    // Format costs with currency
-    setDailyCost(`$${dailyElectricityCost.toFixed(2)}`);
-    setMonthlyCost(`$${monthlyElectricityCost.toFixed(2)}`);
-    
-  }, [userHashrate, networkDifficulty, isLoading, minerWattages, electricityRate, totalWattage]);
-
-  // Helper function to format probability in a readable way
-  const formatProbability = (probability: number): string => {
-    if (probability >= 0.01) {
-      // Show as percentage if >= 1%
-      return `${(probability * 100).toFixed(2)}%`;
-    } else {
-      // Show as "1 in X" format for small probabilities
-      const oneInX = Math.round(1 / probability);
-      return `1 in ${oneInX.toLocaleString()}`;
-    }
-  };
+    return {
+      monthlyChance: formatProbability(monthlyProbability),
+      yearlyChance: formatProbability(yearlyProbability),
+      dailyCost: `$${dailyElectricityCost.toFixed(2)}`,
+      monthlyCost: `$${monthlyElectricityCost.toFixed(2)}`
+    };
+  }, [userHashrate, networkDifficulty, isLoading, electricityRate, totalWattage]);
 
   // Save the electricity rate to localStorage and update state
   const saveElectricityRate = (value: string) => {
@@ -173,22 +173,22 @@ export default function UserMiningStats({
   const statCards = [
     {
       title: '1 Month Block Chance',
-      value: monthlyChance,
+      value: miningStats.monthlyChance,
       icon: <ClockIcon />
     },
     {
       title: '1 Year Block Chance',
-      value: yearlyChance,
+      value: miningStats.yearlyChance,
       icon: <CalendarIcon />
     },
     {
       title: 'Daily Electricity Cost',
-      value: dailyCost,
+      value: miningStats.dailyCost,
       icon: <LightningIcon />
     },
     {
       title: 'Monthly Electricity Cost',
-      value: monthlyCost,
+      value: miningStats.monthlyCost,
       icon: <CurrencyDollarIcon />
     },
   ];

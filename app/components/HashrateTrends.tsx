@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import StatCard from "./StatCard";
 import { formatHashrate } from "../utils/formatters";
 import type { HistoricalPoolStats } from "../api/pool-stats/historical/route";
@@ -23,14 +23,18 @@ export default function HashrateTrends({
   historicalData,
   loading: externalLoading = false,
 }: HashrateTrendsProps) {
-  const [data, setData] = useState<{
-    oneDayAvg: HashrateWithChange;
-    sixDayAvg: HashrateWithChange;
-    nineDayAvg: HashrateWithChange;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
+  // Use state for current time to avoid calling impure function during render
+  const [now, setNow] = useState<number>(() => Date.now() / 1000);
+  
+  // Update time when historical data changes
   useEffect(() => {
+    queueMicrotask(() => {
+      setNow(Date.now() / 1000);
+    });
+  }, [historicalData]);
+  
+  // Use useMemo to compute data instead of useEffect with setState
+  const data = useMemo(() => {
     // If historical data is provided as prop, use it instead of fetching
     if (historicalData && historicalData.length > 0) {
       try {
@@ -38,7 +42,6 @@ export default function HashrateTrends({
         const sortedData = [...historicalData].sort((a, b) => a.timestamp - b.timestamp);
         
         // Calculate averages for different periods
-        const now = Date.now() / 1000;
         const oneDayData = sortedData.filter(item => item.timestamp >= now - 24 * 60 * 60);
         const sixDayData = sortedData.filter(item => item.timestamp >= now - 6 * 24 * 60 * 60);
         const nineDayData = sortedData.filter(item => item.timestamp >= now - 9 * 24 * 60 * 60);
@@ -75,19 +78,20 @@ export default function HashrateTrends({
         const prev9DayAvg = calculateAvg(prev9DayData);
         const nineDayChange = prev9DayAvg ? ((nineDayAvgValue - prev9DayAvg) / prev9DayAvg) * 100 : 0;
         
-        setData({
+        return {
           oneDayAvg: { value: oneDayAvgValue, change: oneDayChange },
           sixDayAvg: { value: sixDayAvgValue, change: sixDayChange },
           nineDayAvg: { value: nineDayAvgValue, change: nineDayChange },
-        });
-        
-        setError(null);
+        };
       } catch (err) {
         console.error('Error processing hashrate trends:', err);
-        setError('Failed to process data');
+        return null;
       }
     }
-  }, [historicalData]);
+    return null;
+  }, [historicalData, now]);
+
+  const [error] = useState<string | null>(null);
 
   const formatChange = (change: number) => {
     const isPositive = change >= 0;
