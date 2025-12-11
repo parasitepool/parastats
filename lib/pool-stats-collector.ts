@@ -662,7 +662,6 @@ export async function syncAccountTotalBlocks() {
               return { success: true };
             }
 
-            console.log(res);
             // 404 is expected for users without accounts - not an error
             if (res.status === 404) {
               return { success: true };
