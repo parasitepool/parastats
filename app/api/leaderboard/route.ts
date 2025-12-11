@@ -15,6 +15,7 @@ interface DifficultyUser extends BaseUser {
 
 interface LoyaltyUser extends BaseUser {
   total_blocks: number;
+  bestever: number;
   created_at: number;
 }
 
@@ -62,7 +63,8 @@ export async function GET(request: Request) {
             address,
             authorised_at,
             created_at,
-            total_blocks
+            total_blocks,
+            bestever
           FROM monitored_users 
           WHERE is_active = 1 AND is_public = 1 AND total_blocks > 0
           ORDER BY total_blocks DESC
