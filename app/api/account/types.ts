@@ -3,6 +3,7 @@ export interface AccountData {
   ln_address: string | null;
   past_ln_addresses: string[];
   total_diff: bigint;
+  total_blocks: number;
   last_updated: string | null;
 }
 

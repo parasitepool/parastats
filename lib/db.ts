@@ -80,6 +80,16 @@ function initializeTables() {
     }
   }
 
+  // Add total_blocks column for loyalty ranking based on blocks mined
+  try {
+    db.exec(`ALTER TABLE monitored_users ADD COLUMN total_blocks INTEGER NOT NULL DEFAULT 0`);
+  } catch (error: unknown) {
+    // Column might already exist, which is fine
+    if (error instanceof Error && !error.message.includes('duplicate column name')) {
+      console.error('Error adding total_blocks column:', error);
+    }
+  }
+
   // Create index on address for faster lookups
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_monitored_users_address ON monitored_users(address)

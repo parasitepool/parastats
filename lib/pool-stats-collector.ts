@@ -40,6 +40,7 @@ interface MonitoredUser {
 
 let isCollectorRunning = false;
 let isUserCollectorRunning = false;
+let isAccountSyncRunning = false;
 
 // Configuration constants
 const CONFIG = {
@@ -587,17 +588,106 @@ export function startPoolStatsCollector() {
   const userJob = cron.schedule('* * * * *', async () => {
     await collectAllUserStats();
   });
+
+  // Run account sync every 10 minutes (for total_blocks loyalty ranking)
+  const accountSyncJob = cron.schedule('*/10 * * * *', async () => {
+    await syncAccountTotalBlocks();
+  });
   
   console.log('Stats collectors started');
   
   // Run initial collections immediately
   collectPoolStats();
   collectAllUserStats();
+  syncAccountTotalBlocks();
   
   return {
     poolJob,
-    userJob
+    userJob,
+    accountSyncJob
   };
+}
+
+/**
+ * Sync total_blocks from para server accounts to local SQLite
+ * Used for loyalty ranking based on blocks mined
+ */
+export async function syncAccountTotalBlocks() {
+  if (isAccountSyncRunning) {
+    console.warn('⚠️  Account sync already running, skipping this cycle');
+    return;
+  }
+
+  try {
+    isAccountSyncRunning = true;
+    const db = getDb();
+    const apiUrl = process.env.API_URL;
+
+    if (!apiUrl) {
+      console.error('Failed to sync account data: No API_URL defined in env');
+      return;
+    }
+
+    const headers: Record<string, string> = {};
+    if (process.env.API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+    }
+
+    // Get all active users
+    const users = db.prepare('SELECT id, address FROM monitored_users WHERE is_active = 1').all() as Array<{ id: number; address: string }>;
+
+    if (users.length === 0) {
+      console.log('No active users to sync total_blocks for');
+      return;
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Process in batches to avoid overwhelming the API
+    for (let i = 0; i < users.length; i += CONFIG.BATCH_SIZE) {
+      const batch = users.slice(i, i + CONFIG.BATCH_SIZE);
+      
+      const results = await Promise.allSettled(
+        batch.map(async (user) => {
+          try {
+            const res = await fetch(`${apiUrl}/account/${user.address}`, { headers });
+            if (res.ok) {
+              const data = await res.json() as { total_blocks?: number };
+              const totalBlocks = data.total_blocks ?? 0;
+              
+              db.prepare('UPDATE monitored_users SET total_blocks = ? WHERE id = ?')
+                .run(totalBlocks, user.id);
+              
+              return { success: true };
+            }
+            // 404 is expected for users without accounts - not an error
+            if (res.status === 404) {
+              return { success: true };
+            }
+            return { success: false };
+          } catch {
+            return { success: false };
+          }
+        })
+      );
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.success) {
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      }
+    }
+
+    console.log(`Synced total_blocks for ${successCount} users (${errorCount} errors) at ${new Date().toISOString()}`);
+
+  } catch (error) {
+    console.error('Error syncing account total_blocks:', error);
+  } finally {
+    isAccountSyncRunning = false;
+  }
 }
 
 /**

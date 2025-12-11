@@ -14,12 +14,13 @@ interface DifficultyUser extends BaseUser {
 }
 
 interface LoyaltyUser extends BaseUser {
-  bestever: number;
+  total_blocks: number;
   created_at: number;
 }
 
 interface CombinedUser extends BaseUser {
   diff: number;
+  total_blocks: number;
   diff_rank: number;
   loyalty_rank: number;
   combined_score: number;
@@ -61,10 +62,10 @@ export async function GET(request: Request) {
             address,
             authorised_at,
             created_at,
-            bestever
+            total_blocks
           FROM monitored_users 
-          WHERE is_active = 1 AND is_public = 1 AND authorised_at != 0
-          ORDER BY authorised_at ASC
+          WHERE is_active = 1 AND is_public = 1 AND total_blocks > 0
+          ORDER BY total_blocks DESC
           LIMIT ?
         `).all(limit).map((user: unknown) => ({
           ...(user as LoyaltyUser),
@@ -80,17 +81,17 @@ export async function GET(request: Request) {
               id,
               address,
               bestever,
-              authorised_at,
+              total_blocks,
               RANK() OVER (ORDER BY bestever DESC) as diff_rank,
-              RANK() OVER (ORDER BY authorised_at ASC) as loyalty_rank
+              RANK() OVER (ORDER BY total_blocks DESC) as loyalty_rank
             FROM monitored_users
-            WHERE is_active = 1 AND is_public = 1 AND authorised_at != 0
+            WHERE is_active = 1 AND is_public = 1 AND (bestever > 0 OR total_blocks > 0)
           )
           SELECT 
             id,
             address,
             bestever as diff,
-            authorised_at,
+            total_blocks,
             diff_rank,
             loyalty_rank,
             (diff_rank + loyalty_rank) / 2.0 as combined_score
