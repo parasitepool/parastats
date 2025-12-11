@@ -109,10 +109,10 @@ class StratumCollector {
     }
   }
 
-  private handleData(data: Buffer): void {
+  private handleData(data: Buffer | string): void {
     try {
       // Add new data to buffer
-      this.messageBuffer += data.toString();
+      this.messageBuffer += typeof data === 'string' ? data : data.toString();
       
       // Process complete messages (separated by newlines)
       const lines = this.messageBuffer.split('\n');
