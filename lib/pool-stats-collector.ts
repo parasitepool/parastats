@@ -40,7 +40,7 @@ interface MonitoredUser {
 
 let isCollectorRunning = false;
 let isUserCollectorRunning = false;
-let isAccountSyncRunning = false;
+let isAccountJobRunning = false;
 
 // Configuration constants
 const CONFIG = {
@@ -589,8 +589,8 @@ export function startPoolStatsCollector() {
     await collectAllUserStats();
   });
 
-  // Run account sync every 10 minutes (for total_blocks loyalty ranking)
-  const accountSyncJob = cron.schedule('*/10 * * * *', async () => {
+  // Run account data sync every 10 minutes (for total_blocks loyalty ranking)
+  const accountJob = cron.schedule('*/10 * * * *', async () => {
     await syncAccountTotalBlocks();
   });
   
@@ -604,7 +604,7 @@ export function startPoolStatsCollector() {
   return {
     poolJob,
     userJob,
-    accountSyncJob
+    accountJob
   };
 }
 
@@ -613,13 +613,13 @@ export function startPoolStatsCollector() {
  * Used for loyalty ranking based on blocks mined
  */
 export async function syncAccountTotalBlocks() {
-  if (isAccountSyncRunning) {
-    console.warn('⚠️  Account sync already running, skipping this cycle');
+  if (isAccountJobRunning) {
+    console.warn('⚠️  Account job already running, skipping this cycle');
     return;
   }
 
   try {
-    isAccountSyncRunning = true;
+    isAccountJobRunning = true;
     const db = getDb();
     const apiUrl = process.env.API_URL;
 
@@ -661,6 +661,8 @@ export async function syncAccountTotalBlocks() {
               
               return { success: true };
             }
+
+            console.log(res);
             // 404 is expected for users without accounts - not an error
             if (res.status === 404) {
               return { success: true };
@@ -686,7 +688,7 @@ export async function syncAccountTotalBlocks() {
   } catch (error) {
     console.error('Error syncing account total_blocks:', error);
   } finally {
-    isAccountSyncRunning = false;
+    isAccountJobRunning = false;
   }
 }
 

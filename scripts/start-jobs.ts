@@ -45,7 +45,7 @@ function shutdown() {
   if (statsCollectorJob) {
     statsCollectorJob.poolJob.stop();
     statsCollectorJob.userJob.stop();
-    statsCollectorJob.accountSyncJob.stop();
+    statsCollectorJob.accountJob.stop();
   }
 
   if (purgeJob) {
