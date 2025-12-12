@@ -299,7 +299,12 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
     })();
 
   } catch (error) {
-    console.error(`Error collecting stats for user ${address}:`, error);
+    // Log concisely for expected errors (404 = user not found), verbose for unexpected errors
+    if (error instanceof HttpError && error.status === 404) {
+      // Already logged by withRetry as "Non-retryable error", no need to log again
+    } else {
+      console.error(`Error collecting stats for user ${address}:`, error);
+    }
     
     // Increment failed attempts and deactivate if threshold reached
     const db = getDb();
