@@ -65,6 +65,7 @@ function initializeTables() {
       bestever REAL DEFAULT 0,
       authorised_at INTEGER DEFAULT 0,
       failed_attempts INTEGER NOT NULL DEFAULT 0,
+      total_blocks INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )
@@ -80,6 +81,16 @@ function initializeTables() {
     }
   }
 
+  // Add total_blocks column for loyalty ranking based on blocks mined
+  try {
+    db.exec(`ALTER TABLE monitored_users ADD COLUMN total_blocks INTEGER NOT NULL DEFAULT 0`);
+  } catch (error: unknown) {
+    // Column might already exist, which is fine
+    if (error instanceof Error && !error.message.includes('duplicate column name')) {
+      console.error('Error adding total_blocks column:', error);
+    }
+  }
+
   // Create index on address for faster lookups
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_monitored_users_address ON monitored_users(address)
@@ -88,6 +99,14 @@ function initializeTables() {
   // Create index on is_active for efficient filtering during collection
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_monitored_users_active ON monitored_users(is_active)
+  `);
+
+  // Index to speed up loyalty leaderboard queries (filter active/public, sort by total_blocks)
+  // Note: Composite index only helps when filtering left-to-right (is_active first, then is_public).
+  // Won't help queries filtering on is_public alone or sorting by total_blocks without the filters.
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_monitored_users_loyalty
+    ON monitored_users(is_active, is_public, total_blocks DESC)
   `);
 
   // Create user stats history table

@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { getDb } from './db';
 import { fetch, HttpError, isRetryableError } from './http-client';
+import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
 
 interface StatsData {
   runtime: number;
@@ -40,6 +41,7 @@ interface MonitoredUser {
 
 let isCollectorRunning = false;
 let isUserCollectorRunning = false;
+let isAccountJobRunning = false;
 
 // Configuration constants
 const CONFIG = {
@@ -587,17 +589,122 @@ export function startPoolStatsCollector() {
   const userJob = cron.schedule('* * * * *', async () => {
     await collectAllUserStats();
   });
+
+  // Run account data sync every 10 minutes (for total_blocks loyalty ranking)
+  const accountJob = cron.schedule('*/10 * * * *', async () => {
+    await syncAccountTotalBlocks();
+  });
   
   console.log('Stats collectors started');
   
   // Run initial collections immediately
   collectPoolStats();
   collectAllUserStats();
+  syncAccountTotalBlocks();
   
   return {
     poolJob,
-    userJob
+    userJob,
+    accountJob
   };
+}
+
+/**
+ * Sync total_blocks from para server accounts to local SQLite
+ * Used for loyalty ranking based on blocks mined
+ */
+export async function syncAccountTotalBlocks() {
+  if (isAccountJobRunning) {
+    console.warn('⚠️  Account job already running, skipping this cycle');
+    return;
+  }
+
+  try {
+    isAccountJobRunning = true;
+    const db = getDb();
+    const apiUrl = process.env.API_URL;
+
+    if (!apiUrl) {
+      console.error('Failed to sync account data: No API_URL defined in env');
+      return;
+    }
+
+    const headers: Record<string, string> = {};
+    if (process.env.API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
+    }
+
+    // Get all active users
+    const users = db.prepare('SELECT id, address FROM monitored_users WHERE is_active = 1').all() as Array<{ id: number; address: string }>;
+
+    if (users.length === 0) {
+      console.log('No active users to sync total_blocks for');
+      return;
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+    const updateStmt = db.prepare('UPDATE monitored_users SET total_blocks = ? WHERE id = ?');
+    const updateBatch = db.transaction((updates: Array<{ id: number; total_blocks: number }>) => {
+      for (const u of updates) updateStmt.run(u.total_blocks, u.id);
+    });
+
+    // Process in batches to avoid overwhelming the API
+    for (let i = 0; i < users.length; i += CONFIG.BATCH_SIZE) {
+      const batch = users.slice(i, i + CONFIG.BATCH_SIZE);
+      
+      const results = await Promise.allSettled(batch.map(async (user) => {
+        try {
+          const url = `${apiUrl}/account/${user.address}`;
+          const totalBlocks = await withRetry(async () => {
+            const res = await fetchWithTimeout(url, { headers });
+
+            // 404 is expected for users without accounts - treat as 0 blocks (also clears stale values)
+            if (res.status === 404) return 0;
+
+            if (!res.ok) {
+              throw new HttpError(res.status, res.statusText, url);
+            }
+
+            const data = await res.json() as { total_blocks?: number; metadata?: { block_count?: number } };
+            // Backend may provide blocks mined either as `total_blocks` or inside `metadata.block_count`
+            return data.total_blocks ?? data.metadata?.block_count ?? 0;
+          }, 4, 500, `account total_blocks ${user.address}`);
+
+          return { success: true, update: { id: user.id, total_blocks: totalBlocks } };
+        } catch (err) {
+          console.warn(`Failed to fetch total_blocks for ${user.address}:`, err instanceof Error ? err.message : err);
+          return { success: false as const };
+        }
+      }));
+
+      const updates: Array<{ id: number; total_blocks: number }> = [];
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.success && 'update' in result.value) {
+          updates.push(result.value.update);
+        }
+      }
+
+      if (updates.length > 0) {
+        updateBatch(updates);
+      }
+
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value.success) {
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      }
+    }
+
+    console.log(`Synced total_blocks for ${successCount} users (${errorCount} errors) at ${new Date().toISOString()}`);
+
+  } catch (error) {
+    console.error('Error syncing account total_blocks:', error);
+  } finally {
+    isAccountJobRunning = false;
+  }
 }
 
 /**
