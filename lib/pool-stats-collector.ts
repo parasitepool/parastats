@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { getDb } from './db';
 import { fetch, HttpError, isRetryableError } from './http-client';
+import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
 
 interface StatsData {
   runtime: number;
@@ -656,7 +657,7 @@ export async function syncAccountTotalBlocks() {
         try {
           const url = `${apiUrl}/account/${user.address}`;
           const totalBlocks = await withRetry(async () => {
-            const res = await fetch(url, { headers });
+            const res = await fetchWithTimeout(url, { headers });
 
             // 404 is expected for users without accounts - treat as 0 blocks (also clears stale values)
             if (res.status === 404) return 0;
@@ -671,7 +672,8 @@ export async function syncAccountTotalBlocks() {
           }, 4, 500, `account total_blocks ${user.address}`);
 
           return { success: true, update: { id: user.id, total_blocks: totalBlocks } };
-        } catch {
+        } catch (err) {
+          console.warn(`Failed to fetch total_blocks for ${user.address}:`, err instanceof Error ? err.message : err);
           return { success: false as const };
         }
       }));

@@ -9,15 +9,10 @@ interface BaseUser {
 
 interface DifficultyUser extends BaseUser {
   diff: number;
-  authorised_at: number;
-  created_at: number;
 }
 
 interface LoyaltyUser extends BaseUser {
-  authorised_at: number;
   total_blocks: number;
-  bestever: number;
-  created_at: number;
 }
 
 interface CombinedUser extends BaseUser {
@@ -44,11 +39,9 @@ export async function GET(request: Request) {
           SELECT 
             id,
             address,
-            bestever as diff,
-            authorised_at,
-            created_at
+            bestever as diff
           FROM monitored_users 
-          WHERE is_active = 1 AND is_public = 1 AND authorised_at != 0
+          WHERE is_active = 1 AND is_public = 1 AND bestever > 0
           ORDER BY bestever DESC
           LIMIT ?
         `).all(limit).map((user: unknown) => ({
@@ -62,10 +55,7 @@ export async function GET(request: Request) {
           SELECT 
             id,
             address,
-            authorised_at,
-            created_at,
-            total_blocks,
-            bestever
+            total_blocks
           FROM monitored_users 
           WHERE is_active = 1 AND is_public = 1 AND total_blocks > 0
           ORDER BY total_blocks DESC
