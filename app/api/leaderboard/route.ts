@@ -5,15 +5,16 @@ import { formatAddress } from '@/app/utils/formatters';
 interface BaseUser {
   id: number;
   address: string;
-  authorised_at: number;
 }
 
 interface DifficultyUser extends BaseUser {
   diff: number;
+  authorised_at: number;
   created_at: number;
 }
 
 interface LoyaltyUser extends BaseUser {
+  authorised_at: number;
   total_blocks: number;
   bestever: number;
   created_at: number;

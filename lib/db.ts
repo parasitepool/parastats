@@ -65,6 +65,7 @@ function initializeTables() {
       bestever REAL DEFAULT 0,
       authorised_at INTEGER DEFAULT 0,
       failed_attempts INTEGER NOT NULL DEFAULT 0,
+      total_blocks INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     )
@@ -98,6 +99,12 @@ function initializeTables() {
   // Create index on is_active for efficient filtering during collection
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_monitored_users_active ON monitored_users(is_active)
+  `);
+
+  // Index to speed up loyalty leaderboard queries (filter active/public, sort by total_blocks)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_monitored_users_loyalty
+    ON monitored_users(is_active, is_public, total_blocks DESC)
   `);
 
   // Create user stats history table
