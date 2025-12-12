@@ -1,9 +1,11 @@
+import type { JsonValue as Json } from '@/app/types/json';
+
 export interface AccountData {
   btc_address: string;
   ln_address: string | null;
   past_ln_addresses: string[];
   total_diff: bigint;
-  total_blocks: number;
+  metadata: Json | null;
   last_updated: string | null;
 }
 
