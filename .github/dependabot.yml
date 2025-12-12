@@ -12,8 +12,6 @@ updates:
         update-types:
           - "minor"
           - "patch"
-    labels:
-      - "dependencies"
 
   - package-ecosystem: "github-actions"
     directory: "/"
