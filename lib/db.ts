@@ -102,6 +102,8 @@ function initializeTables() {
   `);
 
   // Index to speed up loyalty leaderboard queries (filter active/public, sort by total_blocks)
+  // Note: Composite index only helps when filtering left-to-right (is_active first, then is_public).
+  // Won't help queries filtering on is_public alone or sorting by total_blocks without the filters.
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_monitored_users_loyalty
     ON monitored_users(is_active, is_public, total_blocks DESC)

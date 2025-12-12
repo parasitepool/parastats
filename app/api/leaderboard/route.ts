@@ -78,7 +78,7 @@ export async function GET(request: Request) {
               RANK() OVER (ORDER BY bestever DESC) as diff_rank,
               RANK() OVER (ORDER BY total_blocks DESC) as loyalty_rank
             FROM monitored_users
-            WHERE is_active = 1 AND is_public = 1 AND (bestever > 0 OR total_blocks > 0)
+            WHERE is_active = 1 AND is_public = 1 AND max(total_blocks, bestever) > 0
           )
           SELECT 
             id,
