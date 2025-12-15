@@ -6,13 +6,12 @@ interface BlockWinner {
   block_height: number;
   winner_address: string;
   difficulty: number;
-  collected_at: number;
+  block_timestamp: number | null;
 }
 
 interface UserBlockDiff {
   address: string;
   difficulty: number;
-  collected_at: number;
 }
 
 export async function GET(
@@ -38,7 +37,7 @@ export async function GET(
         block_height,
         winner_address,
         difficulty,
-        collected_at
+        block_timestamp
       FROM block_highest_diff
       WHERE block_height = ?
     `).get(blockHeight) as BlockWinner | undefined;
@@ -54,8 +53,7 @@ export async function GET(
     const userDiffs = db.prepare(`
       SELECT 
         address,
-        difficulty,
-        collected_at
+        difficulty
       FROM user_block_diff
       WHERE block_height = ?
       ORDER BY difficulty DESC
@@ -63,12 +61,12 @@ export async function GET(
 
     return NextResponse.json({
       block_height: winner.block_height,
+      block_timestamp: winner.block_timestamp,
       winner: {
         address: formatAddress(winner.winner_address),
         fullAddress: winner.winner_address,
         difficulty: winner.difficulty,
       },
-      collected_at: winner.collected_at,
       users: userDiffs.map(u => ({
         address: formatAddress(u.address),
         fullAddress: u.address,
@@ -85,4 +83,5 @@ export async function GET(
     );
   }
 }
+
 

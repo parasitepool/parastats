@@ -164,47 +164,35 @@ function initializeTables() {
   `);
 
   // Create block highest diff table (pool-wide winner per block)
+  // block_timestamp is the actual Bitcoin block timestamp from mempool.space
   db.exec(`
     CREATE TABLE IF NOT EXISTS block_highest_diff (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      block_height INTEGER NOT NULL UNIQUE,
+      block_height INTEGER PRIMARY KEY,
       winner_address TEXT NOT NULL,
       difficulty REAL NOT NULL,
-      collected_at INTEGER NOT NULL
+      block_timestamp INTEGER
     )
   `);
 
-  // Create indexes for block highest diff queries
+  // Index for leaderboard queries by winner
   db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_block_highest_diff_height ON block_highest_diff(block_height);
     CREATE INDEX IF NOT EXISTS idx_block_highest_diff_winner ON block_highest_diff(winner_address);
   `);
 
-  // Create per-user block diff table
+  // Create per-user block diff table with foreign key to block_highest_diff
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_block_diff (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
       block_height INTEGER NOT NULL,
       address TEXT NOT NULL,
       difficulty REAL NOT NULL,
-      collected_at INTEGER NOT NULL,
-      UNIQUE(block_height, address)
+      PRIMARY KEY (block_height, address),
+      FOREIGN KEY (block_height) REFERENCES block_highest_diff(block_height) ON DELETE CASCADE
     )
   `);
 
-  // Create indexes for user block diff queries
+  // Index for user-specific queries
   db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_user_block_diff_height ON user_block_diff(block_height);
     CREATE INDEX IF NOT EXISTS idx_user_block_diff_address ON user_block_diff(address);
-    CREATE INDEX IF NOT EXISTS idx_user_block_diff_height_address ON user_block_diff(block_height, address);
-  `);
-
-  // Create block timestamps table (maps block_height to its actual Bitcoin timestamp)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS block_timestamps (
-      block_height INTEGER PRIMARY KEY,
-      timestamp INTEGER NOT NULL
-    )
   `);
 }
 

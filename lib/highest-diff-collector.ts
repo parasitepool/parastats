@@ -127,19 +127,19 @@ async function fetchBlockTimestamp(blockHeight: number): Promise<number | null> 
 function hasBlockTimestamp(blockHeight: number): boolean {
   const db = getDb();
   const result = db.prepare(
-    'SELECT 1 FROM block_timestamps WHERE block_height = ?'
+    'SELECT block_timestamp FROM block_highest_diff WHERE block_height = ? AND block_timestamp IS NOT NULL'
   ).get(blockHeight);
   return result !== undefined;
 }
 
 /**
- * Store block timestamp
+ * Store block timestamp (updates existing record)
  */
 function storeBlockTimestamp(blockHeight: number, timestamp: number): void {
   const db = getDb();
   db.prepare(
-    'INSERT OR REPLACE INTO block_timestamps (block_height, timestamp) VALUES (?, ?)'
-  ).run(blockHeight, timestamp);
+    'UPDATE block_highest_diff SET block_timestamp = ? WHERE block_height = ?'
+  ).run(timestamp, blockHeight);
 }
 
 /**
@@ -234,7 +234,7 @@ function hasBlockData(blockHeight: number): boolean {
 
 /**
  * Clean up old block data, keeping only the last MAX_BLOCKS_TO_KEEP blocks
- * Deletes from block_highest_diff, user_block_diff, and block_timestamps tables
+ * Deletes from block_highest_diff (cascades to user_block_diff via FK)
  */
 function cleanupOldBlocks(): void {
   const db = getDb();
@@ -250,25 +250,13 @@ function cleanupOldBlocks(): void {
     
     const cutoffHeight = maxHeight - CONFIG.MAX_BLOCKS_TO_KEEP;
     
-    // Delete old records from all tables in a transaction
-    const deleted = db.transaction(() => {
-      const winnerResult = db.prepare(
-        'DELETE FROM block_highest_diff WHERE block_height < ?'
-      ).run(cutoffHeight);
-      
-      const userResult = db.prepare(
-        'DELETE FROM user_block_diff WHERE block_height < ?'
-      ).run(cutoffHeight);
-      
-      const timestampResult = db.prepare(
-        'DELETE FROM block_timestamps WHERE block_height < ?'
-      ).run(cutoffHeight);
-      
-      return { winners: winnerResult.changes, users: userResult.changes, timestamps: timestampResult.changes };
-    })();
+    // Delete old records - user_block_diff cascades via foreign key
+    const deleted = db.prepare(
+      'DELETE FROM block_highest_diff WHERE block_height < ?'
+    ).run(cutoffHeight);
     
-    if (deleted.winners > 0 || deleted.users > 0 || deleted.timestamps > 0) {
-      console.log(`🧹 Cleaned up old block diff data: ${deleted.winners} blocks, ${deleted.users} user entries, ${deleted.timestamps} timestamps (keeping blocks > ${cutoffHeight})`);
+    if (deleted.changes > 0) {
+      console.log(`🧹 Cleaned up old block diff data: ${deleted.changes} blocks (keeping blocks > ${cutoffHeight})`);
     }
   } catch (error) {
     console.error('Error cleaning up old block diff data:', error);
@@ -291,8 +279,6 @@ export async function collectHighestDiff(blockHeight: number): Promise<boolean> 
     return true;
   }
 
-  const now = Math.floor(Date.now() / 1000);
-
   // Fetch pool winner
   const poolWinner = await fetchHighestDiff(blockHeight);
   if (!poolWinner) {
@@ -309,32 +295,25 @@ export async function collectHighestDiff(blockHeight: number): Promise<boolean> 
   const db = getDb();
 
   db.transaction(() => {
-    // Store pool winner
+    // Store pool winner with optional block timestamp
     const winnerStmt = db.prepare(`
       INSERT OR REPLACE INTO block_highest_diff (
-        block_height, winner_address, difficulty, collected_at
+        block_height, winner_address, difficulty, block_timestamp
       ) VALUES (?, ?, ?, ?)
     `);
-    winnerStmt.run(blockHeight, poolWinner.username, poolWinner.diff, now);
+    winnerStmt.run(blockHeight, poolWinner.username, poolWinner.diff, blockTimestamp);
 
     // Store all user diffs
     if (userDiffs.length > 0) {
       const userStmt = db.prepare(`
         INSERT OR REPLACE INTO user_block_diff (
-          block_height, address, difficulty, collected_at
-        ) VALUES (?, ?, ?, ?)
+          block_height, address, difficulty
+        ) VALUES (?, ?, ?)
       `);
 
       for (const entry of userDiffs) {
-        userStmt.run(blockHeight, entry.username, entry.diff, now);
+        userStmt.run(blockHeight, entry.username, entry.diff);
       }
-    }
-    
-    // Store block timestamp if we got it
-    if (blockTimestamp) {
-      db.prepare(
-        'INSERT OR REPLACE INTO block_timestamps (block_height, timestamp) VALUES (?, ?)'
-      ).run(blockHeight, blockTimestamp);
     }
   })();
 
