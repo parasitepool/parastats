@@ -365,7 +365,7 @@ export async function backfillHighestDiff(): Promise<void> {
 
 /**
  * Trigger a delayed collection for a block (called when clean_jobs is detected)
- * Waits 1 minute to allow shares to settle before collecting
+ * Waits 90 seconds to allow shares to settle before collecting
  */
 export function triggerDelayedCollection(blockHeight: number): void {
   // Cancel any pending collection for this block
@@ -458,14 +458,4 @@ export function stopHighestDiffCollector(): void {
   console.log('📊 Highest diff collector stopped');
 }
 
-/**
- * Get the last collected block height
- */
-export function getLastCollectedBlock(): number | null {
-  const db = getDb();
-  const result = db.prepare(
-    'SELECT MAX(block_height) as max_height FROM block_highest_diff'
-  ).get() as { max_height: number | null } | undefined;
-  return result?.max_height ?? null;
-}
 

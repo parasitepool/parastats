@@ -22,7 +22,7 @@ export async function GET(
     const { blockheight } = await params;
     const blockHeight = parseInt(blockheight, 10);
 
-    if (isNaN(blockHeight)) {
+    if (isNaN(blockHeight) || blockHeight < 0) {
       return NextResponse.json(
         { error: 'Invalid block height' },
         { status: 400 }
