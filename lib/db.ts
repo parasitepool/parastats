@@ -162,6 +162,42 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_stratum_timestamp ON stratum_notifications(timestamp);
     CREATE INDEX IF NOT EXISTS idx_stratum_pool ON stratum_notifications(pool);
   `);
+
+  // Create block highest diff table (pool-wide winner per block)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS block_highest_diff (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      block_height INTEGER NOT NULL UNIQUE,
+      winner_address TEXT NOT NULL,
+      difficulty REAL NOT NULL,
+      collected_at INTEGER NOT NULL
+    )
+  `);
+
+  // Create indexes for block highest diff queries
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_block_highest_diff_height ON block_highest_diff(block_height);
+    CREATE INDEX IF NOT EXISTS idx_block_highest_diff_winner ON block_highest_diff(winner_address);
+  `);
+
+  // Create per-user block diff table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_block_diff (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      block_height INTEGER NOT NULL,
+      address TEXT NOT NULL,
+      difficulty REAL NOT NULL,
+      collected_at INTEGER NOT NULL,
+      UNIQUE(block_height, address)
+    )
+  `);
+
+  // Create indexes for user block diff queries
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_user_block_diff_height ON user_block_diff(block_height);
+    CREATE INDEX IF NOT EXISTS idx_user_block_diff_address ON user_block_diff(address);
+    CREATE INDEX IF NOT EXISTS idx_user_block_diff_height_address ON user_block_diff(block_height, address);
+  `);
 }
 
 // Close the database connection when the app is shutting down

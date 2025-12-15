@@ -179,3 +179,90 @@ export async function toggleUserVisibility(address: string): Promise<{ isPublic:
     throw error;
   }
 }
+
+// Highest diff types
+export interface BlockWinner {
+  block_height: number;
+  winner_address: string;
+  fullAddress: string;
+  difficulty: number;
+  collected_at: number;
+}
+
+export interface UserWinCount {
+  address: string;
+  fullAddress: string;
+  win_count: number;
+  total_diff: number;
+  avg_diff: number;
+}
+
+export interface UserBlockDiff {
+  block_height: number;
+  address: string;
+  fullAddress: string;
+  difficulty: number;
+}
+
+// Recent block winners API
+export async function getRecentBlockWinners(limit: number = 10): Promise<BlockWinner[]> {
+  try {
+    return await withRetry(async () => {
+      const response = await fetch(`/api/highest-diff?limit=${limit}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    });
+  } catch (error) {
+    console.error("Error fetching recent block winners:", error);
+    throw error;
+  }
+}
+
+// Block winners leaderboard API
+export async function getBlockWinnersLeaderboard(limit: number = 99): Promise<UserWinCount[]> {
+  try {
+    return await withRetry(async () => {
+      const response = await fetch(`/api/highest-diff?type=winners&limit=${limit}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    });
+  } catch (error) {
+    console.error("Error fetching block winners leaderboard:", error);
+    throw error;
+  }
+}
+
+// User's block wins API
+export async function getUserBlockWins(address: string, limit: number = 50): Promise<BlockWinner[]> {
+  try {
+    return await withRetry(async () => {
+      const response = await fetch(`/api/highest-diff?address=${address}&limit=${limit}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    });
+  } catch (error) {
+    console.error(`Error fetching block wins for user ${address}:`, error);
+    throw error;
+  }
+}
+
+// Trigger collection for missing blocks
+export async function triggerBlockCollection(blockHeights: number[]): Promise<void> {
+  if (blockHeights.length === 0) return;
+  
+  try {
+    const blocks = blockHeights.slice(0, 5).join(',');
+    await fetch(`/api/highest-diff?blocks=${blocks}`, {
+      method: 'POST',
+    });
+  } catch (error) {
+    // Silently fail - this is a background operation
+    console.debug('Error triggering block collection:', error);
+  }
+}

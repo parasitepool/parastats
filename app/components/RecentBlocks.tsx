@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from "react";
 import BlockCard from "./BlockCard";
+import ShadowBlockCard from "./ShadowBlockCard";
 import { Block } from "@mempool/mempool.js/lib/interfaces/bitcoin/blocks";
 import { getPreference, setPreference } from "../../lib/localStorage";
-import { getBlocksTipHeight, getRecentBlocks } from "../utils/api";
+import { getBlocksTipHeight, getRecentBlocks, getRecentBlockWinners, triggerBlockCollection, type BlockWinner } from "../utils/api";
 import { PlusIcon, MinusIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import Link from "next/link";
 
@@ -80,8 +81,10 @@ export default function RecentBlocks() {
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const [isCompact, setIsCompact] = useState(true);
+  const [highestDiffs, setHighestDiffs] = useState<Map<number, BlockWinner>>(new Map());
   const initialBlockHeightRef = useRef<number>(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const triggeredCollectionsRef = useRef<Set<number>>(new Set());
 
   // Load isCompact preference from localStorage on initial render
   useEffect(() => {
@@ -139,6 +142,47 @@ export default function RecentBlocks() {
       updateArrows();
     }
   }, [blocks]);
+
+  // Fetch highest diffs for the displayed blocks
+  useEffect(() => {
+    if (blocks.length === 0 || currentTipHeight === 0) return;
+
+    async function fetchHighestDiffs() {
+      try {
+        // Fetch recent block winners (enough to cover all displayed blocks + current tip)
+        const winners = await getRecentBlockWinners(blocks.length + 10);
+        
+        // Create a map of block height to winner data
+        const diffMap = new Map<number, BlockWinner>();
+        for (const winner of winners) {
+          diffMap.set(winner.block_height, winner);
+        }
+        setHighestDiffs(diffMap);
+
+        // Detect missing blocks (recent blocks that don't have highest diff data)
+        // Only check the most recent 5 blocks to avoid excessive API calls
+        const recentBlockHeights = blocks.slice(0, 5).map(b => b.height);
+        const missingBlocks = recentBlockHeights.filter(
+          height => !diffMap.has(height) && !triggeredCollectionsRef.current.has(height)
+        );
+
+        if (missingBlocks.length > 0) {
+          // Mark these blocks as triggered to avoid duplicate requests
+          missingBlocks.forEach(h => triggeredCollectionsRef.current.add(h));
+          // Trigger collection in background
+          triggerBlockCollection(missingBlocks);
+        }
+      } catch (error) {
+        console.error("Error fetching highest diffs:", error);
+      }
+    }
+
+    fetchHighestDiffs();
+    
+    // Refresh every 15 seconds to catch newly collected data
+    const intervalId = setInterval(fetchHighestDiffs, 15000);
+    return () => clearInterval(intervalId);
+  }, [blocks, currentTipHeight]);
 
   // Update arrows visibility when blocks data changes
   useEffect(() => {
@@ -216,20 +260,42 @@ export default function RecentBlocks() {
 
           <div
             ref={scrollContainerRef}
-            className={`flex overflow-x-auto ${isCompact ? 'space-x-2' : 'space-x-4'} snap-x scrollbar-none px-2 transition-all duration-300 ease-in-out`}
+            className="overflow-x-auto snap-x scrollbar-none px-2 transition-all duration-300 ease-in-out"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
           >
-            {/* Pending block card at the beginning */}
-            <PendingBlockCard nextHeight={nextBlockHeight} isCompact={isCompact} />
-            
-            {blocks.map((block) => (
-              <BlockCard
-                key={block.id || block.height || block.timestamp}
-                block={block}
-                newBlock={block.height > initialBlockHeightRef.current}
+            {/* Bitcoin blocks row */}
+            <div className={`flex ${isCompact ? 'space-x-2' : 'space-x-4'} mb-1`}>
+              {/* Pending block card at the beginning */}
+              <PendingBlockCard nextHeight={nextBlockHeight} isCompact={isCompact} />
+              
+              {blocks.map((block) => (
+                <BlockCard
+                  key={block.id || block.height || block.timestamp}
+                  block={block}
+                  newBlock={block.height > initialBlockHeightRef.current}
+                  isCompact={isCompact}
+                />
+              ))}
+            </div>
+
+            {/* Shadow chain row - Parasite's highest diffs */}
+            <div className={`flex ${isCompact ? 'space-x-2' : 'space-x-4'}`}>
+              {/* Pending shadow block */}
+              <ShadowBlockCard 
+                blockHeight={nextBlockHeight} 
                 isCompact={isCompact}
+                isPending={true}
               />
-            ))}
+              
+              {blocks.map((block) => (
+                <ShadowBlockCard
+                  key={`shadow-${block.height}`}
+                  blockHeight={block.height}
+                  highestDiff={highestDiffs.get(block.height)}
+                  isCompact={isCompact}
+                />
+              ))}
+            </div>
           </div>
 
           {showRightArrow && (

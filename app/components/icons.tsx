@@ -251,3 +251,18 @@ export const CopyIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
     <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
   </svg>
 );
+
+export const TrophyIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    viewBox="0 0 20 20"
+    fill="currentColor"
+  >
+    <path
+      fillRule="evenodd"
+      d="M5 5a3 3 0 015-2.236A3 3 0 0114.83 6H16a2 2 0 110 4h-1.17a3 3 0 01-1.17 1.659 3 3 0 01-2.66 1.17V15a1 1 0 102 0v-1a1 1 0 112 0v1a3 3 0 01-3 3H8a3 3 0 01-3-3v-1a1 1 0 112 0v1a1 1 0 102 0v-2.171a3 3 0 01-2.66-1.17A3 3 0 015.17 10H4a2 2 0 110-4h1.17A3 3 0 015 5zm5 2a1 1 0 100-2 1 1 0 000 2z"
+      clipRule="evenodd"
+    />
+  </svg>
+);

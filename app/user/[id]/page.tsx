@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility, getUserBlockWins, type BlockWinner } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -34,6 +34,8 @@ export default function UserDashboard() {
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [blockWins, setBlockWins] = useState<BlockWinner[]>([]);
+  const [isLoadingBlockWins, setIsLoadingBlockWins] = useState(true);
   
   const {
     isLightningAuthenticated,
@@ -200,6 +202,44 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
+  // Fetch block wins data (only if valid address)
+  useEffect(() => {
+    if (isValidAddress === false) {
+      setIsLoadingBlockWins(false);
+      return;
+    }
+    if (isValidAddress === null) return;
+
+    let mounted = true;
+
+    const fetchBlockWins = async () => {
+      try {
+        const wins = await getUserBlockWins(userId, 20);
+        if (mounted) {
+          setBlockWins(wins);
+        }
+      } catch (err) {
+        console.error('Error fetching block wins:', err);
+        if (mounted) {
+          setBlockWins([]);
+        }
+      } finally {
+        if (mounted) {
+          setIsLoadingBlockWins(false);
+        }
+      }
+    };
+
+    fetchBlockWins();
+    // Refresh every 60 seconds
+    const intervalId = setInterval(fetchBlockWins, 60000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, [userId, isValidAddress]);
+
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
     if (!userData) return;
@@ -350,6 +390,15 @@ export default function UserDashboard() {
       )
     },
     {
+      title: 'Block Wins (24h)',
+      value: isLoadingBlockWins ? <span className="text-gray-400">-</span> : blockWins.length,
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+        </svg>
+      )
+    },
+    {
       title: 'Total Work',
       value: accountData?.total_diff ? <AnimatedCounter value={accountData.total_diff} /> : <span className="text-gray-400">-</span>,
       icon: (
@@ -453,7 +502,7 @@ export default function UserDashboard() {
 
         {/* Stats Cards */}
         <div className="w-full">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
             {statCards.map((card, index) => (
               <div key={index}>
                 <div className="bg-background p-4 shadow-md border border-border h-full">
@@ -638,6 +687,7 @@ export default function UserDashboard() {
         </div>
         </div>
       )}
+
       </main>
     </>
   );
