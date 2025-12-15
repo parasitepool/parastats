@@ -5,7 +5,7 @@ import BlockCard from "./BlockCard";
 import ShadowBlockCard from "./ShadowBlockCard";
 import { Block } from "@mempool/mempool.js/lib/interfaces/bitcoin/blocks";
 import { getPreference, setPreference } from "../../lib/localStorage";
-import { getBlocksTipHeight, getRecentBlocks, getRecentBlockWinners, triggerBlockCollection, type BlockWinner } from "../utils/api";
+import { getBlocksTipHeight, getRecentBlocks, getRecentBlockWinners, type BlockWinner } from "../utils/api";
 import { PlusIcon, MinusIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import Link from "next/link";
 
@@ -45,7 +45,6 @@ export default function RecentBlocks() {
   const [highestDiffs, setHighestDiffs] = useState<Map<number, BlockWinner>>(new Map());
   const initialBlockHeightRef = useRef<number>(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const triggeredCollectionsRef = useRef<Set<number>>(new Set());
 
   // Load isCompact preference from localStorage on initial render
   useEffect(() => {
@@ -106,11 +105,11 @@ export default function RecentBlocks() {
 
   // Fetch highest diffs for the displayed blocks
   useEffect(() => {
-    if (blocks.length === 0 || currentTipHeight === 0) return;
+    if (blocks.length === 0) return;
 
     async function fetchHighestDiffs() {
       try {
-        // Fetch recent block winners (enough to cover all displayed blocks + current tip)
+        // Fetch recent block winners (enough to cover all displayed blocks)
         const winners = await getRecentBlockWinners(blocks.length + 10);
         
         // Create a map of block height to winner data
@@ -119,29 +118,6 @@ export default function RecentBlocks() {
           diffMap.set(winner.block_height, winner);
         }
         setHighestDiffs(diffMap);
-
-        // Detect missing blocks (recent blocks that don't have highest diff data)
-        // Only check the most recent 5 blocks to avoid excessive API calls
-        const recentBlockHeights = blocks.slice(0, 5).map(b => b.height);
-        const missingBlocks = recentBlockHeights.filter(
-          height => !diffMap.has(height) && !triggeredCollectionsRef.current.has(height)
-        );
-
-        if (missingBlocks.length > 0) {
-          // Mark these blocks as triggered to avoid duplicate requests
-          missingBlocks.forEach(h => triggeredCollectionsRef.current.add(h));
-          // Trigger collection in background
-          triggerBlockCollection(missingBlocks);
-        }
-
-        // Clean up old entries from triggeredCollectionsRef to prevent memory leak
-        // Keep only entries within 20 blocks of current tip
-        const cutoffHeight = currentTipHeight - 20;
-        for (const height of triggeredCollectionsRef.current) {
-          if (height < cutoffHeight) {
-            triggeredCollectionsRef.current.delete(height);
-          }
-        }
       } catch (error) {
         console.error("Error fetching highest diffs:", error);
       }
@@ -152,7 +128,7 @@ export default function RecentBlocks() {
     // Refresh every 15 seconds to catch newly collected data
     const intervalId = setInterval(fetchHighestDiffs, 15000);
     return () => clearInterval(intervalId);
-  }, [blocks, currentTipHeight]);
+  }, [blocks]);
 
   // Update arrows visibility when blocks data changes
   useEffect(() => {

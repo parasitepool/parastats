@@ -186,7 +186,6 @@ export interface BlockWinner {
   winner_address: string;
   fullAddress: string;
   difficulty: number;
-  collected_at: number;
   block_timestamp: number | null;
 }
 
@@ -210,7 +209,6 @@ export async function getRecentBlockWinners(limit: number = 10): Promise<BlockWi
 export interface UserBlockDiffEntry {
   block_height: number;
   difficulty: number;
-  collected_at: number;
   block_timestamp: number | null;
   address: string;
   fullAddress: string;
@@ -228,20 +226,5 @@ export async function getUserBlockDiffs(address: string, limit: number = 50): Pr
   } catch (error) {
     console.error(`Error fetching block diffs for user ${address}:`, error);
     throw error;
-  }
-}
-
-// Trigger collection for missing blocks
-export async function triggerBlockCollection(blockHeights: number[]): Promise<void> {
-  if (blockHeights.length === 0) return;
-  
-  try {
-    const blocks = blockHeights.slice(0, 5).join(',');
-    await fetch(`/api/highest-diff?blocks=${blocks}`, {
-      method: 'POST',
-    });
-  } catch (error) {
-    // Silently fail - this is a background operation
-    console.debug('Error triggering block collection:', error);
   }
 }

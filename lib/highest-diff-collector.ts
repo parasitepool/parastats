@@ -16,9 +16,9 @@ interface UserDiffEntry {
 
 // Configuration
 const CONFIG = {
-  BACKFILL_BLOCKS: 432, // Number of blocks to backfill on startup (3 days worth: 3 * 144)
-  MAX_BLOCKS_TO_KEEP: 432, // Only keep this many blocks in the database (3 days worth)
-  COLLECTION_DELAY_MS: 60_000, // 1 minute delay after clean_jobs
+  BACKFILL_BLOCKS: 500, // Number of blocks to backfill on startup (3 days worth: 3 * 144)
+  MAX_BLOCKS_TO_KEEP: 500, // Only keep this many blocks in the database (3 days worth)
+  COLLECTION_DELAY_MS: 90_000, // 90 seconds delay after clean_jobs
   MEMPOOL_API_URL: 'https://mempool.space/api/blocks/tip/height',
   MEMPOOL_BLOCK_URL: 'https://mempool.space/api/block-height',
   MEMPOOL_BLOCK_DETAILS_URL: 'https://mempool.space/api/block',

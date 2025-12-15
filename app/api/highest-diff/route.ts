@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { formatAddress } from '@/app/utils/formatters';
-import { collectHighestDiff } from '@/lib/highest-diff-collector';
 
 interface BlockWinner {
   block_height: number;
@@ -17,59 +16,14 @@ interface UserWinCount {
   avg_diff: number;
 }
 
-// Trigger collection for missing blocks
-export async function POST(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const blockHeightsParam = searchParams.get('blocks');
-    
-    if (!blockHeightsParam) {
-      return NextResponse.json({ error: 'Missing blocks parameter' }, { status: 400 });
-    }
-
-    const blockHeights = blockHeightsParam.split(',').map(h => parseInt(h, 10)).filter(h => !isNaN(h));
-    
-    if (blockHeights.length === 0) {
-      return NextResponse.json({ error: 'No valid block heights provided' }, { status: 400 });
-    }
-
-    // Limit to 5 blocks at a time to prevent abuse
-    const blocksToCollect = blockHeights.slice(0, 5);
-    
-    // Trigger collection in background (don't wait)
-    const collectionPromises = blocksToCollect.map(height => 
-      collectHighestDiff(height).catch(err => {
-        console.error(`Error collecting block ${height}:`, err);
-        return false;
-      })
-    );
-    
-    // Wait for all collections (with timeout)
-    const results = await Promise.race([
-      Promise.all(collectionPromises),
-      new Promise<boolean[]>(resolve => setTimeout(() => resolve(blocksToCollect.map(() => false)), 5000))
-    ]);
-
-    return NextResponse.json({ 
-      triggered: blocksToCollect, 
-      results: results 
-    });
-
-  } catch (error) {
-    console.error('Error triggering highest diff collection:', error);
-    return NextResponse.json(
-      { error: 'Failed to trigger collection' },
-      { status: 500 }
-    );
-  }
-}
+const MAX_LIMIT = 500;
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '10', 10);
+    const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '10', 10)), MAX_LIMIT);
     const address = searchParams.get('address');
-    const type = searchParams.get('type') || 'recent'; // recent, winners, user
+    const type = searchParams.get('type') || 'recent'; // recent, winners, user-diffs
 
     const db = getDb();
 

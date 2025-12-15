@@ -567,22 +567,23 @@ export default function UserDashboard() {
                 }
               ]
             } : undefined}
-            bestDiffs={userBlockDiffs.length > 0 ? userBlockDiffs.map(diff => {
-              // Use block_timestamp if available (actual Bitcoin block time), fall back to collected_at
-              const timestampMs = (diff.block_timestamp || diff.collected_at) * 1000;
-              return {
-                timestamp: new Date(timestampMs).toLocaleString("en-US", {
-                  year: undefined,
-                  month: "2-digit",
-                  day: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                }),
-                rawTimestamp: timestampMs,
-                difficulty: diff.difficulty,
-              };
-            }) : undefined}
+            bestDiffs={userBlockDiffs.length > 0 ? userBlockDiffs
+              .filter(diff => diff.block_timestamp !== null)
+              .map(diff => {
+                const timestampMs = diff.block_timestamp! * 1000;
+                return {
+                  timestamp: new Date(timestampMs).toLocaleString("en-US", {
+                    year: undefined,
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  }),
+                  rawTimestamp: timestampMs,
+                  difficulty: diff.difficulty,
+                };
+              }) : undefined}
             loading={!historicalData}
           />
         </div>
