@@ -187,21 +187,7 @@ export interface BlockWinner {
   fullAddress: string;
   difficulty: number;
   collected_at: number;
-}
-
-export interface UserWinCount {
-  address: string;
-  fullAddress: string;
-  win_count: number;
-  total_diff: number;
-  avg_diff: number;
-}
-
-export interface UserBlockDiff {
-  block_height: number;
-  address: string;
-  fullAddress: string;
-  difficulty: number;
+  block_timestamp: number | null;
 }
 
 // Recent block winners API
@@ -220,34 +206,27 @@ export async function getRecentBlockWinners(limit: number = 10): Promise<BlockWi
   }
 }
 
-// Block winners leaderboard API
-export async function getBlockWinnersLeaderboard(limit: number = 99): Promise<UserWinCount[]> {
-  try {
-    return await withRetry(async () => {
-      const response = await fetch(`/api/highest-diff?type=winners&limit=${limit}`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return await response.json();
-    });
-  } catch (error) {
-    console.error("Error fetching block winners leaderboard:", error);
-    throw error;
-  }
+// User's best diffs API (user's highest diff per block, regardless of pool ranking)
+export interface UserBlockDiffEntry {
+  block_height: number;
+  difficulty: number;
+  collected_at: number;
+  block_timestamp: number | null;
+  address: string;
+  fullAddress: string;
 }
 
-// User's block wins API
-export async function getUserBlockWins(address: string, limit: number = 50): Promise<BlockWinner[]> {
+export async function getUserBlockDiffs(address: string, limit: number = 50): Promise<UserBlockDiffEntry[]> {
   try {
     return await withRetry(async () => {
-      const response = await fetch(`/api/highest-diff?address=${address}&limit=${limit}`);
+      const response = await fetch(`/api/highest-diff?address=${address}&type=user-diffs&limit=${limit}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       return await response.json();
     });
   } catch (error) {
-    console.error(`Error fetching block wins for user ${address}:`, error);
+    console.error(`Error fetching block diffs for user ${address}:`, error);
     throw error;
   }
 }

@@ -96,19 +96,50 @@ export async function GET(request: Request) {
       );
     }
 
+    if (address && type === 'user-diffs') {
+      // Get this user's best diffs across all blocks (not just wins)
+      // Join with block_timestamps to get the actual block timestamp
+      const userDiffs = db.prepare(`
+        SELECT 
+          u.block_height,
+          u.address,
+          u.difficulty,
+          u.collected_at,
+          bt.timestamp as block_timestamp
+        FROM user_block_diff u
+        LEFT JOIN block_timestamps bt ON u.block_height = bt.block_height
+        WHERE u.address = ?
+        ORDER BY u.block_height DESC
+        LIMIT ?
+      `).all(address, limit) as Array<{ block_height: number; address: string; difficulty: number; collected_at: number; block_timestamp: number | null }>;
+
+      return NextResponse.json(
+        userDiffs.map(d => ({
+          block_height: d.block_height,
+          difficulty: d.difficulty,
+          collected_at: d.collected_at,
+          block_timestamp: d.block_timestamp,
+          address: formatAddress(d.address),
+          fullAddress: d.address,
+        }))
+      );
+    }
+
     if (address) {
-      // Get blocks where this user had the highest diff
+      // Get blocks where this user had the highest diff (wins only)
       const userBlocks = db.prepare(`
         SELECT 
-          block_height,
-          winner_address,
-          difficulty,
-          collected_at
-        FROM block_highest_diff
-        WHERE winner_address = ?
-        ORDER BY block_height DESC
+          b.block_height,
+          b.winner_address,
+          b.difficulty,
+          b.collected_at,
+          bt.timestamp as block_timestamp
+        FROM block_highest_diff b
+        LEFT JOIN block_timestamps bt ON b.block_height = bt.block_height
+        WHERE b.winner_address = ?
+        ORDER BY b.block_height DESC
         LIMIT ?
-      `).all(address, limit) as BlockWinner[];
+      `).all(address, limit) as (BlockWinner & { block_timestamp: number | null })[];
 
       return NextResponse.json(
         userBlocks.map(b => ({
@@ -122,14 +153,16 @@ export async function GET(request: Request) {
     // Default: recent block winners
     const recentBlocks = db.prepare(`
       SELECT 
-        block_height,
-        winner_address,
-        difficulty,
-        collected_at
-      FROM block_highest_diff
-      ORDER BY block_height DESC
+        b.block_height,
+        b.winner_address,
+        b.difficulty,
+        b.collected_at,
+        bt.timestamp as block_timestamp
+      FROM block_highest_diff b
+      LEFT JOIN block_timestamps bt ON b.block_height = bt.block_height
+      ORDER BY b.block_height DESC
       LIMIT ?
-    `).all(limit) as BlockWinner[];
+    `).all(limit) as (BlockWinner & { block_timestamp: number | null })[];
 
     return NextResponse.json(
       recentBlocks.map(b => ({

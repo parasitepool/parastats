@@ -16,10 +16,12 @@ interface UserDiffEntry {
 
 // Configuration
 const CONFIG = {
-  BACKFILL_BLOCKS: 144, // Number of blocks to backfill on startup
-  MAX_BLOCKS_TO_KEEP: 144, // Only keep this many blocks in the database
+  BACKFILL_BLOCKS: 432, // Number of blocks to backfill on startup (3 days worth: 3 * 144)
+  MAX_BLOCKS_TO_KEEP: 432, // Only keep this many blocks in the database (3 days worth)
   COLLECTION_DELAY_MS: 60_000, // 1 minute delay after clean_jobs
   MEMPOOL_API_URL: 'https://mempool.space/api/blocks/tip/height',
+  MEMPOOL_BLOCK_URL: 'https://mempool.space/api/block-height',
+  MEMPOOL_BLOCK_DETAILS_URL: 'https://mempool.space/api/block',
   MAX_RETRIES: 4,
   RETRY_BASE_DELAY: 500,
 } as const;
@@ -83,6 +85,61 @@ export async function getCurrentBlockHeight(): Promise<number> {
     const height = await response.text();
     return parseInt(height, 10);
   }, 'GET mempool block height');
+}
+
+/**
+ * Fetch block timestamp from mempool.space
+ * First gets the block hash by height, then gets block details for timestamp
+ */
+async function fetchBlockTimestamp(blockHeight: number): Promise<number | null> {
+  try {
+    return await withRetry(async () => {
+      // Step 1: Get block hash by height
+      const hashUrl = `${CONFIG.MEMPOOL_BLOCK_URL}/${blockHeight}`;
+      const hashResponse = await fetch(hashUrl, { timeout: 10_000 });
+      
+      if (!hashResponse.ok) {
+        throw new HttpError(hashResponse.status, hashResponse.statusText, hashUrl);
+      }
+      
+      const blockHash = await hashResponse.text();
+      
+      // Step 2: Get block details by hash
+      const detailsUrl = `${CONFIG.MEMPOOL_BLOCK_DETAILS_URL}/${blockHash}`;
+      const detailsResponse = await fetch(detailsUrl, { timeout: 10_000 });
+      
+      if (!detailsResponse.ok) {
+        throw new HttpError(detailsResponse.status, detailsResponse.statusText, detailsUrl);
+      }
+      
+      const blockDetails = await detailsResponse.json() as { timestamp: number };
+      return blockDetails.timestamp;
+    }, `GET block timestamp for ${blockHeight}`);
+  } catch (error) {
+    console.error(`Error fetching timestamp for block ${blockHeight}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Check if we have a timestamp for a block
+ */
+function hasBlockTimestamp(blockHeight: number): boolean {
+  const db = getDb();
+  const result = db.prepare(
+    'SELECT 1 FROM block_timestamps WHERE block_height = ?'
+  ).get(blockHeight);
+  return result !== undefined;
+}
+
+/**
+ * Store block timestamp
+ */
+function storeBlockTimestamp(blockHeight: number, timestamp: number): void {
+  const db = getDb();
+  db.prepare(
+    'INSERT OR REPLACE INTO block_timestamps (block_height, timestamp) VALUES (?, ?)'
+  ).run(blockHeight, timestamp);
 }
 
 /**
@@ -177,7 +234,7 @@ function hasBlockData(blockHeight: number): boolean {
 
 /**
  * Clean up old block data, keeping only the last MAX_BLOCKS_TO_KEEP blocks
- * Deletes from both block_highest_diff and user_block_diff tables
+ * Deletes from block_highest_diff, user_block_diff, and block_timestamps tables
  */
 function cleanupOldBlocks(): void {
   const db = getDb();
@@ -193,7 +250,7 @@ function cleanupOldBlocks(): void {
     
     const cutoffHeight = maxHeight - CONFIG.MAX_BLOCKS_TO_KEEP;
     
-    // Delete old records from both tables in a transaction
+    // Delete old records from all tables in a transaction
     const deleted = db.transaction(() => {
       const winnerResult = db.prepare(
         'DELETE FROM block_highest_diff WHERE block_height < ?'
@@ -203,11 +260,15 @@ function cleanupOldBlocks(): void {
         'DELETE FROM user_block_diff WHERE block_height < ?'
       ).run(cutoffHeight);
       
-      return { winners: winnerResult.changes, users: userResult.changes };
+      const timestampResult = db.prepare(
+        'DELETE FROM block_timestamps WHERE block_height < ?'
+      ).run(cutoffHeight);
+      
+      return { winners: winnerResult.changes, users: userResult.changes, timestamps: timestampResult.changes };
     })();
     
-    if (deleted.winners > 0 || deleted.users > 0) {
-      console.log(`🧹 Cleaned up old block diff data: ${deleted.winners} blocks, ${deleted.users} user entries (keeping blocks > ${cutoffHeight})`);
+    if (deleted.winners > 0 || deleted.users > 0 || deleted.timestamps > 0) {
+      console.log(`🧹 Cleaned up old block diff data: ${deleted.winners} blocks, ${deleted.users} user entries, ${deleted.timestamps} timestamps (keeping blocks > ${cutoffHeight})`);
     }
   } catch (error) {
     console.error('Error cleaning up old block diff data:', error);
@@ -220,6 +281,13 @@ function cleanupOldBlocks(): void {
 export async function collectHighestDiff(blockHeight: number): Promise<boolean> {
   // Skip if we already have data for this block
   if (hasBlockData(blockHeight)) {
+    // Still ensure we have the timestamp
+    if (!hasBlockTimestamp(blockHeight)) {
+      const timestamp = await fetchBlockTimestamp(blockHeight);
+      if (timestamp) {
+        storeBlockTimestamp(blockHeight, timestamp);
+      }
+    }
     return true;
   }
 
@@ -234,6 +302,9 @@ export async function collectHighestDiff(blockHeight: number): Promise<boolean> 
 
   // Fetch all user diffs
   const userDiffs = await fetchAllUserDiffs(blockHeight);
+  
+  // Fetch block timestamp from mempool.space
+  const blockTimestamp = await fetchBlockTimestamp(blockHeight);
 
   const db = getDb();
 
@@ -258,11 +329,18 @@ export async function collectHighestDiff(blockHeight: number): Promise<boolean> 
         userStmt.run(blockHeight, entry.username, entry.diff, now);
       }
     }
+    
+    // Store block timestamp if we got it
+    if (blockTimestamp) {
+      db.prepare(
+        'INSERT OR REPLACE INTO block_timestamps (block_height, timestamp) VALUES (?, ?)'
+      ).run(blockHeight, blockTimestamp);
+    }
   })();
 
   console.log(`📊 Collected highest diff for block ${blockHeight}: winner=${poolWinner.username.substring(0, 12)}... diff=${poolWinner.diff.toExponential(2)}, ${userDiffs.length} users`);
   
-  // Clean up old block data to keep only the last 144 blocks
+  // Clean up old block data to keep only the last MAX_BLOCKS_TO_KEEP blocks
   cleanupOldBlocks();
   
   return true;
@@ -270,7 +348,7 @@ export async function collectHighestDiff(blockHeight: number): Promise<boolean> 
 
 /**
  * Backfill historical data on startup
- * Checks the last 144 blocks and fills in any missing entries
+ * Checks the last BACKFILL_BLOCKS blocks and fills in any missing entries
  */
 export async function backfillHighestDiff(): Promise<void> {
   console.log(`🔄 Starting highest diff backfill (last ${CONFIG.BACKFILL_BLOCKS} blocks)...`);

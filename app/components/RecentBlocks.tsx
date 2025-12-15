@@ -9,68 +9,29 @@ import { getBlocksTipHeight, getRecentBlocks, getRecentBlockWinners, triggerBloc
 import { PlusIcon, MinusIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import Link from "next/link";
 
-// Component for the pending block card
-function PendingBlockCard({ nextHeight, isCompact }: { nextHeight: number; isCompact: boolean }) {
+// Combined Mining card that connects both chains
+function MiningCard({ nextHeight, isCompact }: { nextHeight: number; isCompact: boolean }) {
   return (
-    <Link
-      href="/template"
-      className={`flex-shrink-0 border border-dashed border-gray-500/50 p-2 snap-start animate-pulse-soft ${
-        isCompact ? 'w-28' : 'w-48'
-      }`}
-      style={{
-        maxHeight: isCompact ? '85px' : '200px', 
-        transition: 'max-height 0.3s ease-in-out, width 0.3s ease-in-out',
-      }}
-    >
-      <div className={`${isCompact ? 'flex-col' : 'flex justify-between'} items-start mb-2`}>
+    <div className="flex-shrink-0 flex flex-col items-center justify-center">
+      <Link
+        href="/template"
+        className={`border border-dashed border-gray-500/50 p-2 snap-start animate-pulse-soft flex flex-col items-center justify-center ${
+          isCompact ? 'w-28' : 'w-48'
+        }`}
+        style={{
+          transition: 'width 0.3s ease-in-out',
+        }}
+      >
         <div className="font-bold text-gray-400">{nextHeight}</div>
-        <div className="text-xs text-gray-400">Pending</div>
-      </div>
-
-      {!isCompact && (
-        <div className="border-t border-gray-500/30 pt-2 mb-2 transition-all duration-300 ease-in-out">
-          <div className="flex items-center text-sm text-gray-400">
-            <svg
-              className="h-4 w-4 mr-1"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M12 2v10l7 3.5V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v7.5L12 12V2z"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="currentColor"
-                fillOpacity="0.3"
-              />
-            </svg>
-            <span className="truncate">Template</span>
-          </div>
-
-          <div className="flex items-center text-sm mt-1 text-gray-400">
-            <span className="inline-flex justify-center items-center h-4 w-4 mr-1">⚡</span>
-            <span className="truncate">
-              In progress
-            </span>
-          </div>
-        </div>
-      )}
-
-      <div className={`${!isCompact ? 'border-t border-gray-500/30 pt-2 text-sm' : 'text-xs'} flex justify-between items-center transition-all duration-300 ease-in-out`}>
-        <div className="truncate font-medium text-gray-400">
-          {/* Parasite */}
-        </div>
+        <div className="text-xs text-gray-400 mt-1">Mining...</div>
         {!isCompact && (
-          <div className="truncate font-medium">
-            <div className="w-5 h-5 rounded-full bg-gray-500/20 flex items-center justify-center">
-              <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse"></div>
-            </div>
+          <div className="flex items-center mt-2">
+            <div className="w-2 h-2 rounded-full bg-accent-1 animate-pulse mr-1.5"></div>
+            <span className="text-xs text-gray-400">In progress</span>
           </div>
         )}
-      </div>
-    </Link>
+      </Link>
+    </div>
   );
 }
 
@@ -172,6 +133,15 @@ export default function RecentBlocks() {
           // Trigger collection in background
           triggerBlockCollection(missingBlocks);
         }
+
+        // Clean up old entries from triggeredCollectionsRef to prevent memory leak
+        // Keep only entries within 20 blocks of current tip
+        const cutoffHeight = currentTipHeight - 20;
+        for (const height of triggeredCollectionsRef.current) {
+          if (height < cutoffHeight) {
+            triggeredCollectionsRef.current.delete(height);
+          }
+        }
       } catch (error) {
         console.error("Error fetching highest diffs:", error);
       }
@@ -258,43 +228,39 @@ export default function RecentBlocks() {
             </button>
           )}
 
-          <div
-            ref={scrollContainerRef}
-            className="overflow-x-auto snap-x scrollbar-none px-2 transition-all duration-300 ease-in-out"
-            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          >
-            {/* Bitcoin blocks row */}
-            <div className={`flex ${isCompact ? 'space-x-2' : 'space-x-4'} mb-1`}>
-              {/* Pending block card at the beginning */}
-              <PendingBlockCard nextHeight={nextBlockHeight} isCompact={isCompact} />
-              
-              {blocks.map((block) => (
-                <BlockCard
-                  key={block.id || block.height || block.timestamp}
-                  block={block}
-                  newBlock={block.height > initialBlockHeightRef.current}
-                  isCompact={isCompact}
-                />
-              ))}
-            </div>
+          <div className={`flex ${isCompact ? 'gap-2' : 'gap-4'}`}>
+            {/* Combined Mining card - vertically centered */}
+            <MiningCard nextHeight={nextBlockHeight} isCompact={isCompact} />
+            
+            {/* Scrollable chains container */}
+            <div
+              ref={scrollContainerRef}
+              className="overflow-x-auto snap-x scrollbar-none flex-1 transition-all duration-300 ease-in-out"
+              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+            >
+              {/* Bitcoin blocks row */}
+              <div className={`flex ${isCompact ? 'space-x-2' : 'space-x-4'} mb-1`}>
+                {blocks.map((block) => (
+                  <BlockCard
+                    key={block.id || block.height || block.timestamp}
+                    block={block}
+                    newBlock={block.height > initialBlockHeightRef.current}
+                    isCompact={isCompact}
+                  />
+                ))}
+              </div>
 
-            {/* Shadow chain row - Parasite's highest diffs */}
-            <div className={`flex ${isCompact ? 'space-x-2' : 'space-x-4'}`}>
-              {/* Pending shadow block */}
-              <ShadowBlockCard 
-                blockHeight={nextBlockHeight} 
-                isCompact={isCompact}
-                isPending={true}
-              />
-              
-              {blocks.map((block) => (
-                <ShadowBlockCard
-                  key={`shadow-${block.height}`}
-                  blockHeight={block.height}
-                  highestDiff={highestDiffs.get(block.height)}
-                  isCompact={isCompact}
-                />
-              ))}
+              {/* Shadow chain row - Parasite's highest diffs */}
+              <div className={`flex ${isCompact ? 'space-x-2' : 'space-x-4'}`}>
+                {blocks.map((block) => (
+                  <ShadowBlockCard
+                    key={`shadow-${block.height}`}
+                    blockHeight={block.height}
+                    highestDiff={highestDiffs.get(block.height)}
+                    isCompact={isCompact}
+                  />
+                ))}
+              </div>
             </div>
           </div>
 

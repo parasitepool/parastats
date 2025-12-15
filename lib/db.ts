@@ -198,6 +198,14 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_user_block_diff_address ON user_block_diff(address);
     CREATE INDEX IF NOT EXISTS idx_user_block_diff_height_address ON user_block_diff(block_height, address);
   `);
+
+  // Create block timestamps table (maps block_height to its actual Bitcoin timestamp)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS block_timestamps (
+      block_height INTEGER PRIMARY KEY,
+      timestamp INTEGER NOT NULL
+    )
+  `);
 }
 
 // Close the database connection when the app is shutting down
