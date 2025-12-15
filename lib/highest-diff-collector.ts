@@ -317,7 +317,7 @@ export async function collectHighestDiff(blockHeight: number): Promise<boolean> 
     }
   })();
 
-  console.log(`📊 Collected highest diff for block ${blockHeight}: winner=${poolWinner.username.substring(0, 12)}... diff=${poolWinner.diff.toExponential(2)}, ${userDiffs.length} users`);
+  console.log(`📊 Block ${blockHeight}: winner=${poolWinner.username.substring(0, 12)}... (${poolWinner.diff.toExponential(2)}) + ${userDiffs.length} user diffs`);
   
   // Clean up old block data to keep only the last MAX_BLOCKS_TO_KEEP blocks
   cleanupOldBlocks();
