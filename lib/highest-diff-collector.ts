@@ -27,7 +27,7 @@ const CONFIG = {
 } as const;
 
 let isCollecting = false;
-let pendingCollections: Map<number, NodeJS.Timeout> = new Map();
+const pendingCollections: Map<number, NodeJS.Timeout> = new Map();
 
 /**
  * Helper function to add delay

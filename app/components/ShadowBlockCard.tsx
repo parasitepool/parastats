@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { formatDifficulty, formatAddress } from "../utils/formatters";
 import { type BlockWinner } from "../utils/api";
 
@@ -32,11 +33,12 @@ export default function ShadowBlockCard({
   }
 
   return (
-    <div
-      className={`flex-shrink-0 border border-accent-1/40 bg-accent-1/10 p-2 snap-start hover:bg-accent-1/15 transition-[width] duration-300 ease-in-out ${
+    <Link
+      href={`/block/${blockHeight}`}
+      className={`flex-shrink-0 border border-accent-1/40 bg-accent-1/10 p-2 snap-start hover:bg-accent-1/20 hover:border-accent-1/60 transition-all duration-300 ease-in-out cursor-pointer ${
         isCompact ? 'w-28' : 'w-48'
       }`}
-      title={`Block #${blockHeight} - Best diff: ${formatDifficulty(highestDiff.difficulty)}`}
+      title={`Block #${blockHeight} - Best diff: ${formatDifficulty(highestDiff.difficulty)} - Click for leaderboard`}
     >
       {/* Compact view */}
       {isCompact ? (
@@ -64,7 +66,7 @@ export default function ShadowBlockCard({
           </div>
         </div>
       )}
-    </div>
+    </Link>
   );
 }
 
