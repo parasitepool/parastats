@@ -1,31 +1,42 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { formatAddress } from '@/app/utils/formatters';
-
-interface BlockWinner {
-  block_height: number;
-  winner_address: string;
-  difficulty: number;
-  block_timestamp: number | null;
-}
-
-interface UserBlockDiff {
-  address: string;
-  difficulty: number;
-}
+import { checkRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/app/api/lib/rate-limit';
+import {
+  MAX_BLOCK_HEIGHT,
+  MAX_USERS_PER_BLOCK,
+  BlockWinnerRow,
+  UserBlockDiffRow,
+  logError,
+} from '../types';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ blockheight: string }> }
 ) {
+  // Rate limiting
+  const clientId = getClientIdentifier(request);
+  const rateLimitResult = checkRateLimit(clientId);
+  
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.' },
+      { 
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
+  }
+
   try {
     const { blockheight } = await params;
     const blockHeight = parseInt(blockheight, 10);
 
-    if (isNaN(blockHeight) || blockHeight < 0) {
+    // Validate block height with upper bound
+    if (isNaN(blockHeight) || blockHeight < 0 || blockHeight > MAX_BLOCK_HEIGHT) {
       return NextResponse.json(
         { error: 'Invalid block height' },
-        { status: 400 }
+        { status: 400, headers: getRateLimitHeaders(rateLimitResult) }
       );
     }
 
@@ -40,16 +51,16 @@ export async function GET(
         block_timestamp
       FROM block_highest_diff
       WHERE block_height = ?
-    `).get(blockHeight) as BlockWinner | undefined;
+    `).get(blockHeight) as BlockWinnerRow | undefined;
 
     if (!winner) {
       return NextResponse.json(
         { error: 'No data found for this block' },
-        { status: 404 }
+        { status: 404, headers: getRateLimitHeaders(rateLimitResult) }
       );
     }
 
-    // Get all user diffs for this block
+    // Get all user diffs for this block with LIMIT to prevent unbounded queries
     const userDiffs = db.prepare(`
       SELECT 
         address,
@@ -57,7 +68,8 @@ export async function GET(
       FROM user_block_diff
       WHERE block_height = ?
       ORDER BY difficulty DESC
-    `).all(blockHeight) as UserBlockDiff[];
+      LIMIT ?
+    `).all(blockHeight, MAX_USERS_PER_BLOCK) as UserBlockDiffRow[];
 
     return NextResponse.json({
       block_height: winner.block_height,
@@ -73,15 +85,13 @@ export async function GET(
         difficulty: u.difficulty,
       })),
       user_count: userDiffs.length,
-    });
+    }, { headers: getRateLimitHeaders(rateLimitResult) });
 
   } catch (error) {
-    console.error('Error fetching block highest diff:', error);
+    logError('highest-diff/[blockheight]/route', error);
     return NextResponse.json(
       { error: 'Failed to fetch block data' },
       { status: 500 }
     );
   }
 }
-
-

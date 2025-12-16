@@ -2,9 +2,14 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { formatDifficulty, formatAddress } from '@/app/utils/formatters';
+import { isValidBitcoinAddress } from '@/app/utils/validators';
 import * as echarts from 'echarts';
+
+// Constants
+const LEADERBOARD_MAX_USERS = 99;
+const BLOCK_RANGE_WINDOW = 499; // 500 blocks back
 
 interface BlockData {
   block_height: number;
@@ -38,6 +43,7 @@ export default function BlockLeaderboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<echarts.ECharts | null>(null);
 
   // Fetch available block range
   useEffect(() => {
@@ -49,7 +55,7 @@ export default function BlockLeaderboard() {
         if (data.length > 0) {
           const latestBlock = data[0].block_height;
           setBlockRange({
-            min: Math.max(1, latestBlock - 499), // 500 blocks back
+            min: Math.max(1, latestBlock - BLOCK_RANGE_WINDOW),
             max: latestBlock,
           });
         }
@@ -112,6 +118,16 @@ export default function BlockLeaderboard() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing in an input field
+      const target = e.target as Element;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target.getAttribute('contenteditable') === 'true'
+      ) {
+        return;
+      }
+
       if (e.key === 'ArrowLeft') {
         navigateNewer();
       } else if (e.key === 'ArrowRight') {
@@ -125,14 +141,22 @@ export default function BlockLeaderboard() {
   const canNavigateNewer = blockRange && blockHeight < blockRange.max;
   const canNavigateOlder = blockRange && blockHeight > blockRange.min;
 
-  // Top 99 users for the leaderboard
-  const leaderboard = blockData?.users.slice(0, 99) || [];
+  // Top N users for the leaderboard - memoized to prevent unnecessary re-renders
+  const leaderboard = useMemo(
+    () => blockData?.users.slice(0, LEADERBOARD_MAX_USERS) || [],
+    [blockData?.users]
+  );
 
-  // Scatter chart effect
+  // Scatter chart effect - reuse existing chart instance to avoid re-initialization
   useEffect(() => {
     if (!chartRef.current || !blockData || leaderboard.length === 0) return;
 
-    const chart = echarts.init(chartRef.current);
+    // Get existing chart instance or create new one
+    let chart = chartInstanceRef.current;
+    if (!chart || chart.isDisposed()) {
+      chart = echarts.init(chartRef.current);
+      chartInstanceRef.current = chart;
+    }
 
     const scatterData = leaderboard.map((user, index) => [index + 1, user.difficulty]);
 
@@ -244,16 +268,49 @@ export default function BlockLeaderboard() {
       }],
     };
 
-    chart.setOption(option);
+    chart.setOption(option, { notMerge: true });
 
-    const handleResize = () => chart.resize();
+    const handleResize = () => chart?.resize();
     window.addEventListener('resize', handleResize);
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      chart.dispose();
     };
   }, [blockData, leaderboard]);
+
+  // Cleanup chart on unmount
+  useEffect(() => {
+    return () => {
+      if (chartInstanceRef.current && !chartInstanceRef.current.isDisposed()) {
+        chartInstanceRef.current.dispose();
+        chartInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  /**
+   * Safely render a user link, validating the address format first
+   */
+  const renderUserLink = (user: { fullAddress: string; address: string }, className: string) => {
+    // Validate address before using in href to prevent XSS
+    if (!isValidBitcoinAddress(user.fullAddress)) {
+      return (
+        <span className={className} title="Invalid address">
+          {user.address}
+        </span>
+      );
+    }
+
+    return (
+      <Link 
+        href={`/user/${encodeURIComponent(user.fullAddress)}`}
+        className={className}
+        title={user.fullAddress}
+      >
+        {formatAddress(user.fullAddress)}
+      </Link>
+    );
+  };
 
   return (
     <main className="flex min-h-screen flex-col items-start py-8">
@@ -364,13 +421,7 @@ export default function BlockLeaderboard() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <Link 
-                            href={`/user/${user.fullAddress}`}
-                            className="font-mono text-sm hover:text-accent-1 transition-colors"
-                            title={user.fullAddress}
-                          >
-                            {formatAddress(user.fullAddress)}
-                          </Link>
+                          {renderUserLink(user, "font-mono text-sm hover:text-accent-1 transition-colors")}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-bold ${isWinner ? 'text-accent-1' : ''}`}>
@@ -408,13 +459,7 @@ export default function BlockLeaderboard() {
                         {formatDifficulty(user.difficulty)}
                       </span>
                     </div>
-                    <Link 
-                      href={`/user/${user.fullAddress}`}
-                      className="font-mono text-xs text-accent-2 hover:text-accent-1 transition-colors block"
-                      title={user.fullAddress}
-                    >
-                      {formatAddress(user.fullAddress)}
-                    </Link>
+                    {renderUserLink(user, "font-mono text-xs text-accent-2 hover:text-accent-1 transition-colors block")}
                     <div className="mt-2 text-xs text-accent-3 font-mono">
                       {percentOfWinner.toFixed(1)}% of top
                     </div>
@@ -428,4 +473,3 @@ export default function BlockLeaderboard() {
     </main>
   );
 }
-

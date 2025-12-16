@@ -14,6 +14,11 @@ interface UserDiffEntry {
   diff: number;
 }
 
+interface MempoolBlockDetails {
+  timestamp: number;
+  [key: string]: unknown;
+}
+
 // Configuration
 const CONFIG = {
   BACKFILL_BLOCKS: 500, // Number of blocks to backfill on startup (3 days worth: 3 * 144)
@@ -24,6 +29,7 @@ const CONFIG = {
   MEMPOOL_BLOCK_DETAILS_URL: 'https://mempool.space/api/block',
   MAX_RETRIES: 4,
   RETRY_BASE_DELAY: 500,
+  MAX_PENDING_COLLECTIONS: 50, // Prevent memory leak from too many pending timeouts
 } as const;
 
 let isCollecting = false;
@@ -33,6 +39,18 @@ const pendingCollections: Map<number, NodeJS.Timeout> = new Map();
  * Helper function to add delay
  */
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Validate that response is a valid MempoolBlockDetails object
+ */
+function isValidBlockDetails(data: unknown): data is MempoolBlockDetails {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'timestamp' in data &&
+    typeof (data as MempoolBlockDetails).timestamp === 'number'
+  );
+}
 
 /**
  * Retry helper function with backoff and jitter
@@ -112,7 +130,13 @@ async function fetchBlockTimestamp(blockHeight: number): Promise<number | null> 
         throw new HttpError(detailsResponse.status, detailsResponse.statusText, detailsUrl);
       }
       
-      const blockDetails = await detailsResponse.json() as { timestamp: number };
+      const blockDetails = await detailsResponse.json();
+      
+      // Runtime validation of response structure
+      if (!isValidBlockDetails(blockDetails)) {
+        throw new Error(`Invalid block details response for block ${blockHeight}: missing or invalid timestamp`);
+      }
+      
       return blockDetails.timestamp;
     }, `GET block timestamp for ${blockHeight}`);
   } catch (error) {
@@ -372,6 +396,21 @@ export function triggerDelayedCollection(blockHeight: number): void {
   const existingTimeout = pendingCollections.get(blockHeight);
   if (existingTimeout) {
     clearTimeout(existingTimeout);
+    pendingCollections.delete(blockHeight);
+  }
+
+  // Prevent memory leak: if too many pending collections, clear oldest ones
+  if (pendingCollections.size >= CONFIG.MAX_PENDING_COLLECTIONS) {
+    console.warn(`⚠️ Too many pending collections (${pendingCollections.size}), clearing oldest entries`);
+    
+    // Get the oldest entries (lowest block heights) and remove them
+    const sortedEntries = [...pendingCollections.entries()].sort((a, b) => a[0] - b[0]);
+    const entriesToRemove = sortedEntries.slice(0, Math.floor(CONFIG.MAX_PENDING_COLLECTIONS / 2));
+    
+    for (const [height, timeout] of entriesToRemove) {
+      clearTimeout(timeout);
+      pendingCollections.delete(height);
+    }
   }
 
   console.log(`⏳ Scheduling highest diff collection for block ${blockHeight} in ${CONFIG.COLLECTION_DELAY_MS / 1000}s`);
@@ -457,5 +496,3 @@ export function stopHighestDiffCollector(): void {
   pendingCollections.clear();
   console.log('📊 Highest diff collector stopped');
 }
-
-

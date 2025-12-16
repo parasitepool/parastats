@@ -1,29 +1,44 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { formatAddress } from '@/app/utils/formatters';
-
-interface BlockWinner {
-  block_height: number;
-  winner_address: string;
-  difficulty: number;
-  block_timestamp: number | null;
-}
-
-interface UserWinCount {
-  address: string;
-  win_count: number;
-  total_diff: number;
-  avg_diff: number;
-}
-
-const MAX_LIMIT = 500;
+import { isValidBitcoinAddress } from '@/app/utils/validators';
+import { checkRateLimit, getClientIdentifier, getRateLimitHeaders } from '@/app/api/lib/rate-limit';
+import {
+  MAX_LIMIT,
+  BlockWinnerRow,
+  UserWinCountRow,
+  UserDiffWithTimestampRow,
+  logError,
+} from './types';
 
 export async function GET(request: Request) {
+  // Rate limiting
+  const clientId = getClientIdentifier(request);
+  const rateLimitResult = checkRateLimit(clientId);
+  
+  if (!rateLimitResult.success) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.' },
+      { 
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '10', 10)), MAX_LIMIT);
     const address = searchParams.get('address');
     const type = searchParams.get('type') || 'recent'; // recent, winners, user-diffs
+
+    // Validate address if provided
+    if (address && !isValidBitcoinAddress(address)) {
+      return NextResponse.json(
+        { error: 'Invalid Bitcoin address format' },
+        { status: 400, headers: getRateLimitHeaders(rateLimitResult) }
+      );
+    }
 
     const db = getDb();
 
@@ -39,14 +54,15 @@ export async function GET(request: Request) {
         GROUP BY winner_address
         ORDER BY win_count DESC
         LIMIT ?
-      `).all(limit) as UserWinCount[];
+      `).all(limit) as UserWinCountRow[];
 
       return NextResponse.json(
         winners.map(w => ({
           ...w,
           address: formatAddress(w.address),
           fullAddress: w.address,
-        }))
+        })),
+        { headers: getRateLimitHeaders(rateLimitResult) }
       );
     }
 
@@ -64,7 +80,7 @@ export async function GET(request: Request) {
         WHERE u.address = ?
         ORDER BY u.block_height DESC
         LIMIT ?
-      `).all(address, limit) as Array<{ block_height: number; address: string; difficulty: number; block_timestamp: number | null }>;
+      `).all(address, limit) as UserDiffWithTimestampRow[];
 
       return NextResponse.json(
         userDiffs.map(d => ({
@@ -73,7 +89,8 @@ export async function GET(request: Request) {
           block_timestamp: d.block_timestamp,
           address: formatAddress(d.address),
           fullAddress: d.address,
-        }))
+        })),
+        { headers: getRateLimitHeaders(rateLimitResult) }
       );
     }
 
@@ -89,14 +106,15 @@ export async function GET(request: Request) {
         WHERE winner_address = ?
         ORDER BY block_height DESC
         LIMIT ?
-      `).all(address, limit) as BlockWinner[];
+      `).all(address, limit) as BlockWinnerRow[];
 
       return NextResponse.json(
         userBlocks.map(b => ({
           ...b,
           winner_address: formatAddress(b.winner_address),
           fullAddress: b.winner_address,
-        }))
+        })),
+        { headers: getRateLimitHeaders(rateLimitResult) }
       );
     }
 
@@ -110,22 +128,22 @@ export async function GET(request: Request) {
       FROM block_highest_diff
       ORDER BY block_height DESC
       LIMIT ?
-    `).all(limit) as BlockWinner[];
+    `).all(limit) as BlockWinnerRow[];
 
     return NextResponse.json(
       recentBlocks.map(b => ({
         ...b,
         winner_address: formatAddress(b.winner_address),
         fullAddress: b.winner_address,
-      }))
+      })),
+      { headers: getRateLimitHeaders(rateLimitResult) }
     );
 
   } catch (error) {
-    console.error('Error fetching highest diff data:', error);
+    logError('highest-diff/route', error);
     return NextResponse.json(
       { error: 'Failed to fetch highest diff data' },
       { status: 500 }
     );
   }
 }
-
