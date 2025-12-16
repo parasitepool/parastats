@@ -1,27 +1,28 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { formatDifficulty, formatAddress } from '@/app/utils/formatters';
-import { isValidBitcoinAddress } from '@/app/utils/validators';
+import { formatDifficulty } from '@/app/utils/formatters';
 import * as echarts from 'echarts';
 
 // Constants
 const LEADERBOARD_MAX_USERS = 99;
 const BLOCK_RANGE_WINDOW = 499; // 500 blocks back
 
+/**
+ * PRIVACY: Block data only contains truncated addresses.
+ * Full addresses are never exposed to protect user privacy.
+ * Users cannot navigate to other users' pages from this leaderboard.
+ */
 interface BlockData {
   block_height: number;
   block_timestamp: number | null;
   winner: {
-    address: string;
-    fullAddress: string;
+    address: string; // Truncated address only
     difficulty: number;
   };
   users: {
-    address: string;
-    fullAddress: string;
+    address: string; // Truncated address only
     difficulty: number;
   }[];
   user_count: number;
@@ -247,7 +248,8 @@ export default function BlockLeaderboard() {
           if (!params || params.length === 0) return '';
           const [rank, diff] = params[0].data;
           const user = leaderboard[rank - 1];
-          return `#${rank} ${formatAddress(user?.fullAddress || '')}<br/>Difficulty: ${formatDifficulty(diff)}`;
+          // Only show truncated address - privacy protected
+          return `#${rank} ${user?.address || ''}<br/>Difficulty: ${formatDifficulty(diff)}`;
         }
       },
       series: [{
@@ -287,30 +289,6 @@ export default function BlockLeaderboard() {
       }
     };
   }, []);
-
-  /**
-   * Safely render a user link, validating the address format first
-   */
-  const renderUserLink = (user: { fullAddress: string; address: string }, className: string) => {
-    // Validate address before using in href to prevent XSS
-    if (!isValidBitcoinAddress(user.fullAddress)) {
-      return (
-        <span className={className} title="Invalid address">
-          {user.address}
-        </span>
-      );
-    }
-
-    return (
-      <Link 
-        href={`/user/${encodeURIComponent(user.fullAddress)}`}
-        className={className}
-        title={user.fullAddress}
-      >
-        {formatAddress(user.fullAddress)}
-      </Link>
-    );
-  };
 
   return (
     <main className="flex min-h-screen flex-col items-start py-8">
@@ -412,7 +390,7 @@ export default function BlockLeaderboard() {
                     
                     return (
                       <tr 
-                        key={user.fullAddress} 
+                        key={`${index}-${user.address}`} 
                         className={`border-b border-border/50 hover:bg-foreground/5 transition-colors ${isWinner ? 'bg-accent-1/5' : ''}`}
                       >
                         <td className="px-4 py-3">
@@ -421,7 +399,10 @@ export default function BlockLeaderboard() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          {renderUserLink(user, "font-mono text-sm hover:text-accent-1 transition-colors")}
+                          {/* Privacy: Only truncated address shown, no link to user page */}
+                          <span className="font-mono text-sm">
+                            {user.address}
+                          </span>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`font-bold ${isWinner ? 'text-accent-1' : ''}`}>
@@ -448,7 +429,7 @@ export default function BlockLeaderboard() {
                 
                 return (
                   <div 
-                    key={user.fullAddress} 
+                    key={`${index}-${user.address}`} 
                     className={`p-4 ${isWinner ? 'bg-accent-1/5' : ''}`}
                   >
                     <div className="flex items-center justify-between mb-2">
@@ -459,7 +440,10 @@ export default function BlockLeaderboard() {
                         {formatDifficulty(user.difficulty)}
                       </span>
                     </div>
-                    {renderUserLink(user, "font-mono text-xs text-accent-2 hover:text-accent-1 transition-colors block")}
+                    {/* Privacy: Only truncated address shown, no link to user page */}
+                    <span className="font-mono text-xs text-accent-2 block">
+                      {user.address}
+                    </span>
                     <div className="mt-2 text-xs text-accent-3 font-mono">
                       {percentOfWinner.toFixed(1)}% of top
                     </div>

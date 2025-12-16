@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { formatDifficulty, formatAddress } from "../utils/formatters";
+import { formatDifficulty } from "../utils/formatters";
 import { type BlockWinner } from "../utils/api";
 
 interface ShadowBlockCardProps {
@@ -10,6 +10,10 @@ interface ShadowBlockCardProps {
   isCompact?: boolean;
 }
 
+/**
+ * PRIVACY: This component only displays truncated addresses.
+ * Full addresses are never shown to protect user privacy.
+ */
 export default function ShadowBlockCard({ 
   blockHeight, 
   highestDiff, 
@@ -46,8 +50,9 @@ export default function ShadowBlockCard({
           <span className="text-xs font-bold text-accent-1">
             {formatDifficulty(highestDiff.difficulty)}
           </span>
+          {/* Privacy: Only truncated address shown */}
           <div className="text-[10px] text-foreground/50 truncate max-w-full mt-0.5">
-            {formatAddress(highestDiff.fullAddress)}
+            {highestDiff.winner_address}
           </div>
         </div>
       ) : (
@@ -60,8 +65,9 @@ export default function ShadowBlockCard({
             <div className="text-sm font-bold text-accent-1">
               {formatDifficulty(highestDiff.difficulty)}
             </div>
-            <div className="text-xs text-foreground/60 truncate mt-0.5" title={highestDiff.fullAddress}>
-              {formatAddress(highestDiff.fullAddress)}
+            {/* Privacy: Only truncated address shown, no title with full address */}
+            <div className="text-xs text-foreground/60 truncate mt-0.5">
+              {highestDiff.winner_address}
             </div>
           </div>
         </div>
@@ -69,4 +75,3 @@ export default function ShadowBlockCard({
     </Link>
   );
 }
-

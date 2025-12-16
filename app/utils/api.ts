@@ -180,11 +180,13 @@ export async function toggleUserVisibility(address: string): Promise<{ isPublic:
   }
 }
 
-// Highest diff types
+/**
+ * PRIVACY: BlockWinner only contains truncated addresses.
+ * Full addresses are never exposed by the API to protect user privacy.
+ */
 export interface BlockWinner {
   block_height: number;
-  winner_address: string;
-  fullAddress: string;
+  winner_address: string; // Truncated address only
   difficulty: number;
   block_timestamp: number | null;
 }
@@ -205,13 +207,15 @@ export async function getRecentBlockWinners(limit: number = 10): Promise<BlockWi
   }
 }
 
-// User's best diffs API (user's highest diff per block, regardless of pool ranking)
+/**
+ * PRIVACY: UserBlockDiffEntry only contains truncated addresses.
+ * Full addresses are never exposed by the API to protect user privacy.
+ */
 export interface UserBlockDiffEntry {
   block_height: number;
   difficulty: number;
   block_timestamp: number | null;
-  address: string;
-  fullAddress: string;
+  address: string; // Truncated address only
 }
 
 export async function getUserBlockDiffs(address: string, limit: number = 50): Promise<UserBlockDiffEntry[]> {

@@ -11,6 +11,10 @@ import {
   logError,
 } from './types';
 
+/**
+ * PRIVACY: This API only returns truncated addresses.
+ * Full addresses are never exposed to protect user privacy.
+ */
 export async function GET(request: Request) {
   // Rate limiting
   const clientId = getClientIdentifier(request);
@@ -58,9 +62,10 @@ export async function GET(request: Request) {
 
       return NextResponse.json(
         winners.map(w => ({
-          ...w,
-          address: formatAddress(w.address),
-          fullAddress: w.address,
+          address: formatAddress(w.address), // Truncated only
+          win_count: w.win_count,
+          total_diff: w.total_diff,
+          avg_diff: w.avg_diff,
         })),
         { headers: getRateLimitHeaders(rateLimitResult) }
       );
@@ -87,8 +92,7 @@ export async function GET(request: Request) {
           block_height: d.block_height,
           difficulty: d.difficulty,
           block_timestamp: d.block_timestamp,
-          address: formatAddress(d.address),
-          fullAddress: d.address,
+          address: formatAddress(d.address), // Truncated only
         })),
         { headers: getRateLimitHeaders(rateLimitResult) }
       );
@@ -110,9 +114,10 @@ export async function GET(request: Request) {
 
       return NextResponse.json(
         userBlocks.map(b => ({
-          ...b,
-          winner_address: formatAddress(b.winner_address),
-          fullAddress: b.winner_address,
+          block_height: b.block_height,
+          winner_address: formatAddress(b.winner_address), // Truncated only
+          difficulty: b.difficulty,
+          block_timestamp: b.block_timestamp,
         })),
         { headers: getRateLimitHeaders(rateLimitResult) }
       );
@@ -132,9 +137,10 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       recentBlocks.map(b => ({
-        ...b,
-        winner_address: formatAddress(b.winner_address),
-        fullAddress: b.winner_address,
+        block_height: b.block_height,
+        winner_address: formatAddress(b.winner_address), // Truncated only
+        difficulty: b.difficulty,
+        block_timestamp: b.block_timestamp,
       })),
       { headers: getRateLimitHeaders(rateLimitResult) }
     );

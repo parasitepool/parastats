@@ -10,6 +10,10 @@ import {
   logError,
 } from '../types';
 
+/**
+ * PRIVACY: This API only returns truncated addresses.
+ * Full addresses are never exposed to protect user privacy.
+ */
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ blockheight: string }> }
@@ -71,17 +75,16 @@ export async function GET(
       LIMIT ?
     `).all(blockHeight, MAX_USERS_PER_BLOCK) as UserBlockDiffRow[];
 
+    // Return only truncated addresses - never expose full addresses
     return NextResponse.json({
       block_height: winner.block_height,
       block_timestamp: winner.block_timestamp,
       winner: {
-        address: formatAddress(winner.winner_address),
-        fullAddress: winner.winner_address,
+        address: formatAddress(winner.winner_address), // Truncated only
         difficulty: winner.difficulty,
       },
       users: userDiffs.map(u => ({
-        address: formatAddress(u.address),
-        fullAddress: u.address,
+        address: formatAddress(u.address), // Truncated only
         difficulty: u.difficulty,
       })),
       user_count: userDiffs.length,
