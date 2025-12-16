@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { CallbackDataParams } from "echarts/types/dist/shared";
+import { formatDifficulty, formatHashrate } from "../utils/formatters";
 
 // Constants
 const MAX_TIMESTAMP_DISTANCE_MS = 30 * 60 * 1000; // 30 minutes tolerance for matching timestamps
@@ -32,44 +33,6 @@ interface HashrateChartProps {
   bestDiffs?: BestDiffPoint[];
   loading?: boolean;
   title?: string;
-}
-
-/**
- * Format difficulty value for display (e.g., 1.5G, 100M, etc.)
- */
-function formatDifficulty(value: number): string {
-  if (value >= 1e12) return (value / 1e12).toFixed(1) + "T";
-  if (value >= 1e9) return (value / 1e9).toFixed(1) + "G";
-  if (value >= 1e6) return (value / 1e6).toFixed(1) + "M";
-  if (value >= 1e3) return (value / 1e3).toFixed(1) + "K";
-  return value.toFixed(0);
-}
-
-/**
- * Format hashrate value for display (e.g., 9.5 PH/s, 100 TH/s, etc.)
- */
-function formatHashrate(hashrate: number): string {
-  let unit = "H/s";
-  let value: number = hashrate;
-
-  if (hashrate >= 1e15) {
-    value = hashrate / 1e15;
-    unit = "PH/s";
-  } else if (hashrate >= 1e12) {
-    value = hashrate / 1e12;
-    unit = "TH/s";
-  } else if (hashrate >= 1e9) {
-    value = hashrate / 1e9;
-    unit = "GH/s";
-  } else if (hashrate >= 1e6) {
-    value = hashrate / 1e6;
-    unit = "MH/s";
-  } else if (hashrate >= 1e3) {
-    value = hashrate / 1e3;
-    unit = "KH/s";
-  }
-
-  return `${value.toFixed(2)} ${unit}`;
 }
 
 /**

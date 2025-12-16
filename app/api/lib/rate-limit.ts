@@ -3,7 +3,7 @@
  * 
  * Note: This is a basic implementation suitable for single-instance deployments.
  * For production with multiple instances, consider using Redis or a similar
- * distributed store for rate limiting.
+ * distributed store, or offload to Cloudflare rate limiting for route-specific limits.
  */
 
 interface RateLimitEntry {
@@ -17,7 +17,7 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
 // Configuration
 const CONFIG = {
   WINDOW_MS: 60 * 1000, // 1 minute window
-  MAX_REQUESTS: 100, // Max requests per window
+  MAX_REQUESTS: 200, // Max requests per window (increased from 100 to accommodate batch operations)
   CLEANUP_INTERVAL_MS: 5 * 60 * 1000, // Cleanup every 5 minutes
 } as const;
 
@@ -53,15 +53,43 @@ export interface RateLimitResult {
 }
 
 /**
+ * Get client identifier from request
+ * Uses X-Forwarded-For header if behind a proxy, falls back to generic identifier
+ */
+export function getClientIdentifier(request: Request): string {
+  // Try to get real IP from common headers (when behind proxy/load balancer)
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    // X-Forwarded-For can contain multiple IPs, get the first one (client IP)
+    return forwardedFor.split(',')[0].trim();
+  }
+
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) {
+    return realIp;
+  }
+
+  // Fallback - in development or when headers aren't available
+  return 'unknown-client';
+}
+
+/**
  * Check if a request should be rate limited
- * @param identifier - Unique identifier for the client (e.g., IP address)
+ * 
+ * @param identifierOrRequest - Either a string identifier or a Request object.
+ *                              If Request is provided, getClientIdentifier is called automatically.
  * @param maxRequests - Optional custom max requests (defaults to CONFIG.MAX_REQUESTS)
  * @returns Rate limit result with success status and metadata
  */
 export function checkRateLimit(
-  identifier: string,
+  identifierOrRequest: string | Request,
   maxRequests: number = CONFIG.MAX_REQUESTS
 ): RateLimitResult {
+  // Extract identifier from Request if needed
+  const identifier = typeof identifierOrRequest === 'string' 
+    ? identifierOrRequest 
+    : getClientIdentifier(identifierOrRequest);
+
   const now = Date.now();
   const entry = rateLimitStore.get(identifier);
 
@@ -102,27 +130,6 @@ export function checkRateLimit(
 }
 
 /**
- * Get client identifier from request
- * Uses X-Forwarded-For header if behind a proxy, falls back to generic identifier
- */
-export function getClientIdentifier(request: Request): string {
-  // Try to get real IP from common headers (when behind proxy/load balancer)
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  if (forwardedFor) {
-    // X-Forwarded-For can contain multiple IPs, get the first one (client IP)
-    return forwardedFor.split(',')[0].trim();
-  }
-
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp) {
-    return realIp;
-  }
-
-  // Fallback - in development or when headers aren't available
-  return 'unknown-client';
-}
-
-/**
  * Create rate limit headers for response
  */
 export function getRateLimitHeaders(result: RateLimitResult): HeadersInit {
@@ -132,4 +139,3 @@ export function getRateLimitHeaders(result: RateLimitResult): HeadersInit {
     'X-RateLimit-Reset': result.reset.toString(),
   };
 }
-

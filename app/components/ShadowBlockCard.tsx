@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { formatDifficulty } from "../utils/formatters";
-import { type BlockWinner } from "../utils/api";
+import { type BlockTopDiff } from "../utils/api";
 
 interface ShadowBlockCardProps {
   blockHeight: number;
-  highestDiff?: BlockWinner;
+  highestDiff?: BlockTopDiff;
   isCompact?: boolean;
 }
 
@@ -52,7 +52,7 @@ export default function ShadowBlockCard({
           </span>
           {/* Privacy: Only truncated address shown */}
           <div className="text-[10px] text-foreground/50 truncate max-w-full mt-0.5">
-            {highestDiff.winner_address}
+            {highestDiff.top_diff_address}
           </div>
         </div>
       ) : (
@@ -67,7 +67,7 @@ export default function ShadowBlockCard({
             </div>
             {/* Privacy: Only truncated address shown, no title with full address */}
             <div className="text-xs text-foreground/60 truncate mt-0.5">
-              {highestDiff.winner_address}
+              {highestDiff.top_diff_address}
             </div>
           </div>
         </div>

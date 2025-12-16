@@ -13,11 +13,14 @@ const BLOCK_RANGE_WINDOW = 499; // 500 blocks back
  * PRIVACY: Block data only contains truncated addresses.
  * Full addresses are never exposed to protect user privacy.
  * Users cannot navigate to other users' pages from this leaderboard.
+ * 
+ * Note: Uses "top_diff" terminology instead of "winner" to avoid
+ * implying users won anything - it's simply a difficulty watermark.
  */
 interface BlockData {
   block_height: number;
   block_timestamp: number | null;
-  winner: {
+  top_diff: {
     address: string; // Truncated address only
     difficulty: number;
   };
@@ -385,16 +388,16 @@ export default function BlockLeaderboard() {
                 </thead>
                 <tbody>
                   {leaderboard.map((user, index) => {
-                    const percentOfWinner = (user.difficulty / blockData.winner.difficulty) * 100;
-                    const isWinner = index === 0;
+                    const percentOfTop = (user.difficulty / blockData.top_diff.difficulty) * 100;
+                    const isTopDiff = index === 0;
                     
                     return (
                       <tr 
                         key={`${index}-${user.address}`} 
-                        className={`border-b border-border/50 hover:bg-foreground/5 transition-colors ${isWinner ? 'bg-accent-1/5' : ''}`}
+                        className={`border-b border-border/50 hover:bg-foreground/5 transition-colors ${isTopDiff ? 'bg-accent-1/5' : ''}`}
                       >
                         <td className="px-4 py-3">
-                          <span className={`font-mono ${isWinner ? 'text-accent-1 font-bold' : 'text-accent-3'}`}>
+                          <span className={`font-mono ${isTopDiff ? 'text-accent-1 font-bold' : 'text-accent-3'}`}>
                             #{index + 1}
                           </span>
                         </td>
@@ -405,13 +408,13 @@ export default function BlockLeaderboard() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className={`font-bold ${isWinner ? 'text-accent-1' : ''}`}>
+                          <span className={`font-bold ${isTopDiff ? 'text-accent-1' : ''}`}>
                             {formatDifficulty(user.difficulty)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-sm text-accent-2 font-mono">
-                            {percentOfWinner.toFixed(1)}%
+                            {percentOfTop.toFixed(1)}%
                           </span>
                         </td>
                       </tr>
@@ -424,19 +427,19 @@ export default function BlockLeaderboard() {
             {/* Mobile Cards */}
             <div className="md:hidden divide-y divide-border/50">
               {leaderboard.map((user, index) => {
-                const percentOfWinner = (user.difficulty / blockData.winner.difficulty) * 100;
-                const isWinner = index === 0;
+                const percentOfTop = (user.difficulty / blockData.top_diff.difficulty) * 100;
+                const isTopDiff = index === 0;
                 
                 return (
                   <div 
                     key={`${index}-${user.address}`} 
-                    className={`p-4 ${isWinner ? 'bg-accent-1/5' : ''}`}
+                    className={`p-4 ${isTopDiff ? 'bg-accent-1/5' : ''}`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className={`font-mono text-sm ${isWinner ? 'text-accent-1 font-bold' : 'text-accent-3'}`}>
+                      <span className={`font-mono text-sm ${isTopDiff ? 'text-accent-1 font-bold' : 'text-accent-3'}`}>
                         #{index + 1}
                       </span>
-                      <span className={`font-bold ${isWinner ? 'text-accent-1' : ''}`}>
+                      <span className={`font-bold ${isTopDiff ? 'text-accent-1' : ''}`}>
                         {formatDifficulty(user.difficulty)}
                       </span>
                     </div>
@@ -445,7 +448,7 @@ export default function BlockLeaderboard() {
                       {user.address}
                     </span>
                     <div className="mt-2 text-xs text-accent-3 font-mono">
-                      {percentOfWinner.toFixed(1)}% of top
+                      {percentOfTop.toFixed(1)}% of top
                     </div>
                   </div>
                 );

@@ -5,7 +5,7 @@ import BlockCard from "./BlockCard";
 import ShadowBlockCard from "./ShadowBlockCard";
 import { Block } from "@mempool/mempool.js/lib/interfaces/bitcoin/blocks";
 import { getPreference, setPreference } from "../../lib/localStorage";
-import { getBlocksTipHeight, getRecentBlocks, getRecentBlockWinners, type BlockWinner } from "../utils/api";
+import { getBlocksTipHeight, getRecentBlocks, getRecentBlockTopDiffs, type BlockTopDiff } from "../utils/api";
 import { PlusIcon, MinusIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import Link from "next/link";
 
@@ -42,7 +42,7 @@ export default function RecentBlocks() {
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const [isCompact, setIsCompact] = useState(true);
-  const [highestDiffs, setHighestDiffs] = useState<Map<number, BlockWinner>>(new Map());
+  const [highestDiffs, setHighestDiffs] = useState<Map<number, BlockTopDiff>>(new Map());
   const initialBlockHeightRef = useRef<number>(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -109,13 +109,13 @@ export default function RecentBlocks() {
 
     async function fetchHighestDiffs() {
       try {
-        // Fetch recent block winners (enough to cover all displayed blocks)
-        const winners = await getRecentBlockWinners(blocks.length + 10);
+        // Fetch recent block top diffs (enough to cover all displayed blocks)
+        const topDiffs = await getRecentBlockTopDiffs(blocks.length + 10);
         
-        // Create a map of block height to winner data
-        const diffMap = new Map<number, BlockWinner>();
-        for (const winner of winners) {
-          diffMap.set(winner.block_height, winner);
+        // Create a map of block height to top diff data
+        const diffMap = new Map<number, BlockTopDiff>();
+        for (const topDiff of topDiffs) {
+          diffMap.set(topDiff.block_height, topDiff);
         }
         setHighestDiffs(diffMap);
       } catch (error) {

@@ -181,18 +181,21 @@ export async function toggleUserVisibility(address: string): Promise<{ isPublic:
 }
 
 /**
- * PRIVACY: BlockWinner only contains truncated addresses.
+ * PRIVACY: BlockTopDiff only contains truncated addresses.
  * Full addresses are never exposed by the API to protect user privacy.
+ * 
+ * Note: Uses "top_diff" terminology instead of "winner" to avoid
+ * implying users won anything - it's simply a difficulty watermark.
  */
-export interface BlockWinner {
+export interface BlockTopDiff {
   block_height: number;
-  winner_address: string; // Truncated address only
+  top_diff_address: string; // Truncated address only
   difficulty: number;
   block_timestamp: number | null;
 }
 
-// Recent block winners API
-export async function getRecentBlockWinners(limit: number = 10): Promise<BlockWinner[]> {
+// Recent block top diffs API
+export async function getRecentBlockTopDiffs(limit: number = 10): Promise<BlockTopDiff[]> {
   try {
     return await withRetry(async () => {
       const response = await fetch(`/api/highest-diff?limit=${limit}`);
@@ -202,7 +205,7 @@ export async function getRecentBlockWinners(limit: number = 10): Promise<BlockWi
       return await response.json();
     });
   } catch (error) {
-    console.error("Error fetching recent block winners:", error);
+    console.error("Error fetching recent block top diffs:", error);
     throw error;
   }
 }
