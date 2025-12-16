@@ -179,3 +179,59 @@ export async function toggleUserVisibility(address: string): Promise<{ isPublic:
     throw error;
   }
 }
+
+/**
+ * PRIVACY: BlockTopDiff only contains truncated addresses.
+ * Full addresses are never exposed by the API to protect user privacy.
+ * 
+ * Note: Uses "top_diff" terminology instead of "winner" to avoid
+ * implying users won anything - it's simply a difficulty watermark.
+ */
+export interface BlockTopDiff {
+  block_height: number;
+  top_diff_address: string; // Truncated address only
+  difficulty: number;
+  block_timestamp: number | null;
+}
+
+// Recent block top diffs API
+export async function getRecentBlockTopDiffs(limit: number = 10): Promise<BlockTopDiff[]> {
+  try {
+    return await withRetry(async () => {
+      const response = await fetch(`/api/highest-diff?limit=${limit}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    });
+  } catch (error) {
+    console.error("Error fetching recent block top diffs:", error);
+    throw error;
+  }
+}
+
+/**
+ * PRIVACY: UserBlockDiffEntry only contains truncated addresses.
+ * Full addresses are never exposed by the API to protect user privacy.
+ */
+export interface UserBlockDiffEntry {
+  block_height: number;
+  difficulty: number;
+  block_timestamp: number | null;
+  address: string; // Truncated address only
+}
+
+export async function getUserBlockDiffs(address: string, limit: number = 50): Promise<UserBlockDiffEntry[]> {
+  try {
+    return await withRetry(async () => {
+      const response = await fetch(`/api/highest-diff?address=${address}&type=user-diffs&limit=${limit}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    });
+  } catch (error) {
+    console.error(`Error fetching block diffs for user ${address}:`, error);
+    throw error;
+  }
+}

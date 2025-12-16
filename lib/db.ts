@@ -162,6 +162,38 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_stratum_timestamp ON stratum_notifications(timestamp);
     CREATE INDEX IF NOT EXISTS idx_stratum_pool ON stratum_notifications(pool);
   `);
+
+  // Create block highest diff table (pool-wide winner per block)
+  // block_timestamp is the actual Bitcoin block timestamp from mempool.space
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS block_highest_diff (
+      block_height INTEGER PRIMARY KEY,
+      winner_address TEXT NOT NULL,
+      difficulty REAL NOT NULL,
+      block_timestamp INTEGER
+    )
+  `);
+
+  // Index for leaderboard queries by winner
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_block_highest_diff_winner ON block_highest_diff(winner_address);
+  `);
+
+  // Create per-user block diff table with foreign key to block_highest_diff
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_block_diff (
+      block_height INTEGER NOT NULL,
+      address TEXT NOT NULL,
+      difficulty REAL NOT NULL,
+      PRIMARY KEY (block_height, address),
+      FOREIGN KEY (block_height) REFERENCES block_highest_diff(block_height) ON DELETE CASCADE
+    )
+  `);
+
+  // Index for user-specific queries
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_user_block_diff_address ON user_block_diff(address);
+  `);
 }
 
 // Close the database connection when the app is shutting down

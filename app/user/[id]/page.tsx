@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility, getUserBlockDiffs, type UserBlockDiffEntry } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -34,6 +34,7 @@ export default function UserDashboard() {
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [userBlockDiffs, setUserBlockDiffs] = useState<UserBlockDiffEntry[]>([]);
   
   const {
     isLightningAuthenticated,
@@ -197,6 +198,37 @@ export default function UserDashboard() {
       if (intervalId) {
         clearInterval(intervalId);
       }
+    };
+  }, [userId, isValidAddress]);
+
+  // Fetch user diffs data for the chart (only if valid address)
+  useEffect(() => {
+    if (isValidAddress === false) return;
+    if (isValidAddress === null) return;
+
+    let mounted = true;
+
+    const fetchBlockDiffs = async () => {
+      try {
+        const diffs = await getUserBlockDiffs(userId, 50);
+        if (mounted) {
+          setUserBlockDiffs(diffs);
+        }
+      } catch (err) {
+        console.error('Error fetching block diffs:', err);
+        if (mounted) {
+          setUserBlockDiffs([]);
+        }
+      }
+    };
+
+    fetchBlockDiffs();
+    // Refresh every 60 seconds
+    const intervalId = setInterval(fetchBlockDiffs, 60000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
     };
   }, [userId, isValidAddress]);
 
@@ -514,6 +546,7 @@ export default function UserDashboard() {
       {userData && (
         <div className="w-full mb-6">
           <HashrateChart
+            title="Historic Hashrate and Difficulty"
             data={historicalData ? {
               timestamps: historicalData.map(d => {
                 const date = new Date(d.timestamp);
@@ -526,6 +559,7 @@ export default function UserDashboard() {
                   hour12: false,
                 });
               }),
+              rawTimestamps: historicalData.map(d => new Date(d.timestamp).getTime()),
               series: [
                 {
                   data: historicalData.map(d => d.hashrate),
@@ -533,6 +567,23 @@ export default function UserDashboard() {
                 }
               ]
             } : undefined}
+            bestDiffs={userBlockDiffs.length > 0 ? userBlockDiffs
+              .filter(diff => diff.block_timestamp !== null)
+              .map(diff => {
+                const timestampMs = diff.block_timestamp! * 1000;
+                return {
+                  timestamp: new Date(timestampMs).toLocaleString("en-US", {
+                    year: undefined,
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  }),
+                  rawTimestamp: timestampMs,
+                  difficulty: diff.difficulty,
+                };
+              }) : undefined}
             loading={!historicalData}
           />
         </div>
@@ -638,6 +689,7 @@ export default function UserDashboard() {
         </div>
         </div>
       )}
+
       </main>
     </>
   );

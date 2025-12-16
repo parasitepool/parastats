@@ -81,9 +81,12 @@ async function withRetry<T>(
 
       if (!retryable) {
         // Non-retryable error (e.g., 404, 400, 403) - fail immediately
-        const contextMsg = context ? ` [${context}]` : '';
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        console.log(`Non-retryable error${contextMsg} - ${errorMsg}`);
+        // Skip logging for 404s - they're handled by the caller with a cleaner message
+        if (!(error instanceof HttpError && error.status === 404)) {
+          const contextMsg = context ? ` [${context}]` : '';
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          console.log(`Non-retryable error${contextMsg} - ${errorMsg}`);
+        }
         throw error;
       }
 
@@ -255,7 +258,12 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
     })();
 
   } catch (error) {
-    console.error(`Error collecting stats for user ${address}:`, error);
+    // Log 404s as simple one-liners (user not found is common, not critical)
+    if (error instanceof HttpError && error.status === 404) {
+      console.log(`User ${address} not found (404)`);
+    } else {
+      console.error(`Error collecting stats for user ${address}:`, error);
+    }
     
     // Increment failed attempts and deactivate if threshold reached
     const db = getDb();
