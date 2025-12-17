@@ -1,15 +1,18 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
+import { formatCompactNumber } from '@/app/utils/formatters';
 
 interface AnimatedCounterProps {
   value: bigint | number;
   duration?: number;
+  compact?: boolean;
 }
 
-export default function AnimatedCounter({ 
-  value, 
-  duration = 2000
+export default function AnimatedCounter({
+  value,
+  duration = 2000,
+  compact = false
 }: AnimatedCounterProps) {
   const [displayValue, setDisplayValue] = useState<bigint>(BigInt(0));
   const [rollingDigits, setRollingDigits] = useState<Set<number>>(new Set());
@@ -106,7 +109,9 @@ export default function AnimatedCounter({
   }, [value, duration]);
 
   // Format the display value
-  const formattedValue = displayValue.toLocaleString();
+  const formattedValue = compact
+    ? formatCompactNumber(displayValue)
+    : displayValue.toLocaleString();
   const chars = formattedValue.split('');
 
   return (
