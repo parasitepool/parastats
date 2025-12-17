@@ -37,7 +37,7 @@ interface HashrateChartProps {
 
 /**
  * Map best diff points to chart series data by finding the closest timestamp match.
- * Only includes the top N highest difficulties within the timestamp tolerance.
+ * First filters to diffs within the chart's time range, then takes top N highest difficulties.
  */
 function mapBestDiffsToSeriesData(
   timestamps: string[],
@@ -50,17 +50,32 @@ function mapBestDiffsToSeriesData(
     return seriesData;
   }
 
-  // Sort by difficulty descending and take top N
-  const topDiffs = [...diffs]
+  // Get the time range of the chart
+  const chartMinTime = Math.min(...rawTimestamps);
+  const chartMaxTime = Math.max(...rawTimestamps);
+
+  // First, filter diffs to only those within the chart's time range (with tolerance)
+  const diffsInRange = diffs.filter(diff => 
+    diff.rawTimestamp >= chartMinTime - MAX_TIMESTAMP_DISTANCE_MS &&
+    diff.rawTimestamp <= chartMaxTime + MAX_TIMESTAMP_DISTANCE_MS
+  );
+
+  // Sort by difficulty descending and take top N from those in range
+  const topDiffs = [...diffsInRange]
     .sort((a, b) => b.difficulty - a.difficulty)
     .slice(0, TOP_DIFFS_TO_SHOW);
 
-  // For each top diff, find the closest timestamp index
+  // For each top diff, find the closest timestamp index that isn't already taken
+  const usedIndices = new Set<number>();
+  
   for (const diff of topDiffs) {
     let closestIndex = -1;
     let closestDistance = Infinity;
 
     for (let i = 0; i < rawTimestamps.length; i++) {
+      // Skip indices that already have a dot (higher difficulty already placed there)
+      if (usedIndices.has(i)) continue;
+      
       const distance = Math.abs(rawTimestamps[i] - diff.rawTimestamp);
       if (distance < closestDistance) {
         closestDistance = distance;
@@ -68,9 +83,10 @@ function mapBestDiffsToSeriesData(
       }
     }
 
-    // Only place the point if within tolerance
+    // Only place the point if within tolerance and index not already used
     if (closestIndex >= 0 && closestDistance < MAX_TIMESTAMP_DISTANCE_MS) {
       seriesData[closestIndex] = diff.difficulty;
+      usedIndices.add(closestIndex);
     }
   }
 
@@ -324,6 +340,7 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
           name: "Best Diff",
           type: "scatter" as const,
           yAxisIndex: 1,
+          z: 10, // Render above the hashrate line and area
           data: bestDiffSeriesData,
           symbol: "circle",
           symbolSize: 10,
@@ -476,6 +493,7 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
           name: "Best Diff",
           type: "scatter" as const,
           yAxisIndex: 1,
+          z: 10, // Render above the hashrate line and area
           data: bestDiffSeriesData,
           itemStyle: {
             color: BEST_DIFF_COLOR,

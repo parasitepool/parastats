@@ -144,6 +144,37 @@ export function formatExpectedBlockTime(poolHashrate: number | string | undefine
 }
 
 /**
+ * Formats a large number with compact suffixes (K, M, B, T)
+ * e.g. 1234 -> 1.23K, 1234567890 -> 1.23B
+ * Supports bigint for very large numbers
+ */
+export function formatCompactNumber(value: bigint | number): string {
+  const num = typeof value === 'bigint' ? Number(value) : value;
+  if (num === 0) return '0';
+
+  const suffixes = ['', 'K', 'M', 'B', 'T', 'Q'];
+  const absNum = Math.abs(num);
+
+  if (absNum < 1000) {
+    return num.toLocaleString();
+  }
+
+  const floor = Math.floor(Math.log10(absNum) / 3);
+  const suffixIndex = Math.min(floor, suffixes.length - 1);
+
+  const scaledValue = num / Math.pow(1000, suffixIndex);
+
+  // Always show 4 significant digits
+  if (Math.abs(scaledValue) >= 100) {
+    return `${scaledValue.toFixed(1)}${suffixes[suffixIndex]}`;
+  } else if (Math.abs(scaledValue) >= 10) {
+    return `${scaledValue.toFixed(2)}${suffixes[suffixIndex]}`;
+  } else {
+    return `${scaledValue.toFixed(3)}${suffixes[suffixIndex]}`;
+  }
+}
+
+/**
  * Converts a hashrate string with unit suffix back to its numerical value
  * e.g. '1.23KH/s' -> 1230, '1.23MH/s' -> 1230000
  */
