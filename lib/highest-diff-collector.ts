@@ -36,6 +36,22 @@ let isCollecting = false;
 const pendingCollections: Map<number, NodeJS.Timeout> = new Map();
 
 /**
+ * Clear all block difficulty data from the database
+ * This deletes from block_highest_diff which cascades to user_block_diff via FK
+ */
+export function clearBlockDiffData(): void {
+  const db = getDb();
+  
+  try {
+    const result = db.prepare('DELETE FROM block_highest_diff').run();
+    console.log(`🗑️  Cleared ${result.changes} blocks from block_highest_diff (user_block_diff cascaded)`);
+  } catch (error) {
+    console.error('Error clearing block diff data:', error);
+    throw error;
+  }
+}
+
+/**
  * Helper function to add delay
  */
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -469,10 +485,19 @@ async function periodicCollection(): Promise<void> {
 
 /**
  * Start the highest diff collector
+ * - Checks FORCE_DIFF_BACKFILL env var to optionally clear and redo backfill
  * - Runs backfill on startup
  * - Sets up periodic collection every 10 minutes
  */
 export function startHighestDiffCollector(): { job: ReturnType<typeof cron.schedule> } {
+  // Check if force backfill is requested
+  const forceBackfill = process.env.FORCE_DIFF_BACKFILL === 'true';
+  
+  if (forceBackfill) {
+    console.log('🔄 FORCE_DIFF_BACKFILL=true detected - clearing existing block diff data...');
+    clearBlockDiffData();
+  }
+
   // Run backfill on startup
   backfillHighestDiff();
 

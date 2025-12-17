@@ -30,6 +30,10 @@ let stratumCollector = startStratumCollector();
 console.log("⚡ Stratum collector started");
 
 // Start highest diff collector (backfills on startup, periodic collection every 10 min)
+const forceBackfill = process.env.FORCE_DIFF_BACKFILL === 'true';
+if (forceBackfill) {
+  console.log("⚠️  FORCE_DIFF_BACKFILL=true - will clear and redo block diff backfill");
+}
 let highestDiffCollectorJob = startHighestDiffCollector();
 console.log("🏆 Highest diff collector started");
 
