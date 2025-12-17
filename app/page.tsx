@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Leaderboard from "./components/tables/BoardDiff";
 import PoolStats from "./components/PoolStats";
 import RecentBlocks from "./components/RecentBlocks";
@@ -65,57 +65,64 @@ export default function Dashboard() {
   }, []);
 
   // Format data for HashrateChart only if we have valid historical stats
-  const hashrateChartData = historicalStats.length > 0 ? {
-    timestamps: historicalStats.map(entry => {
-      const date = new Date(entry.timestamp * 1000);
-      return date.toLocaleString("en-US", {
-        year: undefined,
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-    }),
-    series: [
-      {
-        data: historicalStats.map(entry => entry.hashrate1hr ?? 0),
-        title: "1H Average"
-      },
-      {
-        data: historicalStats.map(entry => entry.hashrate1d ?? 0),
-        title: "1D Average",
-        lineStyle: "dashed" as const
-      },
-      {
-        data: historicalStats.map(entry => entry.hashrate7d ?? 0),
-        title: "7D Average",
-        lineStyle: "dotted" as const
-      }
-    ]
-  } : { 
-    timestamps: [], 
-    series: [{ data: [], title: "1H Average" }] 
-  };
+  const hashrateChartData = useMemo(() => {
+    if (historicalStats.length === 0) {
+      return { timestamps: [], series: [{ data: [], title: "1H Average" }] };
+    }
+    return {
+      timestamps: historicalStats.map(entry => {
+        const date = new Date(entry.timestamp * 1000);
+        return date.toLocaleString("en-US", {
+          year: undefined,
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+      }),
+      series: [
+        {
+          data: historicalStats.map(entry => entry.hashrate1hr ?? 0),
+          title: "1H Average"
+        },
+        {
+          data: historicalStats.map(entry => entry.hashrate1d ?? 0),
+          title: "1D Average",
+          lineStyle: "dashed" as const
+        },
+        {
+          data: historicalStats.map(entry => entry.hashrate7d ?? 0),
+          title: "7D Average",
+          lineStyle: "dotted" as const
+        }
+      ]
+    };
+  }, [historicalStats]);
 
   // Format data for UsersWorkersChart only if we have valid historical stats
-  const usersWorkersChartData = historicalStats.length > 0 ? {
-    dates: historicalStats.map(entry => {
-      const date = new Date(entry.timestamp * 1000);
-      return date.toLocaleString("en-US", {
-        year: undefined,
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-    }),
-    users: historicalStats.map(entry => entry.users ?? 0),
-    workers: historicalStats.map(entry => entry.workers ?? 0),
-    idle: historicalStats.map(entry => entry.idle ?? 0),
-    disconnected: historicalStats.map(entry => entry.disconnected ?? 0),
-  } : { dates: [], users: [], workers: [], idle: [], disconnected: [] };
+  const usersWorkersChartData = useMemo(() => {
+    if (historicalStats.length === 0) {
+      return { dates: [], users: [], workers: [], idle: [], disconnected: [] };
+    }
+    return {
+      dates: historicalStats.map(entry => {
+        const date = new Date(entry.timestamp * 1000);
+        return date.toLocaleString("en-US", {
+          year: undefined,
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+      }),
+      users: historicalStats.map(entry => entry.users ?? 0),
+      workers: historicalStats.map(entry => entry.workers ?? 0),
+      idle: historicalStats.map(entry => entry.idle ?? 0),
+      disconnected: historicalStats.map(entry => entry.disconnected ?? 0),
+    };
+  }, [historicalStats]);
 
   return (
     <main className="flex min-h-screen flex-col items-center pb-8">
