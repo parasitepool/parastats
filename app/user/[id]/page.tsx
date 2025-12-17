@@ -210,7 +210,8 @@ export default function UserDashboard() {
 
     const fetchBlockDiffs = async () => {
       try {
-        const diffs = await getUserBlockDiffs(userId, 50);
+        // 3 days * 24 hours * 6 blocks/hour = 432 blocks, use 500 to be safe
+        const diffs = await getUserBlockDiffs(userId, 500);
         if (mounted) {
           setUserBlockDiffs(diffs);
         }
@@ -546,7 +547,7 @@ export default function UserDashboard() {
       {userData && (
         <div className="w-full mb-6">
           <HashrateChart
-            title="Historic Hashrate and Difficulty"
+            title="Hashrate & Difficulty"
             data={historicalData ? {
               timestamps: historicalData.map(d => {
                 const date = new Date(d.timestamp);
