@@ -148,25 +148,34 @@ export async function GET(request: Request) {
     }
 
     // Default: recent block watermarks (highest diffs per block)
-    // Only include blocks where the winner is public (or not in monitored_users, which defaults to public)
-    // Note: DB column is winner_address, aliased for API consistency
+    // Show all blocks, but display the highest PUBLIC user's diff (not necessarily the original winner)
+    // Uses a subquery to find the top public user per block from user_block_diff
+    // If no public users exist for a block, address/difficulty will be null
     const recentBlocks = db.prepare(`
       SELECT 
         b.block_height,
-        b.winner_address as top_diff_address,
-        b.difficulty,
+        u.address as top_diff_address,
+        u.difficulty,
         b.block_timestamp
       FROM block_highest_diff b
-      LEFT JOIN monitored_users m ON b.winner_address = m.address
-      WHERE m.is_public = 1 OR m.address IS NULL
+      LEFT JOIN (
+        SELECT 
+          ud.block_height,
+          ud.address,
+          ud.difficulty,
+          ROW_NUMBER() OVER (PARTITION BY ud.block_height ORDER BY ud.difficulty DESC) as rn
+        FROM user_block_diff ud
+        LEFT JOIN monitored_users m ON ud.address = m.address
+        WHERE m.is_public = 1 OR m.address IS NULL
+      ) u ON b.block_height = u.block_height AND u.rn = 1
       ORDER BY b.block_height DESC
       LIMIT ?
-    `).all(limit) as BlockHighestDiffRow[];
+    `).all(limit) as (BlockHighestDiffRow & { top_diff_address: string | null; difficulty: number | null })[];
 
     return NextResponse.json(
       recentBlocks.map(b => ({
         block_height: b.block_height,
-        top_diff_address: formatAddress(b.top_diff_address), // Truncated only
+        top_diff_address: b.top_diff_address ? formatAddress(b.top_diff_address) : null, // Truncated only, null if no public users
         difficulty: b.difficulty,
         block_timestamp: b.block_timestamp,
       })),
