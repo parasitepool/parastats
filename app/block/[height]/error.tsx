@@ -71,7 +71,3 @@ export default function BlockError({ error, reset }: ErrorProps) {
     </main>
   );
 }
-
-
-
-
