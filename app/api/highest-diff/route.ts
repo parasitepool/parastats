@@ -47,15 +47,18 @@ export async function GET(request: Request) {
 
     if (type === 'leaderboard') {
       // Get leaderboard of users by watermark count (how many times they had the top diff)
+      // Only include users who are public (or not in monitored_users, which defaults to public)
       // Note: DB column is winner_address, aliased to top_diff_address for API consistency
       const topUsers = db.prepare(`
         SELECT 
-          winner_address as address,
+          b.winner_address as address,
           COUNT(*) as watermark_count,
-          SUM(difficulty) as total_diff,
-          AVG(difficulty) as avg_diff
-        FROM block_highest_diff
-        GROUP BY winner_address
+          SUM(b.difficulty) as total_diff,
+          AVG(b.difficulty) as avg_diff
+        FROM block_highest_diff b
+        LEFT JOIN monitored_users m ON b.winner_address = m.address
+        WHERE m.is_public = 1 OR m.address IS NULL
+        GROUP BY b.winner_address
         ORDER BY watermark_count DESC
         LIMIT ?
       `).all(limit) as UserDiffCountRow[];
@@ -72,6 +75,16 @@ export async function GET(request: Request) {
     }
 
     if (address && type === 'user-diffs') {
+      // Check if this user is public before returning their diffs
+      const userPublicCheck = db.prepare(`
+        SELECT is_public FROM monitored_users WHERE address = ?
+      `).get(address) as { is_public: number } | undefined;
+      
+      // If user exists in monitored_users and is not public, return empty
+      if (userPublicCheck && !userPublicCheck.is_public) {
+        return NextResponse.json([], { headers: getRateLimitHeaders(rateLimitResult) });
+      }
+
       // Get this user's best diffs across all blocks (not just watermarks)
       // Join with block_highest_diff to get the block timestamp
       const userDiffs = db.prepare(`
@@ -99,6 +112,16 @@ export async function GET(request: Request) {
     }
 
     if (address) {
+      // Check if this user is public before returning their watermarks
+      const userPublicCheck = db.prepare(`
+        SELECT is_public FROM monitored_users WHERE address = ?
+      `).get(address) as { is_public: number } | undefined;
+      
+      // If user exists in monitored_users and is not public, return empty
+      if (userPublicCheck && !userPublicCheck.is_public) {
+        return NextResponse.json([], { headers: getRateLimitHeaders(rateLimitResult) });
+      }
+
       // Get blocks where this user had the top diff (watermarks only)
       // Note: DB column is winner_address, aliased for API consistency
       const userBlocks = db.prepare(`
@@ -125,15 +148,18 @@ export async function GET(request: Request) {
     }
 
     // Default: recent block watermarks (highest diffs per block)
+    // Only include blocks where the winner is public (or not in monitored_users, which defaults to public)
     // Note: DB column is winner_address, aliased for API consistency
     const recentBlocks = db.prepare(`
       SELECT 
-        block_height,
-        winner_address as top_diff_address,
-        difficulty,
-        block_timestamp
-      FROM block_highest_diff
-      ORDER BY block_height DESC
+        b.block_height,
+        b.winner_address as top_diff_address,
+        b.difficulty,
+        b.block_timestamp
+      FROM block_highest_diff b
+      LEFT JOIN monitored_users m ON b.winner_address = m.address
+      WHERE m.is_public = 1 OR m.address IS NULL
+      ORDER BY b.block_height DESC
       LIMIT ?
     `).all(limit) as BlockHighestDiffRow[];
 
