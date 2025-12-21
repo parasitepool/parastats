@@ -30,6 +30,7 @@ const CONFIG = {
   MAX_RETRIES: 4,
   RETRY_BASE_DELAY: 500,
   MAX_PENDING_COLLECTIONS: 50, // Prevent memory leak from too many pending timeouts
+  YIELD_EVERY_N_BLOCKS: 5,
 } as const;
 
 let isCollecting = false;
@@ -39,6 +40,12 @@ const pendingCollections: Map<number, NodeJS.Timeout> = new Map();
  * Helper function to add delay
  */
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Yield to the event loop to allow other tasks (like HTTP requests) to process
+ * This prevents the collector from blocking the server during batch operations
+ */
+const yieldToEventLoop = () => new Promise<void>(resolve => setImmediate(resolve));
 
 /**
  * Validate that response is a valid MempoolBlockDetails object
@@ -352,6 +359,7 @@ export async function collectHighestDiff(blockHeight: number): Promise<boolean> 
 /**
  * Backfill historical data on startup
  * Checks the last BACKFILL_BLOCKS blocks and fills in any missing entries
+ * Yields to event loop periodically to prevent blocking the server
  */
 export async function backfillHighestDiff(): Promise<void> {
   console.log(`🔄 Starting highest diff backfill (last ${CONFIG.BACKFILL_BLOCKS} blocks)...`);
@@ -363,22 +371,29 @@ export async function backfillHighestDiff(): Promise<void> {
     let collected = 0;
     let skipped = 0;
     let failed = 0;
+    let processedInBatch = 0;
 
     for (let height = startHeight; height <= currentHeight; height++) {
       if (hasBlockData(height)) {
         skipped++;
-        continue;
-      }
-
-      const success = await collectHighestDiff(height);
-      if (success) {
-        collected++;
+        processedInBatch++;
       } else {
-        failed++;
+        const success = await collectHighestDiff(height);
+        if (success) {
+          collected++;
+        } else {
+          failed++;
+        }
+        processedInBatch++;
+
+        // Small delay to avoid overwhelming the API
+        await delay(100);
       }
 
-      // Small delay to avoid overwhelming the API
-      await delay(100);
+      if (processedInBatch >= CONFIG.YIELD_EVERY_N_BLOCKS) {
+        await yieldToEventLoop();
+        processedInBatch = 0;
+      }
     }
 
     console.log(`✅ Backfill complete: ${collected} collected, ${skipped} skipped (already had), ${failed} failed/empty`);
@@ -430,6 +445,7 @@ export function triggerDelayedCollection(blockHeight: number): void {
 /**
  * Periodic collection job - collects for recent blocks
  * Runs every 10 minutes to catch any missed blocks
+ * Yields to event loop to prevent blocking HTTP requests
  */
 async function periodicCollection(): Promise<void> {
   if (isCollecting) {
@@ -454,6 +470,10 @@ async function periodicCollection(): Promise<void> {
           collected++;
         }
         await delay(100);
+      }
+
+      if (i > 0 && i % CONFIG.YIELD_EVERY_N_BLOCKS === 0) {
+        await yieldToEventLoop();
       }
     }
 
