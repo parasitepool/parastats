@@ -149,38 +149,36 @@ export async function GET(request: Request) {
 
     // Default: recent block watermarks (highest diffs per block)
     // Show all blocks, but display the highest PUBLIC user's diff (not necessarily the original winner)
-    // Uses a subquery to find the top public user per block from user_block_diff
-    // If no public users exist for a block, address/difficulty will be null
+    // Step 1: Get recent blocks (fast, indexed query)
     const recentBlocks = db.prepare(`
-      SELECT 
-        b.block_height,
-        u.address as top_diff_address,
-        u.difficulty,
-        b.block_timestamp
-      FROM block_highest_diff b
-      LEFT JOIN (
-        SELECT 
-          ud.block_height,
-          ud.address,
-          ud.difficulty,
-          ROW_NUMBER() OVER (PARTITION BY ud.block_height ORDER BY ud.difficulty DESC) as rn
-        FROM user_block_diff ud
-        LEFT JOIN monitored_users m ON ud.address = m.address
-        WHERE m.is_public = 1 OR m.address IS NULL
-      ) u ON b.block_height = u.block_height AND u.rn = 1
-      ORDER BY b.block_height DESC
+      SELECT block_height, block_timestamp
+      FROM block_highest_diff
+      ORDER BY block_height DESC
       LIMIT ?
-    `).all(limit) as (BlockHighestDiffRow & { top_diff_address: string | null; difficulty: number | null })[];
+    `).all(limit) as { block_height: number; block_timestamp: number }[];
 
-    return NextResponse.json(
-      recentBlocks.map(b => ({
-        block_height: b.block_height,
-        top_diff_address: b.top_diff_address ? formatAddress(b.top_diff_address) : null, // Truncated only, null if no public users
-        difficulty: b.difficulty,
-        block_timestamp: b.block_timestamp,
-      })),
-      { headers: getRateLimitHeaders(rateLimitResult) }
-    );
+    // Step 2: For each block, get the top public user (small indexed queries)
+    // This is O(limit) simple queries instead of one massive window function query
+    const getTopPublicUser = db.prepare(`
+      SELECT u.address, u.difficulty
+      FROM user_block_diff u
+      LEFT JOIN monitored_users m ON u.address = m.address
+      WHERE u.block_height = ? AND (m.is_public = 1 OR m.address IS NULL)
+      ORDER BY u.difficulty DESC
+      LIMIT 1
+    `);
+
+    const results = recentBlocks.map(block => {
+      const topUser = getTopPublicUser.get(block.block_height) as { address: string; difficulty: number } | undefined;
+      return {
+        block_height: block.block_height,
+        top_diff_address: topUser ? formatAddress(topUser.address) : null,
+        difficulty: topUser?.difficulty ?? null,
+        block_timestamp: block.block_timestamp,
+      };
+    });
+
+    return NextResponse.json(results, { headers: getRateLimitHeaders(rateLimitResult) });
 
   } catch (error) {
     logError('highest-diff/route', error);
