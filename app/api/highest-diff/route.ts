@@ -70,7 +70,14 @@ export async function GET(request: Request) {
           total_diff: u.total_diff,
           avg_diff: u.avg_diff,
         })),
-        { headers: getRateLimitHeaders(rateLimitResult) }
+        { 
+          headers: {
+            ...getRateLimitHeaders(rateLimitResult),
+            // Cache leaderboard for 60s, allow stale for 5min while revalidating
+            // This is an expensive query (full table scan + GROUP BY)
+            'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+          }
+        }
       );
     }
 
