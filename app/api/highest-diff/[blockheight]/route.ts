@@ -5,7 +5,6 @@ import { checkRateLimit, getRateLimitHeaders } from '@/app/api/lib/rate-limit';
 import {
   MAX_BLOCK_HEIGHT,
   MAX_USERS_PER_BLOCK,
-  BlockHighestDiffRow,
   UserBlockDiffRow,
   logError,
 } from '../types';
@@ -46,44 +45,46 @@ export async function GET(
 
     const db = getDb();
 
-    // Get the top diff (watermark) for this block
-    // Note: DB column is winner_address, aliased for API consistency
-    const topDiff = db.prepare(`
+    // Get the block data first to check if it exists
+    const blockData = db.prepare(`
       SELECT 
         block_height,
-        winner_address as top_diff_address,
-        difficulty,
         block_timestamp
       FROM block_highest_diff
       WHERE block_height = ?
-    `).get(blockHeight) as BlockHighestDiffRow | undefined;
+    `).get(blockHeight) as { block_height: number; block_timestamp: number } | undefined;
 
-    if (!topDiff) {
+    if (!blockData) {
       return NextResponse.json(
         { error: 'No data found for this block' },
         { status: 404, headers: getRateLimitHeaders(rateLimitResult) }
       );
     }
 
-    // Get all user diffs for this block with LIMIT to prevent unbounded queries
+    // Get all user diffs for this block, filtered to only include public users
+    // Users not in monitored_users are treated as public by default
     const userDiffs = db.prepare(`
       SELECT 
-        address,
-        difficulty
-      FROM user_block_diff
-      WHERE block_height = ?
-      ORDER BY difficulty DESC
+        u.address,
+        u.difficulty
+      FROM user_block_diff u
+      LEFT JOIN monitored_users m ON u.address = m.address
+      WHERE u.block_height = ? AND (m.is_public = 1 OR m.address IS NULL)
+      ORDER BY u.difficulty DESC
       LIMIT ?
     `).all(blockHeight, MAX_USERS_PER_BLOCK) as UserBlockDiffRow[];
 
+    // The top diff is now the highest public user, not necessarily the original winner
+    const topPublicUser = userDiffs.length > 0 ? userDiffs[0] : null;
+
     // Return only truncated addresses - never expose full addresses
     return NextResponse.json({
-      block_height: topDiff.block_height,
-      block_timestamp: topDiff.block_timestamp,
-      top_diff: {
-        address: formatAddress(topDiff.top_diff_address), // Truncated only
-        difficulty: topDiff.difficulty,
-      },
+      block_height: blockData.block_height,
+      block_timestamp: blockData.block_timestamp,
+      top_diff: topPublicUser ? {
+        address: formatAddress(topPublicUser.address), // Truncated only
+        difficulty: topPublicUser.difficulty,
+      } : null,
       users: userDiffs.map(u => ({
         address: formatAddress(u.address), // Truncated only
         difficulty: u.difficulty,
