@@ -38,14 +38,10 @@ function smoothAnomalies(data: HistoricalPoolStats[]): HistoricalPoolStats[] {
     if (isCorrelated) {
       // Anomaly detected - replace with last known good value
       result[i] = {
-        ...curr,
-        hashrate15m: prev.hashrate15m,
-        hashrate1hr: prev.hashrate1hr,
-        hashrate6hr: prev.hashrate6hr,
-        hashrate1d: prev.hashrate1d,
-        hashrate7d: prev.hashrate7d,
-        workers: prev.workers,
-        users: prev.users,
+        ...prev,
+        timestamp: curr.timestamp,
+        idle: curr.idle,
+        disconnected: curr.disconnected,
       };
     }
   }
