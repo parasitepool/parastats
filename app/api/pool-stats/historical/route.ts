@@ -4,6 +4,65 @@ import { parseHashrate } from '../../../utils/formatters';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Detect and smooth measurement anomalies in historical data.
+ * 
+ * Anomalies are identified when all hashrate averages (1hr, 1d, 7d) drop
+ * simultaneously by similar percentages - this is physically impossible
+ * for legitimate data since longer averages should be more stable.
+ * 
+ * Detected anomalies are replaced with interpolated values.
+ */
+function smoothAnomalies(data: HistoricalPoolStats[]): HistoricalPoolStats[] {
+  if (data.length < 3) return data;
+  
+  const result = [...data];
+  const DROP_THRESHOLD = 0.3;         // Must drop at least 30%
+  const CORRELATION_THRESHOLD = 0.25; // Deltas must be within 25% of each other
+  
+  for (let i = 1; i < result.length - 1; i++) {
+    const prev = result[i - 1];
+    const curr = result[i];
+    const next = result[i + 1];
+    
+    // Skip if previous values are zero (can't calculate percentage change)
+    if (prev.hashrate1hr === 0 || prev.hashrate1d === 0 || prev.hashrate7d === 0) continue;
+    
+    // Calculate percentage changes
+    const delta1hr = (curr.hashrate1hr - prev.hashrate1hr) / prev.hashrate1hr;
+    const delta1d = (curr.hashrate1d - prev.hashrate1d) / prev.hashrate1d;
+    const delta7d = (curr.hashrate7d - prev.hashrate7d) / prev.hashrate7d;
+    
+    // Check if all are dropping significantly
+    if (delta1hr >= -DROP_THRESHOLD || delta1d >= -DROP_THRESHOLD || delta7d >= -DROP_THRESHOLD) {
+      continue;
+    }
+    
+    // Check if drops are correlated (similar magnitude)
+    const avgDelta = (delta1hr + delta1d + delta7d) / 3;
+    const isCorrelated = 
+      Math.abs(delta1hr - avgDelta) < Math.abs(avgDelta) * CORRELATION_THRESHOLD &&
+      Math.abs(delta1d - avgDelta) < Math.abs(avgDelta) * CORRELATION_THRESHOLD &&
+      Math.abs(delta7d - avgDelta) < Math.abs(avgDelta) * CORRELATION_THRESHOLD;
+    
+    if (isCorrelated) {
+      // Anomaly detected - interpolate from neighbors
+      result[i] = {
+        ...curr,
+        hashrate15m: (prev.hashrate15m + next.hashrate15m) / 2,
+        hashrate1hr: (prev.hashrate1hr + next.hashrate1hr) / 2,
+        hashrate6hr: (prev.hashrate6hr + next.hashrate6hr) / 2,
+        hashrate1d: (prev.hashrate1d + next.hashrate1d) / 2,
+        hashrate7d: (prev.hashrate7d + next.hashrate7d) / 2,
+        workers: Math.round((prev.workers + next.workers) / 2),
+        users: Math.round((prev.users + next.users) / 2),
+      };
+    }
+  }
+  
+  return result;
+}
+
 export interface HistoricalPoolStats {
   timestamp: number;
   users: number;
@@ -185,8 +244,11 @@ export async function GET(request: Request) {
       }
     }
     
+    // Apply anomaly smoothing to filter out measurement errors
+    const smoothedResults = smoothAnomalies(results);
+    
     // Return response with cache headers
-    return new NextResponse(JSON.stringify(results), {
+    return new NextResponse(JSON.stringify(smoothedResults), {
       headers: {
         'Content-Type': 'application/json',
         'Cache-Control': `s-maxage=${cacheDuration}, stale-while-revalidate=${cacheDuration * 2}`
