@@ -18,7 +18,7 @@
     "bitcoinjs-lib": "^7.0.0",
     "dotenv": "^17.2.3",
     "echarts": "6.0.0",
-    "framer-motion": "12.23.26",
+    "framer-motion": "12.24.0",
     "next": "16.1.1",
     "node-cron": "^4.2.1",
     "pg": "8.16.3",
@@ -27,7 +27,7 @@
     "reflect-metadata": "0.2.2",
     "sharp": "0.34.5",
     "typeorm": "0.3.28",
-    "undici": "^7.16.0"
+    "undici": "^7.18.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.3",
