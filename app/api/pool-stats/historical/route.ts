@@ -4,15 +4,6 @@ import { parseHashrate } from '../../../utils/formatters';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Detect and smooth measurement anomalies in historical data.
- * 
- * Anomalies are identified when all hashrate averages (1hr, 1d, 7d) drop
- * simultaneously by similar percentages - this is physically impossible
- * for legitimate data since longer averages should be more stable.
- * 
- * Detected anomalies are replaced with the last known good value.
- */
 function smoothAnomalies(data: HistoricalPoolStats[]): HistoricalPoolStats[] {
   if (data.length < 2) return data;
   
