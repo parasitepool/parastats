@@ -8,7 +8,7 @@ function smoothAnomalies(data: HistoricalPoolStats[]): HistoricalPoolStats[] {
   if (data.length < 2) return data;
   
   const result = [...data];
-  const DROP_THRESHOLD = 0.3;         // Must drop at least 30%
+  const DROP_THRESHOLD = 0.21;        // Must drop at least 21%
   const CORRELATION_THRESHOLD = 0.25; // Deltas must be within 25% of each other
   
   for (let i = 1; i < result.length; i++) {
