@@ -8,7 +8,7 @@ interface User {
   id: number;
   address: string;
   diff: number;
-  authorised_at: number;
+  total_blocks: number;
   diff_rank: number;
   loyalty_rank: number;
   combined_score: number;

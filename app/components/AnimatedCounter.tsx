@@ -1,15 +1,18 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
+import { formatCompactNumber } from '@/app/utils/formatters';
 
 interface AnimatedCounterProps {
-  value: bigint;
+  value: bigint | number;
   duration?: number;
+  compact?: boolean;
 }
 
-export default function AnimatedCounter({ 
-  value, 
-  duration = 2000
+export default function AnimatedCounter({
+  value,
+  duration = 2000,
+  compact = false
 }: AnimatedCounterProps) {
   const [displayValue, setDisplayValue] = useState<bigint>(BigInt(0));
   const [rollingDigits, setRollingDigits] = useState<Set<number>>(new Set());
@@ -28,6 +31,7 @@ export default function AnimatedCounter({
       setRollingDigits(digitIndices);
       
       // Animate from 0 to actual value
+      const targetValue = BigInt(value);
       const startTime = Date.now();
       const animate = () => {
         const now = Date.now();
@@ -36,15 +40,15 @@ export default function AnimatedCounter({
         
         // Ease-out cubic
         const easeOut = 1 - Math.pow(1 - progress, 3);
-        const currentValue = BigInt(Math.floor(Number(value) * easeOut));
+        const currentValue = BigInt(Math.floor(Number(targetValue) * easeOut));
         setDisplayValue(currentValue);
 
         if (progress < 1) {
           animationFrameRef.current = requestAnimationFrame(animate);
         } else {
-          setDisplayValue(value);
+          setDisplayValue(targetValue);
           setRollingDigits(new Set());
-          prevValueRef.current = value;
+          prevValueRef.current = targetValue;
         }
       };
       
@@ -53,12 +57,13 @@ export default function AnimatedCounter({
     }
 
     // On value changes, only animate changed digits
-    if (prevValueRef.current === value) {
+    const valueBigInt = BigInt(value);
+    if (prevValueRef.current === valueBigInt) {
       return;
     }
 
-    const oldStr = prevValueRef.current.toString().padStart(value.toString().length, '0');
-    const newStr = value.toString();
+    const oldStr = prevValueRef.current.toString().padStart(valueBigInt.toString().length, '0');
+    const newStr = valueBigInt.toString();
     
     // Find which digit positions changed
     const changedIndices = new Set<number>();
@@ -70,8 +75,8 @@ export default function AnimatedCounter({
     
     setRollingDigits(changedIndices);
 
-    const startValue = prevValueRef.current;
-    const endValue = value;
+    const startValue = BigInt(prevValueRef.current);
+    const endValue = valueBigInt;
     const startTime = Date.now();
 
     const animate = () => {
@@ -104,7 +109,9 @@ export default function AnimatedCounter({
   }, [value, duration]);
 
   // Format the display value
-  const formattedValue = displayValue.toLocaleString();
+  const formattedValue = compact
+    ? formatCompactNumber(displayValue)
+    : displayValue.toLocaleString();
   const chars = formattedValue.split('');
 
   return (

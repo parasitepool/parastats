@@ -12,8 +12,6 @@ interface BlockCardProps {
 }
 
 export default function BlockCard({ block, newBlock, isCompact = true }: BlockCardProps) {
-  const [timeString, setTimeString] = useState<string>("");
-
   // Format timestamp to readable date
   const formatTime = (timestamp: number) => {
     const now = new Date();
@@ -32,11 +30,11 @@ export default function BlockCard({ block, newBlock, isCompact = true }: BlockCa
     return `${diffInDays} day${diffInDays > 1 ? "s" : ""} ago`;
   };
 
+  // Use lazy initialization to avoid setState in effect
+  const [timeString, setTimeString] = useState<string>(() => formatTime(block.timestamp));
+
   // Update time display
   useEffect(() => {
-    // Set initial time
-    setTimeString(formatTime(block.timestamp));
-
     // Set up timer to update time string every 5 seconds
     const timer = setInterval(() => {
       setTimeString(formatTime(block.timestamp));

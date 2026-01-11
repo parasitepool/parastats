@@ -1,8 +1,15 @@
+export type AccountMetadata = {
+  block_count?: number;
+  highest_blockheight?: number;
+  [key: string]: unknown;
+};
+
 export interface AccountData {
   btc_address: string;
   ln_address: string | null;
   past_ln_addresses: string[];
-  total_diff: bigint;
+  total_diff: number;
+  metadata: AccountMetadata | null;
   last_updated: string | null;
 }
 

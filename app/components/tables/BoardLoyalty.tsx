@@ -7,7 +7,7 @@ import Board, { BoardColumn } from './Board';
 interface User {
   id: number;
   address: string;
-  authorised_at: number;
+  total_blocks: number;
   rank?: number;
 }
 
@@ -54,21 +54,6 @@ export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
     }
   };
 
-  // Calculate uptime in days and hours
-  const calculateUptime = (authorisedAt: number): { days: number; hours: number } => {
-    const now = Math.floor(Date.now() / 1000);
-    const uptimeSeconds = now - authorisedAt;
-    const days = Math.floor(uptimeSeconds / (24 * 60 * 60));
-    const hours = Math.floor((uptimeSeconds % (24 * 60 * 60)) / (60 * 60));
-    return { days, hours };
-  };
-
-  // Format uptime in days and hours
-  const formatUptime = (authorisedAt: number): string => {
-    const { days, hours } = calculateUptime(authorisedAt);
-    return `${days}d ${hours.toString().padStart(2, '0')}h`;
-  };
-
   const columns: BoardColumn<User>[] = [
     {
       key: 'address',
@@ -76,10 +61,10 @@ export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
       render: (value) => formatAddress(value as string)
     },
     {
-      key: 'authorised_at',
-      header: 'Uptime',
+      key: 'total_blocks',
+      header: 'Blocks',
       align: 'right',
-      render: (value) => formatUptime(value as number)
+      render: (value) => (value as number).toLocaleString()
     }
   ];
 

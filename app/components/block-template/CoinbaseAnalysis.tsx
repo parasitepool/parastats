@@ -39,7 +39,7 @@ export default function CoinbaseAnalysis({
       const tx = getTransaction(coinbaseRaw);
       const outputs = computeCoinbaseOutputs(coinbaseRaw);
       const totalValue = computeCoinbaseOutputValue(coinbaseRaw);
-      const scriptSigInfo = decodeCoinbaseScriptSigInfo(tx.ins[0].script);
+      const scriptSigInfo = decodeCoinbaseScriptSigInfo(Buffer.from(tx.ins[0].script));
       const txDetails = getCoinbaseTxDetails(coinbaseRaw);
       const asciiTag = getFormattedCoinbaseAsciiTag(
         notification.coinbase1,

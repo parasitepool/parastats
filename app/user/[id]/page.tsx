@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility, getUserBlockDiffs, type UserBlockDiffEntry } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -34,6 +34,7 @@ export default function UserDashboard() {
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [userBlockDiffs, setUserBlockDiffs] = useState<UserBlockDiffEntry[]>([]);
   
   const {
     isLightningAuthenticated,
@@ -200,6 +201,38 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
+  // Fetch user diffs data for the chart (only if valid address)
+  useEffect(() => {
+    if (isValidAddress === false) return;
+    if (isValidAddress === null) return;
+
+    let mounted = true;
+
+    const fetchBlockDiffs = async () => {
+      try {
+        // 3 days * 24 hours * 6 blocks/hour = 432 blocks, use 500 to be safe
+        const diffs = await getUserBlockDiffs(userId, 500);
+        if (mounted) {
+          setUserBlockDiffs(diffs);
+        }
+      } catch (err) {
+        console.error('Error fetching block diffs:', err);
+        if (mounted) {
+          setUserBlockDiffs([]);
+        }
+      }
+    };
+
+    fetchBlockDiffs();
+    // Refresh every 60 seconds
+    const intervalId = setInterval(fetchBlockDiffs, 60000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, [userId, isValidAddress]);
+
   // Handle visibility toggle
   const handleToggleVisibility = async () => {
     if (!userData) return;
@@ -351,7 +384,7 @@ export default function UserDashboard() {
     },
     {
       title: 'Total Work',
-      value: accountData?.total_diff ? <AnimatedCounter value={accountData.total_diff} /> : <span className="text-gray-400">-</span>,
+      value: accountData?.total_diff ? <AnimatedCounter value={accountData.total_diff} compact /> : <span className="text-gray-400">-</span>,
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
           <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -514,6 +547,7 @@ export default function UserDashboard() {
       {userData && (
         <div className="w-full mb-6">
           <HashrateChart
+            title="Hashrate & Difficulty"
             data={historicalData ? {
               timestamps: historicalData.map(d => {
                 const date = new Date(d.timestamp);
@@ -526,6 +560,7 @@ export default function UserDashboard() {
                   hour12: false,
                 });
               }),
+              rawTimestamps: historicalData.map(d => new Date(d.timestamp).getTime()),
               series: [
                 {
                   data: historicalData.map(d => d.hashrate),
@@ -533,6 +568,23 @@ export default function UserDashboard() {
                 }
               ]
             } : undefined}
+            bestDiffs={userBlockDiffs.length > 0 ? userBlockDiffs
+              .filter(diff => diff.block_timestamp !== null)
+              .map(diff => {
+                const timestampMs = diff.block_timestamp! * 1000;
+                return {
+                  timestamp: new Date(timestampMs).toLocaleString("en-US", {
+                    year: undefined,
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  }),
+                  rawTimestamp: timestampMs,
+                  difficulty: diff.difficulty,
+                };
+              }) : undefined}
             loading={!historicalData}
           />
         </div>
@@ -638,6 +690,7 @@ export default function UserDashboard() {
         </div>
         </div>
       )}
+
       </main>
     </>
   );

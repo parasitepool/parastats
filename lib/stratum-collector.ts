@@ -1,5 +1,6 @@
 import net from 'net';
 import { getDb } from './db';
+import { triggerDelayedCollection, getCurrentBlockHeight } from './highest-diff-collector';
 
 interface StratumMessage {
   id?: number;
@@ -109,10 +110,10 @@ class StratumCollector {
     }
   }
 
-  private handleData(data: Buffer): void {
+  private handleData(data: Buffer | string): void {
     try {
       // Add new data to buffer
-      this.messageBuffer += data.toString();
+      this.messageBuffer += typeof data === 'string' ? data : data.toString();
       
       // Process complete messages (separated by newlines)
       const lines = this.messageBuffer.split('\n');
@@ -210,6 +211,10 @@ class StratumCollector {
       // Log only on clean job notifications (new blocks) to reduce noise
       if (cleanJobs) {
         console.log(`🎯 New block template: Job ${jobId} (${new Date(now * 1000).toISOString()})`);
+        
+        // Trigger highest diff collection for the previous block
+        // The new block means the previous block is now complete
+        this.triggerHighestDiffCollection();
       }
 
     } catch (error) {
@@ -367,6 +372,23 @@ class StratumCollector {
       }
       this.socket = null;
     }
+  }
+
+  /**
+   * Trigger collection of highest diff for the previous block
+   * Called when a new block is detected (clean_jobs=true)
+   */
+  private triggerHighestDiffCollection(): void {
+    // Get current block height and trigger collection for the previous block
+    getCurrentBlockHeight()
+      .then(currentHeight => {
+        // The previous block is now complete, collect its highest diff
+        const previousBlock = currentHeight - 1;
+        triggerDelayedCollection(previousBlock);
+      })
+      .catch(error => {
+        console.error('Error getting block height for highest diff collection:', error);
+      });
   }
 }
 
