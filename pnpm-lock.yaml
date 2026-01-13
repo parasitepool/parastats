@@ -29,8 +29,8 @@ dependencies:
     specifier: 6.0.0
     version: 6.0.0
   framer-motion:
-    specifier: 12.25.0
-    version: 12.25.0(react-dom@19.2.3)(react@19.2.3)
+    specifier: 12.26.1
+    version: 12.26.1(react-dom@19.2.3)(react@19.2.3)
   next:
     specifier: 16.1.1
     version: 16.1.1(@babel/core@7.28.5)(react-dom@19.2.3)(react@19.2.3)
@@ -70,8 +70,8 @@ devDependencies:
     specifier: ^7.6.13
     version: 7.6.13
   '@types/node':
-    specifier: ^25.0.6
-    version: 25.0.6
+    specifier: ^25.0.7
+    version: 25.0.7
   '@types/node-cron':
     specifier: ^3.0.11
     version: 3.0.11
@@ -1202,7 +1202,7 @@ packages:
   /@types/better-sqlite3@7.6.13:
     resolution: {integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==}
     dependencies:
-      '@types/node': 25.0.6
+      '@types/node': 25.0.7
     dev: true
 
   /@types/estree@1.0.8:
@@ -1221,8 +1221,8 @@ packages:
     resolution: {integrity: sha512-0ikrnug3/IyneSHqCBeslAhlK2aBfYek1fGo4bP4QnZPmiqSGRK+Oy7ZMisLWkesffJvQ1cqAcBnJC+8+nxIAg==}
     dev: true
 
-  /@types/node@25.0.6:
-    resolution: {integrity: sha512-NNu0sjyNxpoiW3YuVFfNz7mxSQ+S4X2G28uqg2s+CzoqoQjLPsWSbsFFyztIAqt2vb8kfEAsJNepMGPTxFDx3Q==}
+  /@types/node@25.0.7:
+    resolution: {integrity: sha512-C/er7DlIZgRJO7WtTdYovjIFzGsz0I95UlMyR9anTb4aCpBSRWe5Jc1/RvLKUfzmOxHPGjSE5+63HgLtndxU4w==}
     dependencies:
       undici-types: 7.16.0
     dev: true
@@ -2791,8 +2791,8 @@ packages:
       mime-types: 2.1.35
     dev: false
 
-  /framer-motion@12.25.0(react-dom@19.2.3)(react@19.2.3):
-    resolution: {integrity: sha512-mlWqd0rApIjeyhTCSNCqPYsUAEhkcUukZxH3ke6KbstBRPcxhEpuIjmiUQvB+1E9xkEm5SpNHBgHCapH/QHTWg==}
+  /framer-motion@12.26.1(react-dom@19.2.3)(react@19.2.3):
+    resolution: {integrity: sha512-Uzc8wGldU4FpmGotthjjcj0SZhigcODjqvKT7lzVZHsmYkzQMFfMIv0vHQoXCeoe/Ahxqp4by4A6QbzFA/lblw==}
     peerDependencies:
       '@emotion/is-prop-valid': '*'
       react: ^18.0.0 || ^19.0.0
