@@ -131,10 +131,21 @@ export async function getUserData(address: string): Promise<ProcessedUserData> {
 }
 
 // Historical pool stats API
-export async function getHistoricalPoolStats(period: string = "24h", interval: string = "5m"): Promise<HistoricalPoolStats[]> {
+export async function getHistoricalPoolStats(
+  period: string = "24h",
+  interval: string = "5m",
+  options?: { start?: number; end?: number }
+): Promise<HistoricalPoolStats[]> {
   try {
     return await withRetry(async () => {
-      const response = await fetch(`/api/pool-stats/historical?period=${period}&interval=${interval}`);
+      const params = new URLSearchParams({ interval });
+      if (options?.start !== undefined && options?.end !== undefined) {
+        params.set('start', String(options.start));
+        params.set('end', String(options.end));
+      } else {
+        params.set('period', period);
+      }
+      const response = await fetch(`/api/pool-stats/historical?${params}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

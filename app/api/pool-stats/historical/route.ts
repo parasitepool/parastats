@@ -105,52 +105,69 @@ export async function GET(request: Request) {
         break;
     }
     
-    // Calculate the time range based on the period
     const now = Math.floor(Date.now() / 1000);
-    let startTime = now;
-    
-    // Parse period format (e.g., "18d" or "6h")
-    const periodMatch = period.match(/^(-?\d+)([dh])$/);
-    
-    if (periodMatch) {
-      const value = parseInt(periodMatch[1], 10);
-      if (value <= 0) {
+    let startTime: number;
+    let endTime: number = now;
+
+    const startParam = searchParams.get('start');
+    const endParam = searchParams.get('end');
+
+    if (startParam && endParam) {
+      startTime = parseInt(startParam, 10);
+      endTime = parseInt(endParam, 10);
+
+      if (isNaN(startTime) || isNaN(endTime) || startTime >= endTime) {
         return new NextResponse(
-          JSON.stringify({ error: "Period must be a positive value (e.g., '24h' or '7d')" }),
+          JSON.stringify({ error: "start must be less than end, both valid unix seconds" }),
           { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
         );
       }
 
-      const unit = periodMatch[2];
-      
-      // Calculate total days for max period check
-      const totalDays = unit === 'd' ? value : value / 24;
-      
-      // Set max period based on the selected interval
-      let maxPeriodDays = 30; // Default max
-      
-      // Apply interval-specific limits
-      if (interval === '1m') {
-        maxPeriodDays = 2; // 2 days max for 1-minute intervals
-      } else if (interval === '5m') {
-        maxPeriodDays = 10; // 10 days max for 5-minute intervals
-      }
-      
-      if (totalDays > maxPeriodDays) {
+      const rangeDays = (endTime - startTime) / 86400;
+      let maxDays = 30;
+      if (interval === '1m') maxDays = 2;
+      else if (interval === '5m') maxDays = 10;
+
+      if (rangeDays > maxDays) {
         return new NextResponse(
-          JSON.stringify({ 
-            error: `For ${interval} interval, period cannot exceed ${maxPeriodDays} days` 
-          }),
+          JSON.stringify({ error: `For ${interval} interval, range cannot exceed ${maxDays} days` }),
           { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
         );
       }
-      
-      // Calculate seconds based on unit (d for days, h for hours)
-      const multiplier = unit === 'd' ? 24 * 60 * 60 : 60 * 60;
-      startTime = now - value * multiplier;
     } else {
-      // Default to 24 hours if format is invalid
-      startTime = now - 24 * 60 * 60;
+      const periodMatch = period.match(/^(-?\d+)([dh])$/);
+
+      if (periodMatch) {
+        const value = parseInt(periodMatch[1], 10);
+        if (value <= 0) {
+          return new NextResponse(
+            JSON.stringify({ error: "Period must be a positive value (e.g., '24h' or '7d')" }),
+            { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+          );
+        }
+
+        const unit = periodMatch[2];
+        const totalDays = unit === 'd' ? value : value / 24;
+
+        let maxPeriodDays = 30;
+        if (interval === '1m') {
+          maxPeriodDays = 2;
+        } else if (interval === '5m') {
+          maxPeriodDays = 10;
+        }
+
+        if (totalDays > maxPeriodDays) {
+          return new NextResponse(
+            JSON.stringify({ error: `For ${interval} interval, period cannot exceed ${maxPeriodDays} days` }),
+            { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+          );
+        }
+
+        const multiplier = unit === 'd' ? 86400 : 3600;
+        startTime = now - value * multiplier;
+      } else {
+        startTime = now - 86400;
+      }
     }
     
     // Get the data from the database
@@ -181,7 +198,7 @@ export async function GET(request: Request) {
     
     // Calculate intervals for the time range
     const intervals = [];
-    for (let t = startTime; t < now; t += intervalSeconds) {
+    for (let t = startTime; t < endTime; t += intervalSeconds) {
       intervals.push({
         start: t,
         end: t + intervalSeconds

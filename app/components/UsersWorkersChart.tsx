@@ -12,13 +12,19 @@ interface UsersWorkersChartProps {
     disconnected: number[];
   };
   loading?: boolean;
+  onZoomChange?: (startPercent: number, endPercent: number) => void;
+  refetching?: boolean;
 }
 
 export default function UsersWorkersChart({
   data,
   loading = false,
+  onZoomChange,
+  refetching = false,
 }: UsersWorkersChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
+  const onZoomChangeRef = useRef(onZoomChange);
+  useEffect(() => { onZoomChangeRef.current = onZoomChange; }, [onZoomChange]);
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -330,7 +336,11 @@ export default function UsersWorkersChart({
       }, false);
     };
 
-    chart.on('datazoom', handleDataZoom);
+    chart.on('datazoom', (params: unknown) => {
+      handleDataZoom(params);
+      const p = params as { start: number; end: number };
+      onZoomChangeRef.current?.(p.start ?? 0, p.end ?? 100);
+    });
 
     const handleResize = () => {
       chart.resize();
@@ -377,7 +387,10 @@ export default function UsersWorkersChart({
 
   return (
     <div className="bg-background py-6 shadow-md border border-border">
-      <h2 className="text-2xl font-semibold mb-4 px-6">Users & Workers</h2>
+      <div className="flex items-center gap-3 mb-4 px-6">
+        <h2 className="text-2xl font-semibold">Users & Workers</h2>
+        {refetching && <span className="text-sm text-muted-foreground animate-pulse">Loading detail...</span>}
+      </div>
       {loading && <p className="text-center">Loading data...</p>}
       <div ref={chartRef} style={{ width: "100%", height: "450px" }}></div>
     </div>

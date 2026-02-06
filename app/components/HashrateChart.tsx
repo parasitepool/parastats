@@ -33,6 +33,8 @@ interface HashrateChartProps {
   bestDiffs?: BestDiffPoint[];
   loading?: boolean;
   title?: string;
+  onZoomChange?: (startPercent: number, endPercent: number) => void;
+  refetching?: boolean;
 }
 
 /**
@@ -93,10 +95,12 @@ function mapBestDiffsToSeriesData(
   return seriesData;
 }
 
-export default function HashrateChart({ data, bestDiffs, loading = false, title = "Historic Hashrate" }: HashrateChartProps) {
+export default function HashrateChart({ data, bestDiffs, loading = false, title = "Historic Hashrate", onZoomChange, refetching = false }: HashrateChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const isInitializedRef = useRef(false);
+  const onZoomChangeRef = useRef(onZoomChange);
+  useEffect(() => { onZoomChangeRef.current = onZoomChange; }, [onZoomChange]);
 
   // Build chart options function - memoized to avoid recreating on every render
   const buildChartOptions = useCallback((chartData: typeof data, diffData?: BestDiffPoint[]) => {
@@ -440,7 +444,11 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
         }
       };
 
-      chart.on('datazoom', handleDataZoom);
+      chart.on('datazoom', (params: unknown) => {
+        handleDataZoom(params);
+        const p = params as { start: number; end: number };
+        onZoomChangeRef.current?.(p.start ?? 0, p.end ?? 100);
+      });
       isInitializedRef.current = true;
     }
 
@@ -478,7 +486,10 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
 
   return (
     <div className="bg-background shadow-md border border-border py-6">
-      <h2 className="text-2xl font-semibold mb-4 px-6">{title}</h2>
+      <div className="flex items-center gap-3 mb-4 px-6">
+        <h2 className="text-2xl font-semibold">{title}</h2>
+        {refetching && <span className="text-sm text-muted-foreground animate-pulse">Loading detail...</span>}
+      </div>
       {loading && <p className="text-center">Loading data...</p>}
       <div ref={chartRef} style={{ width: "100%", height: "400px" }}></div>
     </div>

@@ -13,6 +13,7 @@ import HashrateChart from "./components/HashrateChart";
 import BoardCombined from "./components/tables/BoardCombined";
 import { getPoolStats, getHistoricalPoolStats, type PoolStats as PoolStatsType } from "./utils/api";
 import type { HistoricalPoolStats } from "./api/pool-stats/historical/route";
+import { useChartZoomData } from "./hooks/useChartZoomData";
 
 export default function Dashboard() {
   const [poolStats, setPoolStats] = useState<PoolStatsType>();
@@ -64,13 +65,14 @@ export default function Dashboard() {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Format data for HashrateChart only if we have valid historical stats
+  const { activeData, isRefetching, onZoomChange } = useChartZoomData(historicalStats);
+
   const hashrateChartData = useMemo(() => {
-    if (historicalStats.length === 0) {
+    if (activeData.length === 0) {
       return { timestamps: [], series: [{ data: [], title: "1H Average" }] };
     }
     return {
-      timestamps: historicalStats.map(entry => {
+      timestamps: activeData.map(entry => {
         const date = new Date(entry.timestamp * 1000);
         return date.toLocaleString("en-US", {
           year: undefined,
@@ -83,30 +85,29 @@ export default function Dashboard() {
       }),
       series: [
         {
-          data: historicalStats.map(entry => entry.hashrate1hr ?? 0),
+          data: activeData.map(entry => entry.hashrate1hr ?? 0),
           title: "1H Average"
         },
         {
-          data: historicalStats.map(entry => entry.hashrate1d ?? 0),
+          data: activeData.map(entry => entry.hashrate1d ?? 0),
           title: "1D Average",
           lineStyle: "dashed" as const
         },
         {
-          data: historicalStats.map(entry => entry.hashrate7d ?? 0),
+          data: activeData.map(entry => entry.hashrate7d ?? 0),
           title: "7D Average",
           lineStyle: "dotted" as const
         }
       ]
     };
-  }, [historicalStats]);
+  }, [activeData]);
 
-  // Format data for UsersWorkersChart only if we have valid historical stats
   const usersWorkersChartData = useMemo(() => {
-    if (historicalStats.length === 0) {
+    if (activeData.length === 0) {
       return { dates: [], users: [], workers: [], idle: [], disconnected: [] };
     }
     return {
-      dates: historicalStats.map(entry => {
+      dates: activeData.map(entry => {
         const date = new Date(entry.timestamp * 1000);
         return date.toLocaleString("en-US", {
           year: undefined,
@@ -117,12 +118,12 @@ export default function Dashboard() {
           hour12: false,
         });
       }),
-      users: historicalStats.map(entry => entry.users ?? 0),
-      workers: historicalStats.map(entry => entry.workers ?? 0),
-      idle: historicalStats.map(entry => entry.idle ?? 0),
-      disconnected: historicalStats.map(entry => entry.disconnected ?? 0),
+      users: activeData.map(entry => entry.users ?? 0),
+      workers: activeData.map(entry => entry.workers ?? 0),
+      idle: activeData.map(entry => entry.idle ?? 0),
+      disconnected: activeData.map(entry => entry.disconnected ?? 0),
     };
-  }, [historicalStats]);
+  }, [activeData]);
 
   return (
     <main className="flex min-h-screen flex-col items-center pb-8">
@@ -148,7 +149,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full mb-6">
         <HashrateGauge totalHashrate={(poolStats?.hashrate || 0) / 1000000000000000} />
         <div className="lg:col-span-2">
-          <HashrateChart data={hashrateChartData} loading={historicalLoading} />
+          <HashrateChart data={hashrateChartData} loading={historicalLoading} onZoomChange={onZoomChange} refetching={isRefetching} />
         </div>
         {/* <HashrateDistribution /> */}
       </div>
@@ -157,7 +158,7 @@ export default function Dashboard() {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full mb-6">
         <div className="lg:col-span-2">
-          <UsersWorkersChart data={usersWorkersChartData} loading={historicalLoading} />
+          <UsersWorkersChart data={usersWorkersChartData} loading={historicalLoading} onZoomChange={onZoomChange} refetching={isRefetching} />
         </div>
         <BoardCombined />
       </div>
