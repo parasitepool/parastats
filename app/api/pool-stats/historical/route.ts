@@ -113,17 +113,26 @@ export async function GET(request: Request) {
     const endParam = searchParams.get('end');
 
     if (startParam && endParam) {
-      startTime = parseInt(startParam, 10);
-      endTime = parseInt(endParam, 10);
+      startTime = Number(startParam);
+      endTime = Number(endParam);
 
-      if (isNaN(startTime) || isNaN(endTime) || startTime >= endTime) {
+      if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
         return new NextResponse(
-          JSON.stringify({ error: "start must be less than end, both valid unix seconds" }),
+          JSON.stringify({ error: "start and end must be valid unix seconds" }),
           { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
         );
       }
 
+      startTime = Math.trunc(startTime);
+      endTime = Math.trunc(endTime);
       endTime = Math.min(endTime, now);
+
+      if (startTime < 0 || endTime <= startTime) {
+        return new NextResponse(
+          JSON.stringify({ error: "start must be less than end, both non-negative unix seconds" }),
+          { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+        );
+      }
 
       const rangeDays = (endTime - startTime) / 86400;
       let maxDays = 30;

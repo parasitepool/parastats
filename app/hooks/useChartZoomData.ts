@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { getHistoricalPoolStats } from "../utils/api";
 import type { HistoricalPoolStats } from "../api/pool-stats/historical/route";
 
@@ -23,6 +23,13 @@ export function useChartZoomData(baseData: HistoricalPoolStats[]) {
   const abortRef = useRef<AbortController | null>(null);
   const fetchId = useRef(0);
 
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
+
   const onZoomChange = useCallback(
     (startPercent: number, endPercent: number) => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
@@ -32,6 +39,8 @@ export function useChartZoomData(baseData: HistoricalPoolStats[]) {
           suppressResetCount.current--;
           return;
         }
+        if (abortRef.current) abortRef.current.abort();
+        setIsRefetching(false);
         setActiveData(null);
         currentInterval.current = BASE_INTERVAL;
         lastFetchRange.current = null;
@@ -46,13 +55,18 @@ export function useChartZoomData(baseData: HistoricalPoolStats[]) {
           Math.floor((startPercent / 100) * totalLen),
           totalLen - 1
         );
-        const endIdx = Math.min(
+        let endIdx = Math.min(
           Math.ceil((endPercent / 100) * totalLen),
           totalLen - 1
         );
 
+        if (endIdx <= startIdx) {
+          endIdx = Math.min(startIdx + 1, totalLen - 1);
+        }
+
         const startTs = baseData[startIdx].timestamp;
         const endTs = baseData[endIdx].timestamp;
+        if (endTs <= startTs) return;
         const windowDays = (endTs - startTs) / 86400;
 
         const interval = pickInterval(windowDays);
@@ -82,7 +96,11 @@ export function useChartZoomData(baseData: HistoricalPoolStats[]) {
 
         setIsRefetching(true);
 
-        getHistoricalPoolStats("", interval, { start: startTs, end: endTs })
+        getHistoricalPoolStats("", interval, {
+          start: startTs,
+          end: endTs,
+          signal: controller.signal,
+        })
           .then((data) => {
             if (fetchId.current !== id) return;
             suppressResetCount.current = 2;

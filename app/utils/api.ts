@@ -134,7 +134,7 @@ export async function getUserData(address: string): Promise<ProcessedUserData> {
 export async function getHistoricalPoolStats(
   period: string = "24h",
   interval: string = "5m",
-  options?: { start?: number; end?: number }
+  options?: { start?: number; end?: number; signal?: AbortSignal }
 ): Promise<HistoricalPoolStats[]> {
   try {
     return await withRetry(async () => {
@@ -145,7 +145,9 @@ export async function getHistoricalPoolStats(
       } else {
         params.set('period', period);
       }
-      const response = await fetch(`/api/pool-stats/historical?${params}`);
+      const response = await fetch(`/api/pool-stats/historical?${params}`, {
+        signal: options?.signal,
+      });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
