@@ -4,13 +4,11 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { getHistoricalPoolStats } from "../utils/api";
 import type { HistoricalPoolStats } from "../api/pool-stats/historical/route";
 
-const DEBOUNCE_MS = 300;
+const DEBOUNCE_MS = 150;
 const BASE_INTERVAL = "30m";
 
-function pickInterval(windowDays: number): string {
-  if (windowDays <= 3) return "1m";
-  if (windowDays <= 10) return "5m";
-  return BASE_INTERVAL;
+function pickInterval(): string {
+  return "1m";
 }
 
 export function useChartZoomData(baseData: HistoricalPoolStats[]) {
@@ -67,9 +65,7 @@ export function useChartZoomData(baseData: HistoricalPoolStats[]) {
         const startTs = baseData[startIdx].timestamp;
         const endTs = baseData[endIdx].timestamp;
         if (endTs <= startTs) return;
-        const windowDays = (endTs - startTs) / 86400;
-
-        const interval = pickInterval(windowDays);
+        const interval = pickInterval();
 
         if (interval === BASE_INTERVAL) {
           setActiveData(null);

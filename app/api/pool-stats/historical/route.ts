@@ -134,17 +134,6 @@ export async function GET(request: Request) {
         );
       }
 
-      const rangeDays = (endTime - startTime) / 86400;
-      let maxDays = 30;
-      if (interval === '1m') maxDays = 2;
-      else if (interval === '5m') maxDays = 10;
-
-      if (rangeDays > maxDays) {
-        return new NextResponse(
-          JSON.stringify({ error: `For ${interval} interval, range cannot exceed ${maxDays} days` }),
-          { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
-        );
-      }
     } else {
       const periodMatch = period.match(/^(-?\d+)([dh])$/);
 
