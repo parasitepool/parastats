@@ -24,6 +24,7 @@ export default function UsersWorkersChart({
 }: UsersWorkersChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const onZoomChangeRef = useRef(onZoomChange);
+  const zoomStateRef = useRef({ start: 0, end: 100 });
   useEffect(() => { onZoomChangeRef.current = onZoomChange; }, [onZoomChange]);
 
   useEffect(() => {
@@ -46,7 +47,7 @@ export default function UsersWorkersChart({
     const usersColor = "#CCCCCC";
     const workersColor = "#666666";
 
-    const getChartOption = (chartData: typeof data) => ({
+    const getChartOption = (chartData: typeof data, zoomState: { start: number; end: number }) => ({
       backgroundColor: "transparent",
       animation: false,
       textStyle: {
@@ -161,6 +162,8 @@ export default function UsersWorkersChart({
           type: "slider",
           xAxisIndex: [0, 1],
           filterMode: "none",
+          start: zoomState.start,
+          end: zoomState.end,
           backgroundColor: secondaryColor,
           fillerColor: "rgba(0, 0, 0, 0.1)",
           borderColor: borderColor,
@@ -238,7 +241,7 @@ export default function UsersWorkersChart({
     });
 
     // Initial chart setup
-    chart.setOption(getChartOption(data));
+    chart.setOption(getChartOption(data, zoomStateRef.current));
 
     // Add datazoom event listener for auto-scaling y-axes
     const handleDataZoom = (params: unknown) => {
@@ -339,7 +342,10 @@ export default function UsersWorkersChart({
     chart.on('datazoom', (params: unknown) => {
       handleDataZoom(params);
       const p = params as { start: number; end: number };
-      onZoomChangeRef.current?.(p.start ?? 0, p.end ?? 100);
+      const start = typeof p.start === "number" ? p.start : zoomStateRef.current.start;
+      const end = typeof p.end === "number" ? p.end : zoomStateRef.current.end;
+      zoomStateRef.current = { start, end };
+      onZoomChangeRef.current?.(start, end);
     });
 
     const handleResize = () => {
@@ -350,7 +356,7 @@ export default function UsersWorkersChart({
 
     // Update chart when data changes
     if (data) {
-      chart.setOption(getChartOption(data), { notMerge: false });
+      chart.setOption(getChartOption(data, zoomStateRef.current), { notMerge: false });
     }
 
     return () => {

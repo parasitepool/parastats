@@ -65,14 +65,23 @@ export default function Dashboard() {
     return () => clearInterval(intervalId);
   }, []);
 
-  const { activeData, isRefetching, onZoomChange } = useChartZoomData(historicalStats);
+  const {
+    activeData: hashrateActiveData,
+    isRefetching: isHashrateRefetching,
+    onZoomChange: onHashrateZoomChange,
+  } = useChartZoomData(historicalStats);
+  const {
+    activeData: usersActiveData,
+    isRefetching: isUsersRefetching,
+    onZoomChange: onUsersZoomChange,
+  } = useChartZoomData(historicalStats);
 
   const hashrateChartData = useMemo(() => {
-    if (activeData.length === 0) {
+    if (hashrateActiveData.length === 0) {
       return { timestamps: [], series: [{ data: [], title: "1H Average" }] };
     }
     return {
-      timestamps: activeData.map(entry => {
+      timestamps: hashrateActiveData.map(entry => {
         const date = new Date(entry.timestamp * 1000);
         return date.toLocaleString("en-US", {
           year: undefined,
@@ -85,29 +94,29 @@ export default function Dashboard() {
       }),
       series: [
         {
-          data: activeData.map(entry => entry.hashrate1hr ?? 0),
+          data: hashrateActiveData.map(entry => entry.hashrate1hr ?? 0),
           title: "1H Average"
         },
         {
-          data: activeData.map(entry => entry.hashrate1d ?? 0),
+          data: hashrateActiveData.map(entry => entry.hashrate1d ?? 0),
           title: "1D Average",
           lineStyle: "dashed" as const
         },
         {
-          data: activeData.map(entry => entry.hashrate7d ?? 0),
+          data: hashrateActiveData.map(entry => entry.hashrate7d ?? 0),
           title: "7D Average",
           lineStyle: "dotted" as const
         }
       ]
     };
-  }, [activeData]);
+  }, [hashrateActiveData]);
 
   const usersWorkersChartData = useMemo(() => {
-    if (activeData.length === 0) {
+    if (usersActiveData.length === 0) {
       return { dates: [], users: [], workers: [], idle: [], disconnected: [] };
     }
     return {
-      dates: activeData.map(entry => {
+      dates: usersActiveData.map(entry => {
         const date = new Date(entry.timestamp * 1000);
         return date.toLocaleString("en-US", {
           year: undefined,
@@ -118,12 +127,12 @@ export default function Dashboard() {
           hour12: false,
         });
       }),
-      users: activeData.map(entry => entry.users ?? 0),
-      workers: activeData.map(entry => entry.workers ?? 0),
-      idle: activeData.map(entry => entry.idle ?? 0),
-      disconnected: activeData.map(entry => entry.disconnected ?? 0),
+      users: usersActiveData.map(entry => entry.users ?? 0),
+      workers: usersActiveData.map(entry => entry.workers ?? 0),
+      idle: usersActiveData.map(entry => entry.idle ?? 0),
+      disconnected: usersActiveData.map(entry => entry.disconnected ?? 0),
     };
-  }, [activeData]);
+  }, [usersActiveData]);
 
   return (
     <main className="flex min-h-screen flex-col items-center pb-8">
@@ -149,7 +158,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full mb-6">
         <HashrateGauge totalHashrate={(poolStats?.hashrate || 0) / 1000000000000000} />
         <div className="lg:col-span-2">
-          <HashrateChart data={hashrateChartData} loading={historicalLoading} onZoomChange={onZoomChange} refetching={isRefetching} />
+          <HashrateChart data={hashrateChartData} loading={historicalLoading} onZoomChange={onHashrateZoomChange} refetching={isHashrateRefetching} />
         </div>
         {/* <HashrateDistribution /> */}
       </div>
@@ -158,7 +167,7 @@ export default function Dashboard() {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full mb-6">
         <div className="lg:col-span-2">
-          <UsersWorkersChart data={usersWorkersChartData} loading={historicalLoading} onZoomChange={onZoomChange} refetching={isRefetching} />
+          <UsersWorkersChart data={usersWorkersChartData} loading={historicalLoading} onZoomChange={onUsersZoomChange} refetching={isUsersRefetching} />
         </div>
         <BoardCombined />
       </div>

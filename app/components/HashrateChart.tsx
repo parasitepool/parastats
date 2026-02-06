@@ -100,10 +100,11 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const isInitializedRef = useRef(false);
   const onZoomChangeRef = useRef(onZoomChange);
+  const zoomStateRef = useRef({ start: 0, end: 100 });
   useEffect(() => { onZoomChangeRef.current = onZoomChange; }, [onZoomChange]);
 
   // Build chart options function - memoized to avoid recreating on every render
-  const buildChartOptions = useCallback((chartData: typeof data, diffData?: BestDiffPoint[]) => {
+  const buildChartOptions = useCallback((chartData: typeof data, diffData: BestDiffPoint[] | undefined, zoomState: { start: number; end: number }) => {
     // Get theme colors from CSS variables
     const foregroundColor = getComputedStyle(document.documentElement)
       .getPropertyValue("--foreground")
@@ -254,6 +255,8 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
         type: "slider",
         xAxisIndex: [0],
         filterMode: "none",
+        start: zoomState.start,
+        end: zoomState.end,
         backgroundColor: secondaryColor,
         fillerColor: "rgba(0, 0, 0, 0.1)",
         borderColor: borderColor,
@@ -447,14 +450,17 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
       chart.on('datazoom', (params: unknown) => {
         handleDataZoom(params);
         const p = params as { start: number; end: number };
-        onZoomChangeRef.current?.(p.start ?? 0, p.end ?? 100);
+        const start = typeof p.start === "number" ? p.start : zoomStateRef.current.start;
+        const end = typeof p.end === "number" ? p.end : zoomStateRef.current.end;
+        zoomStateRef.current = { start, end };
+        onZoomChangeRef.current?.(start, end);
       });
       isInitializedRef.current = true;
     }
 
     // Set/update chart options with data
     if (isInitializedRef.current) {
-      chart.setOption(buildChartOptions(data, bestDiffs), { notMerge: true });
+      chart.setOption(buildChartOptions(data, bestDiffs, zoomStateRef.current), { notMerge: true });
     }
   }, [data, bestDiffs, buildChartOptions]);
 
