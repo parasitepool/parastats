@@ -123,6 +123,8 @@ export async function GET(request: Request) {
         );
       }
 
+      endTime = Math.min(endTime, now);
+
       const rangeDays = (endTime - startTime) / 86400;
       let maxDays = 30;
       if (interval === '1m') maxDays = 2;

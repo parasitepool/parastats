@@ -18,16 +18,18 @@ export function useChartZoomData(baseData: HistoricalPoolStats[]) {
   const [isRefetching, setIsRefetching] = useState(false);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentInterval = useRef(BASE_INTERVAL);
-  const suppressReset = useRef(false);
+  const suppressResetCount = useRef(0);
   const lastFetchRange = useRef<{ start: number; end: number } | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const fetchId = useRef(0);
 
   const onZoomChange = useCallback(
     (startPercent: number, endPercent: number) => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current);
 
       if (startPercent <= 0 && endPercent >= 100) {
-        if (suppressReset.current) {
-          suppressReset.current = false;
+        if (suppressResetCount.current > 0) {
+          suppressResetCount.current--;
           return;
         }
         setActiveData(null);
@@ -40,7 +42,10 @@ export function useChartZoomData(baseData: HistoricalPoolStats[]) {
         if (baseData.length === 0) return;
 
         const totalLen = baseData.length;
-        const startIdx = Math.floor((startPercent / 100) * totalLen);
+        const startIdx = Math.min(
+          Math.floor((startPercent / 100) * totalLen),
+          totalLen - 1
+        );
         const endIdx = Math.min(
           Math.ceil((endPercent / 100) * totalLen),
           totalLen - 1
@@ -70,18 +75,26 @@ export function useChartZoomData(baseData: HistoricalPoolStats[]) {
 
         currentInterval.current = interval;
 
+        if (abortRef.current) abortRef.current.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const id = ++fetchId.current;
+
         setIsRefetching(true);
 
         getHistoricalPoolStats("", interval, { start: startTs, end: endTs })
           .then((data) => {
-            suppressReset.current = true;
+            if (fetchId.current !== id) return;
+            suppressResetCount.current = 2;
             lastFetchRange.current = { start: startTs, end: endTs };
             setActiveData(data);
           })
           .catch((err) => {
+            if (fetchId.current !== id) return;
             console.error("Zoom fetch failed:", err);
           })
           .finally(() => {
+            if (fetchId.current !== id) return;
             setIsRefetching(false);
           });
       }, DEBOUNCE_MS);
