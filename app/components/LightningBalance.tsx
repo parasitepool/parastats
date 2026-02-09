@@ -198,9 +198,9 @@ export default function LightningBalance({
         </div>
         
         <div className="grid grid-cols-1 gap-4 sm:gap-6">
-          {/* Lightning Address shimmer */}
+          {/* LN Address shimmer */}
           <div className="flex flex-col">
-            <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
+            <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
             <div className="bg-secondary p-3 sm:p-4 border border-border h-[5rem] flex items-center">
               <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
             </div>
@@ -305,9 +305,9 @@ export default function LightningBalance({
         ) : addressesMatch ? (
           // If addresses match, show Lightning Address and Balance as separate boxes
           <div className="grid grid-cols-1 gap-4 sm:gap-6">
-            {/* Lightning Address */}
+            {/* LN Address */}
             <div className="flex flex-col">
-              <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
+              <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
               <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
                 <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
                 {isOwner && isLightningAuthenticated && (
@@ -364,7 +364,7 @@ export default function LightningBalance({
           <div className="space-y-4">
             {displayLnAddress && (
               <div className="flex flex-col">
-                <h3 className="text-sm font-medium text-accent-2 mb-2">Lightning Address</h3>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
                 <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2 h-[5rem]">
                   <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -427,7 +427,7 @@ export default function LightningBalance({
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-background border border-foreground p-6 max-w-md w-full mx-4 shadow-xl">
             <div className="flex justify-between items-start mb-4">
-              <h2 className="text-2xl font-bold text-accent-3">Reset Lightning Address</h2>
+              <h2 className="text-2xl font-bold text-accent-3">Reset LN Address</h2>
               <button
                 onClick={() => setShowResetConfirm(false)}
                 className="text-gray-400 hover:text-gray-500 focus:outline-none"
@@ -440,14 +440,14 @@ export default function LightningBalance({
 
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-medium text-accent-2 mb-2">Current Address</h3>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">Current LN Address</h3>
                 <div className="bg-secondary p-3 border border-border">
                   <p className="text-foreground break-all">{displayLnAddress || 'Not set'}</p>
                 </div>
               </div>
 
               <div>
-                <h3 className="text-sm font-medium text-accent-2 mb-2">New Address</h3>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">New LN Address</h3>
                 <div className="bg-secondary p-3 border border-border">
                   <p className="text-foreground break-all">{walletInfo?.username}@sati.pro</p>
                 </div>
