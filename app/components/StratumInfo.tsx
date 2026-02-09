@@ -12,15 +12,9 @@ interface StratumInfoProps {
 export default function StratumInfo({ userId, isLoading = false }: StratumInfoProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [useHighDiff, setUseHighDiff] = useState(false);
-  const [animateKey, setAnimateKey] = useState(0);
 
   const stratumUrl = useHighDiff ? "parasite.wtf:42068" : "parasite.wtf:42069";
   const stratumUsername = `${userId}.WORKER_NAME`;
-
-  const handleToggleHighDiff = () => {
-    setUseHighDiff(!useHighDiff);
-    setAnimateKey(prev => prev + 1);
-  };
 
   const copyToClipboard = async (text: string, fieldName: string) => {
     try {
@@ -84,7 +78,7 @@ export default function StratumInfo({ userId, isLoading = false }: StratumInfoPr
             <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">
               parasite.wtf:
               <motion.span
-                key={animateKey}
+                key={String(useHighDiff)}
                 initial={{ x: 0 }}
                 animate={{
                   x: [0, -4, 4, -4, 4, 0],
@@ -96,11 +90,11 @@ export default function StratumInfo({ userId, isLoading = false }: StratumInfoPr
               </motion.span>
             </p>
             <button
-              onClick={handleToggleHighDiff}
+              onClick={() => setUseHighDiff(prev => !prev)}
               className={`flex items-center gap-1 px-2 py-1 text-xs font-medium flex-shrink-0 transition-colors ${
                 useHighDiff
-                  ? "bg-foreground text-background hover:bg-gray-700"
-                  : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                  ? "bg-foreground text-background hover:bg-foreground/80"
+                  : "bg-foreground/50 text-background/70 hover:bg-foreground/80"
               }`}
               title={useHighDiff ? "Currently using high difficulty port (1,000,000 initial diff). Click to switch to standard port." : "Switch to high difficulty port. Sets the initial difficulty to 1,000,000. Only use for powerful miners."}
             >
