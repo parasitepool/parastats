@@ -96,7 +96,7 @@ export default function StratumInfo({ userId, isLoading = false }: StratumInfoPr
                   ? "bg-foreground text-background hover:bg-foreground/80"
                   : "bg-foreground/50 text-background/70 hover:bg-foreground/80"
               }`}
-              title={useHighDiff ? "Currently using high difficulty port (1,000,000 initial diff). Click to switch to standard port." : "Switch to high difficulty port. Sets the initial difficulty to 1,000,000. Only use for powerful miners."}
+              title={useHighDiff ? "Currently using high difficulty port (1,000,000 initial diff). Only use for powerful miners. Click to switch to standard port." : "Only use for powerful miners. Switch to high difficulty port. Sets the initial difficulty to 1,000,000."}
             >
               <span className={useHighDiff ? "" : "line-through"}>high diff</span>
             </button>

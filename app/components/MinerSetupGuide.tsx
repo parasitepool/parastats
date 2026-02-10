@@ -65,12 +65,6 @@ export default function MinerSetupGuide() {
               </span>
             </li>
             <li>
-              High Diff Port:{" "}
-              <span className="font-mono bg-foreground/10 px-2 py-1 rounded">
-                42068
-              </span>
-            </li>
-            <li>
               Depending on your miner it will look something like this:<br />
               <span className="font-mono bg-foreground/10 px-2 py-0.25 rounded">
                 parasite.wtf:42069<br />
@@ -103,6 +97,12 @@ export default function MinerSetupGuide() {
               </p>
             </li>
           </ul>
+        </li>
+        <li>
+          If you have a very powerful miner you can also use the high diff port at {" "}
+          <span className="font-mono bg-foreground/10 px-2 py-1 rounded">
+            42068
+          </span>
         </li>
       </ol>
     </div>
