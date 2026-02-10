@@ -29,8 +29,8 @@ dependencies:
     specifier: 6.0.0
     version: 6.0.0
   framer-motion:
-    specifier: 12.33.0
-    version: 12.33.0(react-dom@19.2.4)(react@19.2.4)
+    specifier: 12.34.0
+    version: 12.34.0(react-dom@19.2.4)(react@19.2.4)
   next:
     specifier: 16.1.6
     version: 16.1.6(@babel/core@7.29.0)(react-dom@19.2.4)(react@19.2.4)
@@ -56,8 +56,8 @@ dependencies:
     specifier: 0.3.28
     version: 0.3.28(better-sqlite3@12.6.2)(pg@8.18.0)
   undici:
-    specifier: ^7.20.0
-    version: 7.20.0
+    specifier: ^7.21.0
+    version: 7.21.0
 
 devDependencies:
   '@eslint/eslintrc':
@@ -70,8 +70,8 @@ devDependencies:
     specifier: ^7.6.13
     version: 7.6.13
   '@types/node':
-    specifier: ^25.2.1
-    version: 25.2.1
+    specifier: ^25.2.3
+    version: 25.2.3
   '@types/node-cron':
     specifier: ^3.0.11
     version: 3.0.11
@@ -1212,7 +1212,7 @@ packages:
   /@types/better-sqlite3@7.6.13:
     resolution: {integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==}
     dependencies:
-      '@types/node': 25.2.1
+      '@types/node': 25.2.3
     dev: true
 
   /@types/estree@1.0.8:
@@ -1231,8 +1231,8 @@ packages:
     resolution: {integrity: sha512-0ikrnug3/IyneSHqCBeslAhlK2aBfYek1fGo4bP4QnZPmiqSGRK+Oy7ZMisLWkesffJvQ1cqAcBnJC+8+nxIAg==}
     dev: true
 
-  /@types/node@25.2.1:
-    resolution: {integrity: sha512-CPrnr8voK8vC6eEtyRzvMpgp3VyVRhgclonE7qYi6P9sXwYb59ucfrnmFBTaP0yUi8Gk4yZg/LlTJULGxvTNsg==}
+  /@types/node@25.2.3:
+    resolution: {integrity: sha512-m0jEgYlYz+mDJZ2+F4v8D1AyQb+QzsNqRuI7xg1VQX/KlKS0qT9r1Mo16yo5F/MtifXFgaofIFsdFMox2SxIbQ==}
     dependencies:
       undici-types: 7.16.0
     dev: true
@@ -2791,8 +2791,8 @@ packages:
       mime-types: 2.1.35
     dev: false
 
-  /framer-motion@12.33.0(react-dom@19.2.4)(react@19.2.4):
-    resolution: {integrity: sha512-ca8d+rRPcDP5iIF+MoT3WNc0KHJMjIyFAbtVLvM9eA7joGSpeqDfiNH/kCs1t4CHi04njYvWyj0jS4QlEK/rJQ==}
+  /framer-motion@12.34.0(react-dom@19.2.4)(react@19.2.4):
+    resolution: {integrity: sha512-+/H49owhzkzQyxtn7nZeF4kdH++I2FWrESQ184Zbcw5cEqNHYkE5yxWxcTLSj5lNx3NWdbIRy5FHqUvetD8FWg==}
     peerDependencies:
       '@emotion/is-prop-valid': '*'
       react: ^18.0.0 || ^19.0.0
@@ -2805,7 +2805,7 @@ packages:
       react-dom:
         optional: true
     dependencies:
-      motion-dom: 12.33.0
+      motion-dom: 12.34.0
       motion-utils: 12.29.2
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
@@ -3558,8 +3558,8 @@ packages:
     resolution: {integrity: sha512-gKLcREMhtuZRwRAfqP3RFW+TK4JqApVBtOIftVgjuABpAtpxhPGaDcfvbhNvD0B8iD1oUr/txX35NjcaY6Ns/A==}
     dev: false
 
-  /motion-dom@12.33.0:
-    resolution: {integrity: sha512-XRPebVypsl0UM+7v0Hr8o9UAj0S2djsQWRdHBd5iVouVpMrQqAI0C/rDAT3QaYnXnHuC5hMcwDHCboNeyYjPoQ==}
+  /motion-dom@12.34.0:
+    resolution: {integrity: sha512-Lql3NuEcScRDxTAO6GgUsRHBZOWI/3fnMlkMcH5NftzcN37zJta+bpbMAV9px4Nj057TuvRooMK7QrzMCgtz6Q==}
     dependencies:
       motion-utils: 12.29.2
     dev: false
@@ -4725,8 +4725,8 @@ packages:
     resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
     dev: true
 
-  /undici@7.20.0:
-    resolution: {integrity: sha512-MJZrkjyd7DeC+uPZh+5/YaMDxFiiEEaDgbUSVMXayofAkDWF1088CDo+2RPg7B1BuS1qf1vgNE7xqwPxE0DuSQ==}
+  /undici@7.21.0:
+    resolution: {integrity: sha512-Hn2tCQpoDt1wv23a68Ctc8Cr/BHpUSfaPYrkajTXOS9IKpxVRx/X5m1K2YkbK2ipgZgxXSgsUinl3x+2YdSSfg==}
     engines: {node: '>=20.18.1'}
     dev: false
 
