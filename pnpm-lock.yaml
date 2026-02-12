@@ -76,11 +76,11 @@ devDependencies:
     specifier: ^3.0.11
     version: 3.0.11
   '@types/react':
-    specifier: ^19.2.13
-    version: 19.2.13
+    specifier: ^19.2.14
+    version: 19.2.14
   '@types/react-dom':
     specifier: ^19.2.3
-    version: 19.2.3(@types/react@19.2.13)
+    version: 19.2.3(@types/react@19.2.14)
   eslint:
     specifier: ^9.39.2
     version: 9.39.2
@@ -1237,16 +1237,16 @@ packages:
       undici-types: 7.16.0
     dev: true
 
-  /@types/react-dom@19.2.3(@types/react@19.2.13):
+  /@types/react-dom@19.2.3(@types/react@19.2.14):
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
     peerDependencies:
       '@types/react': ^19.2.0
     dependencies:
-      '@types/react': 19.2.13
+      '@types/react': 19.2.14
     dev: true
 
-  /@types/react@19.2.13:
-    resolution: {integrity: sha512-KkiJeU6VbYbUOp5ITMIc7kBfqlYkKA5KhEHVrGMmUUMt7NeaZg65ojdPk+FtNrBAOXNVM5QM72jnADjM+XVRAQ==}
+  /@types/react@19.2.14:
+    resolution: {integrity: sha512-ilcTH/UniCkMdtexkoCN0bI7pMcJDvmQFPvuPvmEaYA/NSfFTAgdUSLAoVjaRJm7+6PvcM+q1zYOwS4wTYMF9w==}
     dependencies:
       csstype: 3.2.3
     dev: true
