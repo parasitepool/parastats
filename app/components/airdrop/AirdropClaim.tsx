@@ -9,6 +9,7 @@ interface Eligibility {
     has_10t: boolean;
     slots: number;
     assigned_utxos: string[];
+    assigned_inscription_ids: string[];
 }
 
 interface AirdropClaimProps {
@@ -117,9 +118,9 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
     // Don't render anything while loading or if not eligible
     if (loading || !eligibility) return null;
 
-    const tiers: { key: string; label: string; eligible: boolean }[] = [
-        { key: "1T", label: "1 Tera", eligible: eligibility.has_1t },
-        { key: "10T", label: "10 Tera", eligible: eligibility.has_10t },
+    const tiers: { key: string; label: string; eligible: boolean; index: number }[] = [
+        { key: "1T", label: "1 Tera", eligible: eligibility.has_1t, index: 0 },
+        { key: "10T", label: "10 Tera", eligible: eligibility.has_10t, index: 1 },
     ];
 
     const eligibleTiers = tiers.filter((t) => t.eligible);
@@ -143,31 +144,43 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:gap-6">
+            <div className={`grid gap-4 sm:gap-6 ${eligibleTiers.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                 {eligibleTiers.map((tier) => {
                     const claimed = claimedTiers.has(tier.key);
                     const claiming = claimingTier === tier.key;
+                    const inscriptionId =
+                        eligibility.assigned_inscription_ids?.[tier.index] ?? null;
 
                     return (
                         <div key={tier.key} className="flex flex-col">
                             <h3 className="text-sm font-medium text-accent-2 mb-2">{tier.label} Tier</h3>
-                            <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
-                                <p className="text-lg sm:text-xl font-semibold">
-                                    {claimed ? (
-                                        <span className="text-green-500">Claimed</span>
-                                    ) : (
-                                        "Eligible"
-                                    )}
-                                </p>
-                                {isOwner && !claimed && (
-                                    <button
-                                        onClick={() => handleClaim(tier.key)}
-                                        disabled={claiming || claimingTier !== null}
-                                        className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {claiming ? "Signing..." : "Claim"}
-                                    </button>
+                            <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
+                                {inscriptionId && (
+                                    <img
+                                        src={`https://ordinals.com/content/${inscriptionId}`}
+                                        alt={`${tier.label} inscription`}
+                                        className="w-full max-w-[200px] aspect-square bg-transparent"
+                                        style={{ imageRendering: "pixelated" }}
+                                    />
                                 )}
+                                <div className="flex items-center justify-between w-full">
+                                    <p className="text-lg sm:text-xl font-semibold">
+                                        {claimed ? (
+                                            <span className="text-green-500">Claimed</span>
+                                        ) : (
+                                            "Eligible"
+                                        )}
+                                    </p>
+                                    {isOwner && !claimed && (
+                                        <button
+                                            onClick={() => handleClaim(tier.key)}
+                                            disabled={claiming || claimingTier !== null}
+                                            className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {claiming ? "Signing..." : "Claim"}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     );
