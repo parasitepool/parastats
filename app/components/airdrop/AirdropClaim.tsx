@@ -70,10 +70,27 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
         setTxHex(null);
 
         try {
-            const destinationAddress = address;
-            const message = `${userId}|${tier}|${destinationAddress}`;
+            const { request, MessageSigningProtocols, AddressPurpose } = await import("@sats-connect/core");
 
-            const { request, MessageSigningProtocols } = await import("@sats-connect/core");
+            const accountsResponse = await request("getAccounts", {
+                purposes: [AddressPurpose.Ordinals],
+                message: "Select your Ordinals address for the airdrop",
+            });
+
+            if (accountsResponse.status !== "success") {
+                throw new Error("Failed to get Ordinals address from wallet");
+            }
+
+            const ordinalsAccount = accountsResponse.result.find(
+                (addr) => addr.purpose === AddressPurpose.Ordinals
+            );
+
+            if (!ordinalsAccount) {
+                throw new Error("No Ordinals address found in wallet");
+            }
+
+            const destinationAddress = ordinalsAccount.address;
+            const message = `${userId}|${tier}|${destinationAddress}`;
 
             const signResponse = await request("signMessage", {
                 address: address,
