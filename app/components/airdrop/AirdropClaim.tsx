@@ -131,7 +131,8 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
         { key: "10T", label: "10 Tera", eligible: eligibility.has_10t, index: 1 },
     ];
 
-    const eligibleTiers = tiers.filter((t) => t.eligible);
+    const maxSlots = eligibility.assigned_utxos?.length ?? 0;
+    const eligibleTiers = tiers.filter((t) => t.eligible).slice(0, maxSlots);
     if (eligibleTiers.length === 0) return null;
 
     return (
