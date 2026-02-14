@@ -10,6 +10,7 @@ interface Eligibility {
     slots: number;
     assigned_utxos: string[];
     assigned_inscription_ids: string[];
+    claimed_tiers: string[];
 }
 
 interface AirdropClaimProps {
@@ -37,6 +38,13 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
             if (response.ok) {
                 const data: Eligibility = await response.json();
                 setEligibility(data);
+                if (data.claimed_tiers?.length) {
+                    setClaimedTiers((prev) => {
+                        const next = new Set(prev);
+                        data.claimed_tiers.forEach((t) => next.add(t));
+                        return next;
+                    });
+                }
             } else {
                 setEligibility(null);
             }
