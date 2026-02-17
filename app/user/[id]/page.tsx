@@ -18,7 +18,7 @@ import AnimatedCounter from '@/app/components/AnimatedCounter';
 import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
-import AirdropClaim from "@/app/components/airdrop/AirdropClaim";
+import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
 
 export default function UserDashboard() {
   const params = useParams();
@@ -542,7 +542,7 @@ export default function UserDashboard() {
                       <LightningBalance userId={userId} loading={false} />
                     </div>
                     <div className="grid grid-cols-1 gap-4 mt-4">
-                      <AirdropClaim userId={userId} />
+                      <DispenserClaim userId={userId} />
                     </div>
                   </div>
               )}

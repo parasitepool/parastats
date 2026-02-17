@@ -3,15 +3,15 @@ import { fetch } from '@/lib/http-client';
 
 export async function GET() {
   try {
-    const apiUrl = process.env.AIRDROP_API_URL;
+    const apiUrl = process.env.DISPENSER_API_URL;
     if (!apiUrl) {
-      console.error("Error fetching eligibility: No AIRDROP_API_URL defined in env");
+      console.error("Error fetching eligibility: No DISPENSER_API_URL defined in env");
       return NextResponse.json({ error: "Failed to fetch eligibility" }, { status: 500 });
     }
 
     const headers: Record<string, string> = {};
-    if (process.env.AIRDROP_API_TOKEN) {
-      headers['Authorization'] = `Bearer ${process.env.AIRDROP_API_TOKEN}`;
+    if (process.env.DISPENSER_API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.DISPENSER_API_TOKEN}`;
     }
 
     const response = await fetch(`${apiUrl}/eligibility`, {

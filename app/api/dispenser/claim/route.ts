@@ -3,9 +3,9 @@ import { fetch } from '@/lib/http-client';
 
 export async function POST(request: Request) {
   try {
-    const apiUrl = process.env.AIRDROP_API_URL;
+    const apiUrl = process.env.DISPENSER_API_URL;
     if (!apiUrl) {
-      console.error("Error posting claim: No AIRDROP_API_URL defined in env");
+      console.error("Error posting claim: No DISPENSER_API_URL defined in env");
       return NextResponse.json({ error: "Failed to submit claim" }, { status: 500 });
     }
 
@@ -14,8 +14,8 @@ export async function POST(request: Request) {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (process.env.AIRDROP_API_TOKEN) {
-      headers['Authorization'] = `Bearer ${process.env.AIRDROP_API_TOKEN}`;
+    if (process.env.DISPENSER_API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.DISPENSER_API_TOKEN}`;
     }
 
     const response = await fetch(`${apiUrl}/claim`, {

@@ -13,12 +13,12 @@ interface Eligibility {
     claimed_tiers: string[];
 }
 
-interface AirdropClaimProps {
+interface DispenserClaimProps {
     userId: string;
     className?: string;
 }
 
-export default function AirdropClaim({ userId, className = "" }: AirdropClaimProps) {
+export default function DispenserClaim({ userId, className = "" }: DispenserClaimProps) {
     const { address, isInitialized } = useWallet();
     const [eligibility, setEligibility] = useState<Eligibility | null>(null);
     const [loading, setLoading] = useState(true);
@@ -32,7 +32,7 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
     const fetchEligibility = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await fetch(`/api/airdrop/eligibility/${encodeURIComponent(userId)}`, {
+            const response = await fetch(`/api/dispenser/eligibility/${encodeURIComponent(userId)}`, {
                 cache: "no-store",
             });
             if (response.ok) {
@@ -49,7 +49,7 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
                 setEligibility(null);
             }
         } catch (err) {
-            console.error("Error fetching airdrop eligibility:", err);
+            console.error("Error fetching dispenser eligibility:", err);
             setEligibility(null);
         } finally {
             setLoading(false);
@@ -74,7 +74,7 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
 
             const accountsResponse = await request("getAccounts", {
                 purposes: [AddressPurpose.Ordinals],
-                message: "Select your Ordinals address for the airdrop",
+                message: "Select your Ordinals address for the dispenser",
             });
 
             if (accountsResponse.status !== "success") {
@@ -113,7 +113,7 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
                 throw new Error("Unexpected signature format");
             }
 
-            const response = await fetch("/api/airdrop/claim", {
+            const response = await fetch("/api/dispenser/claim", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -166,7 +166,7 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
                             />
                         </svg>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-bold">Airdrop</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold">Dispenser</h2>
                 </div>
             </div>
 
@@ -182,12 +182,14 @@ export default function AirdropClaim({ userId, className = "" }: AirdropClaimPro
                             <h3 className="text-sm font-medium text-accent-2 mb-2">{tier.label} Tier</h3>
                             <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
                                 {inscriptionId && (
-                                    <img
-                                        src={`https://ordinals.com/content/${inscriptionId}`}
-                                        alt={`${tier.label} inscription`}
-                                        className="w-full max-w-[200px] aspect-square bg-transparent"
-                                        style={{ imageRendering: "pixelated" }}
-                                    />
+                                    <a href={`https://ordinals.com/inscription/${inscriptionId}`}>
+                                        <img
+                                            src={`https://ordinals.com/content/${inscriptionId}`}
+                                            alt={`${tier.label} inscription`}
+                                            className="w-full max-w-[200px] aspect-square bg-transparent"
+                                            style={{ imageRendering: "pixelated" }}
+                                        />
+                                    </a>
                                 )}
                                 <div className="flex items-center justify-between w-full">
                                     <p className="text-lg sm:text-xl font-semibold">
