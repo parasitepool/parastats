@@ -182,7 +182,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                             <h3 className="text-sm font-medium text-accent-2 mb-2">{tier.label} Tier</h3>
                             <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
                                 {inscriptionId && (
-                                    <a href={`https://ordinals.com/inscription/${inscriptionId}`}>
+                                    <a target="_blank" rel="noopener noreferrer" href={`https://ordinals.com/inscription/${inscriptionId}`}>
                                         <img
                                             src={`https://ordinals.com/content/${inscriptionId}`}
                                             alt={`${tier.label} inscription`}
