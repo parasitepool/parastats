@@ -186,7 +186,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                                         <img
                                             src={`https://ordinals.com/content/${inscriptionId}`}
                                             alt={`${tier.label} inscription`}
-                                            className="w-full max-w-[200px] aspect-square bg-transparent"
+                                            className="w-50 aspect-square bg-transparent"
                                             style={{ imageRendering: "pixelated" }}
                                         />
                                     </a>
