@@ -5,8 +5,7 @@ import { useWallet } from "@/app/hooks/useWallet";
 
 interface Eligibility {
     username: string;
-    has_1t: boolean;
-    has_10t: boolean;
+    tiers: string[];
     slots: number;
     assigned_utxos: string[];
     assigned_inscription_ids: string[];
@@ -22,8 +21,8 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
     const { address, isInitialized } = useWallet();
     const [eligibility, setEligibility] = useState<Eligibility | null>(null);
     const [loading, setLoading] = useState(true);
-    const [claimingTier, setClaimingTier] = useState<string | null>(null);
-    const [claimedTiers, setClaimedTiers] = useState<Set<string>>(new Set());
+    const [claimingSlot, setClaimingSlot] = useState<number | null>(null);
+    const [claimedSlots, setClaimedSlots] = useState<Set<number>>(new Set());
     const [error, setError] = useState<string | null>(null);
     const [txHex, setTxHex] = useState<string | null>(null);
 
@@ -39,11 +38,22 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 const data: Eligibility = await response.json();
                 setEligibility(data);
                 if (data.claimed_tiers?.length) {
-                    setClaimedTiers((prev) => {
-                        const next = new Set(prev);
-                        data.claimed_tiers.forEach((t) => next.add(t));
-                        return next;
-                    });
+                    const claimCounts = new Map<string, number>();
+                    for (const t of data.claimed_tiers) {
+                        claimCounts.set(t, (claimCounts.get(t) ?? 0) + 1);
+                    }
+                    const claimed = new Set<number>();
+                    for (let i = 0; i < data.tiers.length; i++) {
+                        const tier = data.tiers[i];
+                        const remaining = claimCounts.get(tier) ?? 0;
+                        if (remaining > 0) {
+                            claimed.add(i);
+                            claimCounts.set(tier, remaining - 1);
+                        }
+                    }
+                    setClaimedSlots(claimed);
+                } else {
+                    setClaimedSlots(new Set());
                 }
             } else {
                 setEligibility(null);
@@ -62,10 +72,10 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
         }
     }, [isInitialized, fetchEligibility]);
 
-    const handleClaim = async (tier: string) => {
+    const handleClaim = async (tier: string, slotIndex: number) => {
         if (!address) return;
 
-        setClaimingTier(tier);
+        setClaimingSlot(slotIndex);
         setError(null);
         setTxHex(null);
 
@@ -131,26 +141,26 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
             }
 
             setTxHex(data.hex);
-            setClaimedTiers((prev) => new Set(prev).add(tier));
+            setClaimedSlots((prev) => new Set(prev).add(slotIndex));
         } catch (err) {
             console.error("Claim error:", err);
             setError(err instanceof Error ? err.message : "Failed to claim");
         } finally {
-            setClaimingTier(null);
+            setClaimingSlot(null);
         }
     };
 
     // Don't render anything while loading or if not eligible
     if (loading || !eligibility) return null;
 
-    const tiers: { key: string; label: string; eligible: boolean; index: number }[] = [
-        { key: "1T", label: "1 Tera", eligible: eligibility.has_1t, index: 0 },
-        { key: "10T", label: "10 Tera", eligible: eligibility.has_10t, index: 1 },
-    ];
+    const slots = eligibility.tiers.map((tier, i) => ({
+        tier,
+        inscriptionId: eligibility.assigned_inscription_ids?.[i] ?? null,
+        claimed: claimedSlots.has(i),
+        index: i,
+    }));
 
-    const maxSlots = eligibility.assigned_utxos?.length ?? 0;
-    const eligibleTiers = tiers.filter((t) => t.eligible).slice(0, maxSlots);
-    if (eligibleTiers.length === 0) return null;
+    if (slots.length === 0) return null;
 
     return (
         <div className={`bg-background p-4 sm:p-6 shadow-md border border-border ${className}`}>
@@ -170,22 +180,19 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 </div>
             </div>
 
-            <div className={`grid gap-4 sm:gap-6 ${eligibleTiers.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-                {eligibleTiers.map((tier) => {
-                    const claimed = claimedTiers.has(tier.key);
-                    const claiming = claimingTier === tier.key;
-                    const inscriptionId =
-                        eligibility.assigned_inscription_ids?.[tier.index] ?? null;
+            <div className={`grid gap-4 sm:gap-6 ${slots.length === 1 ? "grid-cols-1" : slots.length === 2 ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-3"}`}>
+                {slots.map((slot) => {
+                    const claiming = claimingSlot === slot.index;
 
                     return (
-                        <div key={tier.key} className="flex flex-col">
-                            <h3 className="text-sm font-medium text-accent-2 mb-2">{tier.label} Tier</h3>
+                        <div key={slot.index} className="flex flex-col">
+                            <h3 className="text-sm font-medium text-accent-2 mb-2">{slot.tier} Tier</h3>
                             <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
-                                {inscriptionId && (
-                                    <a target="_blank" rel="noopener noreferrer" href={`https://ordinals.com/inscription/${inscriptionId}`}>
+                                {slot.inscriptionId && (
+                                    <a target="_blank" rel="noopener noreferrer" href={`https://ordinals.com/inscription/${slot.inscriptionId}`}>
                                         <img
-                                            src={`https://ordinals.com/content/${inscriptionId}`}
-                                            alt={`${tier.label} inscription`}
+                                            src={`https://ordinals.com/content/${slot.inscriptionId}`}
+                                            alt={`${slot.tier} inscription`}
                                             className="w-50 aspect-square bg-transparent"
                                             style={{ imageRendering: "pixelated" }}
                                         />
@@ -193,16 +200,16 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                                 )}
                                 <div className="flex items-center justify-between w-full">
                                     <p className="text-lg sm:text-xl font-semibold">
-                                        {claimed ? (
+                                        {slot.claimed ? (
                                             <span className="text-green-500">Claimed</span>
                                         ) : (
                                             "Eligible"
                                         )}
                                     </p>
-                                    {isOwner && !claimed && (
+                                    {isOwner && !slot.claimed && (
                                         <button
-                                            onClick={() => handleClaim(tier.key)}
-                                            disabled={claiming || claimingTier !== null}
+                                            onClick={() => handleClaim(slot.tier, slot.index)}
+                                            disabled={claiming || claimingSlot !== null}
                                             className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {claiming ? "Signing..." : "Claim"}
