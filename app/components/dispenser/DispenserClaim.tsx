@@ -173,8 +173,48 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
 
     if (slots.length === 0) return null;
 
-    // Group slots by tier for display
-    const tiers = [...new Set(slots.map((s) => s.tier))];
+    const miningSlots = slots.filter((s) => s.tier !== "override");
+    const whitelistSlots = slots.filter((s) => s.tier === "override");
+
+    const renderSlots = (slotsToRender: typeof slots) =>
+        slotsToRender.map((slot) => {
+            const claiming = claimingSlot === slot.index;
+
+            return (
+                <div key={slot.index} className="flex flex-col">
+                    <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
+                        {slot.inscriptionId && (
+                            <a target="_blank" rel="noopener noreferrer" href={`https://ordinals.com/inscription/${slot.inscriptionId}`}>
+                                <img
+                                    src={`https://ordinals.com/content/${slot.inscriptionId}`}
+                                    alt="inscription"
+                                    className="w-full aspect-square bg-transparent"
+                                    style={{ imageRendering: "pixelated" }}
+                                />
+                            </a>
+                        )}
+                        <div className="flex items-center justify-between w-full">
+                            <p className="text-sm sm:text-base font-semibold">
+                                {slot.claimed ? (
+                                    <span className="text-green-500">Claimed</span>
+                                ) : (
+                                    "Eligible"
+                                )}
+                            </p>
+                            {isOwner && !slot.claimed && (
+                                <button
+                                    onClick={() => handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
+                                    disabled={claiming || claimingSlot !== null}
+                                    className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {claiming ? "Signing..." : "Claim"}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
 
     return (
         <div className={`bg-background p-4 sm:p-6 shadow-md border border-border ${className}`}>
@@ -194,54 +234,23 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 </div>
             </div>
 
-            {tiers.map((tier) => {
-                const tierSlots = slots.filter((s) => s.tier === tier);
-                return (
-                    <div key={tier} className="mb-6 last:mb-0">
-                        <h3 className="text-sm font-medium text-accent-2 mb-3">{tier} Tier</h3>
-                        <div className="grid gap-4 sm:gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                            {tierSlots.map((slot) => {
-                                const claiming = claimingSlot === slot.index;
-
-                                return (
-                                    <div key={slot.index} className="flex flex-col">
-                                        <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
-                                            {slot.inscriptionId && (
-                                                <a target="_blank" rel="noopener noreferrer" href={`https://ordinals.com/inscription/${slot.inscriptionId}`}>
-                                                    <img
-                                                        src={`https://ordinals.com/content/${slot.inscriptionId}`}
-                                                        alt={`${slot.tier} inscription`}
-                                                        className="w-full aspect-square bg-transparent"
-                                                        style={{ imageRendering: "pixelated" }}
-                                                    />
-                                                </a>
-                                            )}
-                                            <div className="flex items-center justify-between w-full">
-                                                <p className="text-sm sm:text-base font-semibold">
-                                                    {slot.claimed ? (
-                                                        <span className="text-green-500">Claimed</span>
-                                                    ) : (
-                                                        "Eligible"
-                                                    )}
-                                                </p>
-                                                {isOwner && !slot.claimed && (
-                                                    <button
-                                                        onClick={() => handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
-                                                        disabled={claiming || claimingSlot !== null}
-                                                        className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        {claiming ? "Signing..." : "Claim"}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+            {miningSlots.length > 0 && (
+                <div className="mb-6">
+                    <h3 className="text-sm font-medium text-accent-2 mb-3">Mining Reward</h3>
+                    <div className="grid gap-4 sm:gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        {renderSlots(miningSlots)}
                     </div>
-                );
-            })}
+                </div>
+            )}
+
+            {whitelistSlots.length > 0 && (
+                <div className="mb-6 last:mb-0">
+                    <h3 className="text-sm font-medium text-accent-2 mb-3">Whitelist</h3>
+                    <div className="grid gap-4 sm:gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        {renderSlots(whitelistSlots)}
+                    </div>
+                </div>
+            )}
 
             {txHex && (
                 <div className="mt-4">
