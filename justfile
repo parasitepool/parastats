@@ -8,7 +8,8 @@ lint:
   pnpm lint
 
 audit:
-  pnpm audit
+  pnpm audit --prod
+  pnpm audit --dev --audit-level=high
 
 ci: install lint audit
 

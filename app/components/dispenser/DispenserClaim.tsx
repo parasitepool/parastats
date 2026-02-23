@@ -5,12 +5,21 @@ import { useWallet } from "@/app/hooks/useWallet";
 
 interface Eligibility {
     username: string;
-    has_1t: boolean;
-    has_10t: boolean;
-    slots: number;
-    assigned_utxos: string[];
-    assigned_inscription_ids: string[];
-    claimed_tiers: string[];
+    tier_shares: Record<string, number>;
+    override_slots: number;
+    total_slots: number;
+    assigned_utxos: Record<string, string[]>;
+    assigned_inscription_ids: Record<string, string[]>;
+    claims: Record<string, number[]>;
+}
+
+interface Slot {
+    tier: string;
+    utxo: string | null;
+    inscriptionId: string;
+    claimed: boolean;
+    index: number;
+    tierSlotIndex: number;
 }
 
 interface DispenserClaimProps {
@@ -18,12 +27,31 @@ interface DispenserClaimProps {
     className?: string;
 }
 
+function buildSlots(data: Eligibility): Slot[] {
+    const slots: Slot[] = [];
+    for (const [tier, inscriptionIds] of Object.entries(data.assigned_inscription_ids ?? {})) {
+        const utxos = data.assigned_utxos?.[tier] ?? [];
+        const claimedIndices = new Set(data.claims?.[tier] ?? []);
+        for (let i = 0; i < inscriptionIds.length; i++) {
+            slots.push({
+                tier,
+                utxo: utxos[i] ?? null,
+                inscriptionId: inscriptionIds[i],
+                claimed: claimedIndices.has(i),
+                tierSlotIndex: i,
+                index: slots.length,
+            });
+        }
+    }
+    return slots;
+}
+
 export default function DispenserClaim({ userId, className = "" }: DispenserClaimProps) {
     const { address, isInitialized } = useWallet();
     const [eligibility, setEligibility] = useState<Eligibility | null>(null);
     const [loading, setLoading] = useState(true);
-    const [claimingTier, setClaimingTier] = useState<string | null>(null);
-    const [claimedTiers, setClaimedTiers] = useState<Set<string>>(new Set());
+    const [claimingSlot, setClaimingSlot] = useState<number | null>(null);
+    const [localClaimed, setLocalClaimed] = useState<Set<number>>(new Set());
     const [error, setError] = useState<string | null>(null);
     const [txHex, setTxHex] = useState<string | null>(null);
 
@@ -38,13 +66,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
             if (response.ok) {
                 const data: Eligibility = await response.json();
                 setEligibility(data);
-                if (data.claimed_tiers?.length) {
-                    setClaimedTiers((prev) => {
-                        const next = new Set(prev);
-                        data.claimed_tiers.forEach((t) => next.add(t));
-                        return next;
-                    });
-                }
+                setLocalClaimed(new Set());
             } else {
                 setEligibility(null);
             }
@@ -62,10 +84,10 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
         }
     }, [isInitialized, fetchEligibility]);
 
-    const handleClaim = async (tier: string) => {
+    const handleClaim = async (tier: string, slotIndex: number, tierSlotIndex: number) => {
         if (!address) return;
 
-        setClaimingTier(tier);
+        setClaimingSlot(slotIndex);
         setError(null);
         setTxHex(null);
 
@@ -90,7 +112,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
             }
 
             const destinationAddress = ordinalsAccount.address;
-            const message = `${userId}|${tier}|${destinationAddress}`;
+            const message = `${userId}|${tier}|${tierSlotIndex}|${destinationAddress}`;
 
             const signResponse = await request("signMessage", {
                 address: address,
@@ -119,6 +141,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 body: JSON.stringify({
                     username: userId,
                     tier,
+                    slot: tierSlotIndex,
                     destination_address: destinationAddress,
                     signature,
                 }),
@@ -131,26 +154,67 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
             }
 
             setTxHex(data.hex);
-            setClaimedTiers((prev) => new Set(prev).add(tier));
+            setLocalClaimed((prev) => new Set(prev).add(slotIndex));
         } catch (err) {
             console.error("Claim error:", err);
             setError(err instanceof Error ? err.message : "Failed to claim");
         } finally {
-            setClaimingTier(null);
+            setClaimingSlot(null);
         }
     };
 
     // Don't render anything while loading or if not eligible
     if (loading || !eligibility) return null;
 
-    const tiers: { key: string; label: string; eligible: boolean; index: number }[] = [
-        { key: "1T", label: "1 Tera", eligible: eligibility.has_1t, index: 0 },
-        { key: "10T", label: "10 Tera", eligible: eligibility.has_10t, index: 1 },
-    ];
+    const slots = buildSlots(eligibility).map((slot) => ({
+        ...slot,
+        claimed: slot.claimed || localClaimed.has(slot.index),
+    }));
 
-    const maxSlots = eligibility.assigned_utxos?.length ?? 0;
-    const eligibleTiers = tiers.filter((t) => t.eligible).slice(0, maxSlots);
-    if (eligibleTiers.length === 0) return null;
+    if (slots.length === 0) return null;
+
+    const miningSlots = slots.filter((s) => s.tier !== "override");
+    const whitelistSlots = slots.filter((s) => s.tier === "override");
+
+    const renderSlots = (slotsToRender: typeof slots) =>
+        slotsToRender.map((slot) => {
+            const claiming = claimingSlot === slot.index;
+
+            return (
+                <div key={slot.index} className="flex flex-col">
+                    <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
+                        {slot.inscriptionId && (
+                            <a target="_blank" rel="noopener noreferrer" href={`https://ordinals.com/inscription/${slot.inscriptionId}`}>
+                                <img
+                                    src={`https://ordinals.com/content/${slot.inscriptionId}`}
+                                    alt="inscription"
+                                    className="w-full aspect-square bg-transparent"
+                                    style={{ imageRendering: "pixelated" }}
+                                />
+                            </a>
+                        )}
+                        <div className="flex items-center justify-between w-full">
+                            <p className="text-sm sm:text-base font-semibold">
+                                {slot.claimed ? (
+                                    <span className="text-green-500">Claimed</span>
+                                ) : (
+                                    "Eligible"
+                                )}
+                            </p>
+                            {isOwner && !slot.claimed && (
+                                <button
+                                    onClick={() => handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
+                                    disabled={claiming || claimingSlot !== null}
+                                    className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {claiming ? "Signing..." : "Claim"}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        });
 
     return (
         <div className={`bg-background p-4 sm:p-6 shadow-md border border-border ${className}`}>
@@ -170,50 +234,23 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 </div>
             </div>
 
-            <div className={`grid gap-4 sm:gap-6 ${eligibleTiers.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-                {eligibleTiers.map((tier) => {
-                    const claimed = claimedTiers.has(tier.key);
-                    const claiming = claimingTier === tier.key;
-                    const inscriptionId =
-                        eligibility.assigned_inscription_ids?.[tier.index] ?? null;
+            {miningSlots.length > 0 && (
+                <div className="mb-6">
+                    <h3 className="text-sm font-medium text-accent-2 mb-3">Mining Reward</h3>
+                    <div className="grid gap-4 sm:gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        {renderSlots(miningSlots)}
+                    </div>
+                </div>
+            )}
 
-                    return (
-                        <div key={tier.key} className="flex flex-col">
-                            <h3 className="text-sm font-medium text-accent-2 mb-2">{tier.label} Tier</h3>
-                            <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
-                                {inscriptionId && (
-                                    <a target="_blank" rel="noopener noreferrer" href={`https://ordinals.com/inscription/${inscriptionId}`}>
-                                        <img
-                                            src={`https://ordinals.com/content/${inscriptionId}`}
-                                            alt={`${tier.label} inscription`}
-                                            className="w-50 aspect-square bg-transparent"
-                                            style={{ imageRendering: "pixelated" }}
-                                        />
-                                    </a>
-                                )}
-                                <div className="flex items-center justify-between w-full">
-                                    <p className="text-lg sm:text-xl font-semibold">
-                                        {claimed ? (
-                                            <span className="text-green-500">Claimed</span>
-                                        ) : (
-                                            "Eligible"
-                                        )}
-                                    </p>
-                                    {isOwner && !claimed && (
-                                        <button
-                                            onClick={() => handleClaim(tier.key)}
-                                            disabled={claiming || claimingTier !== null}
-                                            className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {claiming ? "Signing..." : "Claim"}
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
+            {whitelistSlots.length > 0 && (
+                <div className="mb-6 last:mb-0">
+                    <h3 className="text-sm font-medium text-accent-2 mb-3">Whitelist</h3>
+                    <div className="grid gap-4 sm:gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        {renderSlots(whitelistSlots)}
+                    </div>
+                </div>
+            )}
 
             {txHex && (
                 <div className="mt-4">
