@@ -188,7 +188,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                                 <img
                                     src={`https://ordinals.com/content/${slot.inscriptionId}`}
                                     alt="inscription"
-                                    className="w-full aspect-square bg-transparent"
+                                    className="w-full min-w-[200px] aspect-square bg-transparent"
                                     style={{ imageRendering: "pixelated" }}
                                 />
                             </a>
@@ -237,7 +237,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
             {miningSlots.length > 0 && (
                 <div className="mb-6">
                     <h3 className="text-sm font-medium text-accent-2 mb-3">Mining Reward</h3>
-                    <div className="grid gap-4 sm:gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    <div className="grid gap-4 sm:gap-6 grid-cols-3">
                         {renderSlots(miningSlots)}
                     </div>
                 </div>
@@ -246,7 +246,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
             {whitelistSlots.length > 0 && (
                 <div className="mb-6 last:mb-0">
                     <h3 className="text-sm font-medium text-accent-2 mb-3">Whitelist</h3>
-                    <div className="grid gap-4 sm:gap-6 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    <div className="grid gap-4 sm:gap-6 grid-cols-3">
                         {renderSlots(whitelistSlots)}
                     </div>
                 </div>
