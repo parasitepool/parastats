@@ -652,9 +652,9 @@ export async function syncAccountTotalBlocks() {
 
     let successCount = 0;
     let errorCount = 0;
-    const updateStmt = db.prepare('UPDATE monitored_users SET total_blocks = ? WHERE id = ?');
-    const updateBatch = db.transaction((updates: Array<{ id: number; total_blocks: number }>) => {
-      for (const u of updates) updateStmt.run(u.total_blocks, u.id);
+    const updateStmt = db.prepare('UPDATE monitored_users SET total_blocks = ?, is_public = ? WHERE id = ?');
+    const updateBatch = db.transaction((updates: Array<{ id: number; total_blocks: number; is_public: number }>) => {
+      for (const u of updates) updateStmt.run(u.total_blocks, u.is_public, u.id);
     });
 
     // Process in batches to avoid overwhelming the API
@@ -664,29 +664,32 @@ export async function syncAccountTotalBlocks() {
       const results = await Promise.allSettled(batch.map(async (user) => {
         try {
           const url = `${apiUrl}/account/${user.address}`;
-          const totalBlocks = await withRetry(async () => {
+          const accountResult = await withRetry(async () => {
             const res = await fetchWithTimeout(url, { headers });
 
-            // 404 is expected for users without accounts - treat as 0 blocks (also clears stale values)
-            if (res.status === 404) return 0;
+            // 404 is expected for users without accounts - treat as 0 blocks, default public
+            if (res.status === 404) return { totalBlocks: 0, isPublic: 1 };
 
             if (!res.ok) {
               throw new HttpError(res.status, res.statusText, url);
             }
 
-            const data = await res.json() as { total_blocks?: number; metadata?: { block_count?: number } };
+            const data = await res.json() as { total_blocks?: number; metadata?: { block_count?: number; is_private?: boolean } };
             // Backend may provide blocks mined either as `total_blocks` or inside `metadata.block_count`
-            return data.total_blocks ?? data.metadata?.block_count ?? 0;
+            const blocks = data.total_blocks ?? data.metadata?.block_count ?? 0;
+            // Sync visibility: upstream is_private -> local is_public (inverted)
+            const pub = data.metadata?.is_private ? 0 : 1;
+            return { totalBlocks: blocks, isPublic: pub };
           }, 4, 500, `account total_blocks ${user.address}`);
 
-          return { success: true, update: { id: user.id, total_blocks: totalBlocks } };
+          return { success: true, update: { id: user.id, total_blocks: accountResult.totalBlocks, is_public: accountResult.isPublic } };
         } catch (err) {
           console.warn(`Failed to fetch total_blocks for ${user.address}:`, err instanceof Error ? err.message : err);
           return { success: false as const };
         }
       }));
 
-      const updates: Array<{ id: number; total_blocks: number }> = [];
+      const updates: Array<{ id: number; total_blocks: number; is_public: number }> = [];
       for (const result of results) {
         if (result.status === 'fulfilled' && result.value.success && 'update' in result.value) {
           updates.push(result.value.update);
