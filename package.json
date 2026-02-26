@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "eslint --config eslint.config.mjs",
     "lint:fix": "eslint --config eslint.config.mjs --fix",
-    "collect-stats": "tsx scripts/start-jobs.ts"
+    "collect-stats": "tsx scripts/start-jobs.ts",
+    "generate-privacy-migration": "tsx scripts/generate-privacy-migration.ts"
   },
   "dependencies": {
     "@mempool/mempool.js": "3.0.0",
