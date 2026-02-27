@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate, toggleUserVisibility, getUserBlockDiffs, type UserBlockDiffEntry } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, updateAccountMetadata, getUserBlockDiffs, type UserBlockDiffEntry } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -38,8 +38,10 @@ export default function UserDashboard() {
   const [userBlockDiffs, setUserBlockDiffs] = useState<UserBlockDiffEntry[]>([]);
 
   const {
+    address,
     isLightningAuthenticated,
     isInitialized,
+    isConnected,
     connectWithLightning,
   } = useWallet();
 
@@ -234,14 +236,44 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
-  // Handle visibility toggle
+  const isPrivate = accountData?.metadata?.is_private ?? false;
+  const isOwnProfile = isConnected && address === userId;
+
   const handleToggleVisibility = async () => {
-    if (!userData) return;
+    if (!isOwnProfile) return;
 
     setIsTogglingVisibility(true);
     try {
-      const result = await toggleUserVisibility(userId);
-      setUserData({ ...userData, isPublic: result.isPublic });
+      const metadata = { is_private: !isPrivate };
+
+      const { request: satConnectRequest, MessageSigningProtocols } = await import('@sats-connect/core');
+
+      const signResponse = await satConnectRequest('signMessage', {
+        address: userId,
+        message: JSON.stringify(metadata),
+        protocol: MessageSigningProtocols.BIP322,
+      });
+
+      if (signResponse.status !== 'success') {
+        throw new Error('Failed to sign message');
+      }
+
+      let signature: string;
+      if (typeof signResponse.result === 'string') {
+        signature = signResponse.result;
+      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
+        signature = signResponse.result.signature;
+      } else {
+        throw new Error('Unexpected signature format');
+      }
+
+      await updateAccountMetadata(userId, metadata, signature);
+
+      const response = await fetch(`/api/account/${userId}`, { cache: 'no-store' });
+      if (response.ok) {
+        const data: CombinedAccountResponse = await response.json();
+        setAccountData(data.account);
+      }
     } catch (error) {
       console.error('Failed to toggle visibility:', error);
       alert('Failed to toggle visibility. Please try again.');
@@ -455,24 +487,24 @@ export default function UserDashboard() {
             <div className="flex items-center justify-between mb-4">
               <h1 className="text-2xl lg:text-3xl font-bold wrap-anywhere text-ellipsis line-clamp-1">
                 {userId}
-                {userData && !userData.isPublic && (
+                {isPrivate && (
                     <span className="text-red-500 text-lg font-semibold"> - Private</span>
                 )}
               </h1>
 
               <div className="flex items-center gap-2">
-                {/* Visibility Toggle Button - only show if userData exists */}
-                {userData && (
+                {/* Visibility Toggle Button - only show for own profile when wallet is connected */}
+                {isOwnProfile && (
                     <button
                         onClick={handleToggleVisibility}
                         disabled={isTogglingVisibility}
                         className={`flex items-center gap-2 px-4 py-2 border disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors ${
-                            userData.isPublic
+                            !isPrivate
                                 ? 'bg-green-500/10 border-green-500/40 hover:bg-green-500/20 text-green-500'
                                 : 'bg-red-500/10 border-red-500/40 hover:bg-red-500/20 text-red-500'
                         }`}
                     >
-                      {userData.isPublic ? (
+                      {!isPrivate ? (
                           <>
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
                               <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm-3-9V6c0-1.66 1.34-3 3-3s3 1.34 3 3v2H9z" />
