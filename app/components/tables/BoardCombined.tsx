@@ -7,6 +7,7 @@ import Board, { BoardColumn } from './Board';
 interface User {
   id: number;
   address: string;
+  claimed?: boolean;
   diff: number;
   total_blocks: number;
   diff_rank: number;
@@ -62,7 +63,11 @@ export default function BoardCombined({ initialData }: BoardCombinedProps) {
     {
       key: 'address',
       header: 'Address',
-      render: (value) => formatAddress(value as string)
+      render: (value, item) => (
+        <span className={item.claimed ? 'text-green-500' : ''}>
+          {formatAddress(value as string)}
+        </span>
+      )
     },
     {
       key: 'diff_rank',

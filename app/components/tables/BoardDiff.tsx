@@ -9,6 +9,7 @@ import DifficultyInfoModal from '../modals/DifficultyInfoModal';
 interface User {
   id: number;
   address: string;
+  claimed?: boolean;
   diff: number;
   authorised_at: number;
   rank?: number;
@@ -65,7 +66,11 @@ export default function BoardDiff({ initialData }: LeaderboardProps) {
     {
       key: 'address',
       header: 'Address',
-      render: (value) => formatAddress(value as string)
+      render: (value, item) => (
+        <span className={item.claimed ? 'text-green-500' : ''}>
+          {formatAddress(value as string)}
+        </span>
+      )
     },
     {
       key: 'diff',
