@@ -556,49 +556,52 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          <div className="w-full mb-6">
-            <HashrateChart
-                title="Hashrate & Difficulty"
-                data={historicalData ? {
-                  timestamps: historicalData.map(d => {
-                    const date = new Date(d.timestamp);
-                    return date.toLocaleString("en-US", {
-                      year: undefined,
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: false,
-                    });
-                  }),
-                  rawTimestamps: historicalData.map(d => new Date(d.timestamp).getTime()),
-                  series: [
-                    {
-                      data: historicalData.map(d => d.hashrate),
-                      title: "Hashrate"
-                    }
-                  ]
-                } : undefined}
-                bestDiffs={userBlockDiffs.length > 0 ? userBlockDiffs
-                    .filter(diff => diff.block_timestamp !== null)
-                    .map(diff => {
-                      const timestampMs = diff.block_timestamp! * 1000;
-                      return {
-                        timestamp: new Date(timestampMs).toLocaleString("en-US", {
+          {/* Hashrate Chart - only show if we have data */}
+          {!userData && (
+              <div className="w-full mb-6">
+                <HashrateChart
+                    title="Hashrate & Difficulty"
+                    data={historicalData ? {
+                      timestamps: historicalData.map(d => {
+                        const date = new Date(d.timestamp);
+                        return date.toLocaleString("en-US", {
                           year: undefined,
                           month: "2-digit",
                           day: "2-digit",
                           hour: "2-digit",
                           minute: "2-digit",
                           hour12: false,
-                        }),
-                        rawTimestamp: timestampMs,
-                        difficulty: diff.difficulty,
-                      };
-                    }) : undefined}
-                loading={!historicalData}
-            />
-          </div>
+                        });
+                      }),
+                      rawTimestamps: historicalData.map(d => new Date(d.timestamp).getTime()),
+                      series: [
+                        {
+                          data: historicalData.map(d => d.hashrate),
+                          title: "Hashrate"
+                        }
+                      ]
+                    } : undefined}
+                    bestDiffs={userBlockDiffs.length > 0 ? userBlockDiffs
+                        .filter(diff => diff.block_timestamp !== null)
+                        .map(diff => {
+                          const timestampMs = diff.block_timestamp! * 1000;
+                          return {
+                            timestamp: new Date(timestampMs).toLocaleString("en-US", {
+                              year: undefined,
+                              month: "2-digit",
+                              day: "2-digit",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              hour12: false,
+                            }),
+                            rawTimestamp: timestampMs,
+                            difficulty: diff.difficulty,
+                          };
+                        }) : undefined}
+                    loading={!historicalData}
+                />
+              </div>
+          )}
 
           {/* Mining Projections - Uncomment when UserMiningStats is implemented */}
           {/* <UserMiningStats
