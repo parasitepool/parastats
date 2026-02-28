@@ -7,7 +7,6 @@ import Board, { BoardColumn } from './Board';
 interface User {
   id: number;
   address: string;
-  claimed?: boolean;
   total_blocks: number;
   rank?: number;
 }
@@ -59,11 +58,7 @@ export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
     {
       key: 'address',
       header: 'Address',
-      render: (value, item) => (
-        <span className={item.claimed ? 'text-green-500' : ''}>
-          {formatAddress(value as string)}
-        </span>
-      )
+      render: (value) => formatAddress(value as string)
     },
     {
       key: 'total_blocks',

@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { formatAddress } from '@/app/utils/formatters';
 import { checkRateLimit, getRateLimitHeaders } from '@/app/api/lib/rate-limit';
-import { getClaimedAddresses } from '@/lib/dispenser-cache';
 import {
   MAX_BLOCK_HEIGHT,
   MAX_USERS_PER_BLOCK,
@@ -77,7 +76,6 @@ export async function GET(
 
     // The top diff is now the highest public user, not necessarily the original winner
     const topPublicUser = userDiffs.length > 0 ? userDiffs[0] : null;
-    const claimedSet = getClaimedAddresses();
 
     // Return only truncated addresses - never expose full addresses
     return NextResponse.json({
@@ -85,12 +83,10 @@ export async function GET(
       block_timestamp: blockData.block_timestamp,
       top_diff: topPublicUser ? {
         address: formatAddress(topPublicUser.address), // Truncated only
-        claimed: claimedSet.has(topPublicUser.address),
         difficulty: topPublicUser.difficulty,
       } : null,
       users: userDiffs.map(u => ({
         address: formatAddress(u.address), // Truncated only
-        claimed: claimedSet.has(u.address),
         difficulty: u.difficulty,
       })),
       user_count: userDiffs.length,

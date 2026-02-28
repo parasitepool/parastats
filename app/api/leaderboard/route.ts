@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { formatAddress } from '@/app/utils/formatters';
-import { getClaimedAddresses } from '@/lib/dispenser-cache';
 
 interface BaseUser {
   id: number;
@@ -31,50 +30,47 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '9', 10);
     
     const db = getDb();
-    const claimedSet = getClaimedAddresses();
-
+    
     let users;
-
+    
     switch (type) {
       case 'difficulty':
         users = db.prepare(`
-          SELECT
+          SELECT 
             id,
             address,
             bestever as diff
-          FROM monitored_users
+          FROM monitored_users 
           WHERE is_active = 1 AND is_public = 1 AND bestever > 0
           ORDER BY bestever DESC
           LIMIT ?
         `).all(limit).map((user: unknown) => ({
           ...(user as DifficultyUser),
-          claimed: claimedSet.has((user as DifficultyUser).address),
-          address: formatAddress((user as DifficultyUser).address),
+          address: formatAddress((user as DifficultyUser).address)
         }));
         break;
-
+        
       case 'loyalty':
         users = db.prepare(`
-          SELECT
+          SELECT 
             id,
             address,
             total_blocks
-          FROM monitored_users
+          FROM monitored_users 
           WHERE is_active = 1 AND is_public = 1 AND total_blocks > 0
           ORDER BY total_blocks DESC
           LIMIT ?
         `).all(limit).map((user: unknown) => ({
           ...(user as LoyaltyUser),
-          claimed: claimedSet.has((user as LoyaltyUser).address),
-          address: formatAddress((user as LoyaltyUser).address),
+          address: formatAddress((user as LoyaltyUser).address)
         }));
         break;
-
+        
       case 'combined':
       default:
         users = db.prepare(`
           WITH RankedUsers AS (
-            SELECT
+            SELECT 
               id,
               address,
               bestever,
@@ -84,7 +80,7 @@ export async function GET(request: Request) {
             FROM monitored_users
             WHERE is_active = 1 AND is_public = 1 AND max(total_blocks, bestever) > 0
           )
-          SELECT
+          SELECT 
             id,
             address,
             bestever as diff,
@@ -97,8 +93,7 @@ export async function GET(request: Request) {
           LIMIT ?
         `).all(limit).map((user: unknown) => ({
           ...(user as CombinedUser),
-          claimed: claimedSet.has((user as CombinedUser).address),
-          address: formatAddress((user as CombinedUser).address),
+          address: formatAddress((user as CombinedUser).address)
         }));
         break;
     }

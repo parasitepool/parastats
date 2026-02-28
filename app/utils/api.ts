@@ -190,7 +190,6 @@ export async function toggleUserVisibility(address: string): Promise<{ isPublic:
 export interface BlockTopDiff {
   block_height: number;
   top_diff_address: string; // Truncated address only
-  claimed?: boolean;
   difficulty: number;
   block_timestamp: number | null;
 }

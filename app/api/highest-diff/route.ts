@@ -3,7 +3,6 @@ import { getDb } from '@/lib/db';
 import { formatAddress } from '@/app/utils/formatters';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { checkRateLimit, getRateLimitHeaders } from '@/app/api/lib/rate-limit';
-import { getClaimedAddresses } from '@/lib/dispenser-cache';
 import {
   MAX_LIMIT,
   BlockHighestDiffRow,
@@ -45,7 +44,6 @@ export async function GET(request: Request) {
     }
 
     const db = getDb();
-    const claimedSet = getClaimedAddresses();
 
     if (type === 'leaderboard') {
       // Get leaderboard of users by watermark count (how many times they had the top diff)
@@ -68,7 +66,6 @@ export async function GET(request: Request) {
       return NextResponse.json(
         topUsers.map(u => ({
           address: formatAddress(u.address), // Truncated only
-          claimed: claimedSet.has(u.address),
           watermark_count: u.watermark_count,
           total_diff: u.total_diff,
           avg_diff: u.avg_diff,
@@ -116,7 +113,6 @@ export async function GET(request: Request) {
           difficulty: d.difficulty,
           block_timestamp: d.block_timestamp,
           address: formatAddress(d.address), // Truncated only
-          claimed: claimedSet.has(d.address),
         })),
         { headers: getRateLimitHeaders(rateLimitResult) }
       );
@@ -151,7 +147,6 @@ export async function GET(request: Request) {
         userBlocks.map(b => ({
           block_height: b.block_height,
           top_diff_address: formatAddress(b.top_diff_address), // Truncated only
-          claimed: claimedSet.has(b.top_diff_address),
           difficulty: b.difficulty,
           block_timestamp: b.block_timestamp,
         })),
@@ -185,7 +180,6 @@ export async function GET(request: Request) {
       return {
         block_height: block.block_height,
         top_diff_address: topUser ? formatAddress(topUser.address) : null,
-        claimed: topUser ? claimedSet.has(topUser.address) : false,
         difficulty: topUser?.difficulty ?? null,
         block_timestamp: block.block_timestamp,
       };

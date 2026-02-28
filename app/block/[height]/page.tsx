@@ -22,12 +22,10 @@ interface BlockData {
   block_timestamp: number | null;
   top_diff: {
     address: string; // Truncated address only
-    claimed?: boolean;
     difficulty: number;
   };
   users: {
     address: string; // Truncated address only
-    claimed?: boolean;
     difficulty: number;
   }[];
   user_count: number;
@@ -164,7 +162,7 @@ export default function BlockLeaderboard() {
       chartInstanceRef.current = chart;
     }
 
-    const scatterData = leaderboard.map((user, index) => [index + 1, user.difficulty, user.claimed ? 1 : 0]);
+    const scatterData = leaderboard.map((user, index) => [index + 1, user.difficulty]);
 
     const option = {
       backgroundColor: 'transparent',
@@ -254,8 +252,7 @@ export default function BlockLeaderboard() {
           const [rank, diff] = params[0].data;
           const user = leaderboard[rank - 1];
           // Only show truncated address - privacy protected
-          const addrColor = user?.claimed ? '#22c55e' : '#ededed';
-          return `#${rank} <span style="color:${addrColor}">${user?.address || ''}</span><br/>Difficulty: ${formatDifficulty(diff)}`;
+          return `#${rank} ${user?.address || ''}<br/>Difficulty: ${formatDifficulty(diff)}`;
         }
       },
       series: [{
@@ -263,9 +260,9 @@ export default function BlockLeaderboard() {
         data: scatterData,
         symbolSize: 8,
         itemStyle: {
-          color: (params: { data: number[] }) => params.data[2] ? '#22c55e' : '#ef4444',
+          color: '#ef4444',
           shadowBlur: 6,
-          shadowColor: (params: { data: number[] }) => params.data[2] ? '#22c55e' : '#ef4444',
+          shadowColor: '#ef4444',
         },
         emphasis: {
           scale: 1.5,
@@ -406,7 +403,7 @@ export default function BlockLeaderboard() {
                         </td>
                         <td className="px-4 py-3">
                           {/* Privacy: Only truncated address shown, no link to user page */}
-                          <span className={`font-mono text-sm ${user.claimed ? 'text-green-500' : ''}`}>
+                          <span className="font-mono text-sm">
                             {user.address}
                           </span>
                         </td>
@@ -447,7 +444,7 @@ export default function BlockLeaderboard() {
                       </span>
                     </div>
                     {/* Privacy: Only truncated address shown, no link to user page */}
-                    <span className={`font-mono text-xs block ${user.claimed ? 'text-green-500' : 'text-accent-2'}`}>
+                    <span className="font-mono text-xs text-accent-2 block">
                       {user.address}
                     </span>
                     <div className="mt-2 text-xs text-accent-3 font-mono">

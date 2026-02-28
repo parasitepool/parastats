@@ -51,7 +51,7 @@ export default function ShadowBlockCard({
             {formatDifficulty(highestDiff.difficulty)}
           </span>
           {/* Privacy: Only truncated address shown */}
-          <div className={`text-[10px] truncate max-w-full mt-0.5 ${highestDiff.claimed ? 'text-green-500' : 'text-foreground/50'}`}>
+          <div className="text-[10px] text-foreground/50 truncate max-w-full mt-0.5">
             {highestDiff.top_diff_address}
           </div>
         </div>
@@ -66,7 +66,7 @@ export default function ShadowBlockCard({
               {formatDifficulty(highestDiff.difficulty)}
             </div>
             {/* Privacy: Only truncated address shown, no title with full address */}
-            <div className={`text-xs truncate mt-0.5 ${highestDiff.claimed ? 'text-green-500' : 'text-foreground/60'}`}>
+            <div className="text-xs text-foreground/60 truncate mt-0.5">
               {highestDiff.top_diff_address}
             </div>
           </div>
