@@ -162,17 +162,12 @@ export async function getHistoricalUserStats(address: string, period: string = "
   }
 }
 
-export async function updateAccountMetadata(
-  btc_address: string,
-  metadata: Record<string, unknown>,
-  signature: string
-): Promise<unknown> {
+// Toggle user visibility API
+export async function toggleUserVisibility(address: string): Promise<{ isPublic: boolean }> {
   try {
     return await withRetry(async () => {
-      const response = await fetch('/api/account/metadata', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ btc_address, metadata, signature }),
+      const response = await fetch(`/api/user/${address}`, {
+        method: 'PATCH',
       });
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -180,7 +175,7 @@ export async function updateAccountMetadata(
       return await response.json();
     });
   } catch (error) {
-    console.error(`Error updating account metadata for ${btc_address}:`, error);
+    console.error(`Error toggling visibility for user ${address}:`, error);
     throw error;
   }
 }

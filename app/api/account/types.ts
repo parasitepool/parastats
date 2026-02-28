@@ -1,15 +1,8 @@
 export type AccountMetadata = {
   block_count?: number;
   highest_blockheight?: number;
-  is_private?: boolean;
   [key: string]: unknown;
 };
-
-export interface AccountMetadataUpdate {
-  btc_address: string;
-  metadata: Record<string, unknown>;
-  signature: string;
-}
 
 export interface AccountData {
   btc_address: string;
