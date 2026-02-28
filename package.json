@@ -26,6 +26,7 @@
     "react-dom": "19.2.4",
     "reflect-metadata": "0.2.2",
     "sharp": "0.34.5",
+    "typeorm": "0.3.28",
     "undici": "^7.22.0"
   },
   "devDependencies": {
