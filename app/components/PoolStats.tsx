@@ -139,7 +139,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
     },
     {
       title: "Last Block Found",
-      value: <a href={'https://mempool.space/block/00000000000000000001600d3ef5c3bc57c637662f242dbe5d517b2225a955db'}>{poolStats?.lastBlockTime}</a>,
+      value: <a href={'https://mempool.space/block/00000000000000000001600d3ef5c3bc57c637662f242dbe5d517b2225a955db'} target="_blank" rel="noopener noreferrer">{poolStats?.lastBlockTime}</a>,
       icon: <BookmarkIcon />,
     },
     {
