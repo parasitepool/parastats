@@ -11,7 +11,8 @@ const { difficulty, blocks } = bitcoin;
 
 export type PoolStats = {
   uptime: string;
-  lastBlockTime: string;
+  lastBlockTime: string | null;
+  lastBlockHash: string | null;
   highestDifficulty: string;
   hashrate: number;
   users: number;
