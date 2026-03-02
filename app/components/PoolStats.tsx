@@ -81,7 +81,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
 
   const statCards = [
     {
-      title: "Pool's Highest Diff",
+      title: "Highest Diff Since Last Block",
       value: poolStats?.highestDifficulty && hashrate?.currentDifficulty ? (
         <span className='flex gap-1'>
           {poolStats.highestDifficulty}
