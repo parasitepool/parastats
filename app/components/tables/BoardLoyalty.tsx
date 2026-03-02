@@ -60,7 +60,7 @@ export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
       key: 'address',
       header: 'Address',
       render: (value, item) => (
-        <span className={item.claimed ? 'text-green-500' : ''}>
+        <span>
           {formatAddress(value as string)}
         </span>
       )
