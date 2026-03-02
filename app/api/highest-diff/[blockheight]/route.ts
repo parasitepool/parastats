@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { formatAddress } from '@/app/utils/formatters';
 import { checkRateLimit, getRateLimitHeaders } from '@/app/api/lib/rate-limit';
 import { getClaimedAddresses } from '@/lib/dispenser-cache';
+import { getBadgeData } from '@/lib/badge-cache';
 import {
   MAX_BLOCK_HEIGHT,
   MAX_USERS_PER_BLOCK,
@@ -78,19 +79,21 @@ export async function GET(
     // The top diff is now the highest public user, not necessarily the original winner
     const topPublicUser = userDiffs.length > 0 ? userDiffs[0] : null;
     const claimedSet = getClaimedAddresses();
+    const badgeData = getBadgeData();
 
-    // Return only truncated addresses - never expose full addresses
     return NextResponse.json({
       block_height: blockData.block_height,
       block_timestamp: blockData.block_timestamp,
       top_diff: topPublicUser ? {
-        address: formatAddress(topPublicUser.address), // Truncated only
+        address: formatAddress(topPublicUser.address),
         claimed: claimedSet.has(topPublicUser.address),
+        badge_block: badgeData.contributors.has(topPublicUser.address) ? badgeData.blockHeight : null,
         difficulty: topPublicUser.difficulty,
       } : null,
       users: userDiffs.map(u => ({
-        address: formatAddress(u.address), // Truncated only
+        address: formatAddress(u.address),
         claimed: claimedSet.has(u.address),
+        badge_block: badgeData.contributors.has(u.address) ? badgeData.blockHeight : null,
         difficulty: u.difficulty,
       })),
       user_count: userDiffs.length,

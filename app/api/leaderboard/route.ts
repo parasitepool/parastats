@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { formatAddress } from '@/app/utils/formatters';
 import { getClaimedAddresses } from '@/lib/dispenser-cache';
+import { getBadgeData } from '@/lib/badge-cache';
 
 interface BaseUser {
   id: number;
@@ -32,6 +33,7 @@ export async function GET(request: Request) {
     
     const db = getDb();
     const claimedSet = getClaimedAddresses();
+    const badgeData = getBadgeData();
 
     let users;
 
@@ -46,11 +48,15 @@ export async function GET(request: Request) {
           WHERE is_active = 1 AND is_public = 1 AND bestever > 0
           ORDER BY bestever DESC
           LIMIT ?
-        `).all(limit).map((user: unknown) => ({
-          ...(user as DifficultyUser),
-          claimed: claimedSet.has((user as DifficultyUser).address),
-          address: formatAddress((user as DifficultyUser).address),
-        }));
+        `).all(limit).map((user: unknown) => {
+          const address = (user as DifficultyUser).address;
+          return {
+            ...(user as DifficultyUser),
+            claimed: claimedSet.has(address),
+            badge_block: badgeData.contributors.has(address) ? badgeData.blockHeight : null,
+            address: formatAddress(address),
+          };
+        });
         break;
 
       case 'loyalty':
@@ -63,11 +69,15 @@ export async function GET(request: Request) {
           WHERE is_active = 1 AND is_public = 1 AND total_blocks > 0
           ORDER BY total_blocks DESC
           LIMIT ?
-        `).all(limit).map((user: unknown) => ({
-          ...(user as LoyaltyUser),
-          claimed: claimedSet.has((user as LoyaltyUser).address),
-          address: formatAddress((user as LoyaltyUser).address),
-        }));
+        `).all(limit).map((user: unknown) => {
+          const address = (user as LoyaltyUser).address;
+          return {
+            ...(user as LoyaltyUser),
+            claimed: claimedSet.has(address),
+            badge_block: badgeData.contributors.has(address) ? badgeData.blockHeight : null,
+            address: formatAddress(address),
+          };
+        });
         break;
 
       case 'combined':
@@ -95,11 +105,15 @@ export async function GET(request: Request) {
           FROM RankedUsers
           ORDER BY combined_score ASC
           LIMIT ?
-        `).all(limit).map((user: unknown) => ({
-          ...(user as CombinedUser),
-          claimed: claimedSet.has((user as CombinedUser).address),
-          address: formatAddress((user as CombinedUser).address),
-        }));
+        `).all(limit).map((user: unknown) => {
+          const address = (user as CombinedUser).address;
+          return {
+            ...(user as CombinedUser),
+            claimed: claimedSet.has(address),
+            badge_block: badgeData.contributors.has(address) ? badgeData.blockHeight : null,
+            address: formatAddress(address),
+          };
+        });
         break;
     }
     

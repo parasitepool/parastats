@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { formatDifficulty, parseHashrate } from '@/app/utils/formatters';
 import { formatRelativeTime } from '@/app/utils/formatters';
 import { fetch } from '@/lib/http-client';
+import { getBadgeData } from '@/lib/badge-cache';
 
 export interface WorkerData {
   workername: string;
@@ -38,6 +39,7 @@ export interface ProcessedUserData {
   bestDifficulty: string;
   uptime: string;
   workerData: ProcessedWorkerData[];
+  badge_block: number | null;
 }
 
 export interface ProcessedWorkerData {
@@ -79,8 +81,8 @@ export async function GET(
     }
     
     const userData: UserData = await response.json();
+    const badgeData = getBadgeData();
 
-    // Process the user data
     const processedData: ProcessedUserData = {
       hashrate: parseHashrate(userData.hashrate5m),
       workers: userData.workers,
@@ -88,6 +90,7 @@ export async function GET(
       bestDifficulty: formatDifficulty(userData.bestever),
       uptime: calculateUptime(userData.authorised),
       workerData: processWorkerData(userData.worker),
+      badge_block: badgeData.contributors.has(address) ? badgeData.blockHeight : null,
     };
 
     return NextResponse.json(processedData);

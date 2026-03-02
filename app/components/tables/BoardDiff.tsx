@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { formatDifficulty, formatAddress } from '../../utils/formatters';
 import Board, { BoardColumn } from './Board';
+import BlockBadge from '../BlockBadge';
 import { InfoIcon } from '../icons';
 import DifficultyInfoModal from '../modals/DifficultyInfoModal';
 
@@ -10,6 +11,7 @@ interface User {
   id: number;
   address: string;
   claimed?: boolean;
+  badge_block: number | null;
   diff: number;
   authorised_at: number;
   rank?: number;
@@ -69,6 +71,7 @@ export default function BoardDiff({ initialData }: LeaderboardProps) {
       render: (value, item) => (
         <span>
           {formatAddress(value as string)}
+          <BlockBadge blockHeight={item.badge_block} />
         </span>
       )
     },

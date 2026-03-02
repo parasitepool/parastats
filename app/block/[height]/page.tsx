@@ -3,6 +3,7 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { formatDifficulty } from '@/app/utils/formatters';
+import BlockBadge from '@/app/components/BlockBadge';
 import * as echarts from 'echarts';
 
 // Constants
@@ -23,11 +24,13 @@ interface BlockData {
   top_diff: {
     address: string; // Truncated address only
     claimed?: boolean;
+    badge_block?: number | null;
     difficulty: number;
   };
   users: {
     address: string; // Truncated address only
     claimed?: boolean;
+    badge_block?: number | null;
     difficulty: number;
   }[];
   user_count: number;
@@ -405,9 +408,9 @@ export default function BlockLeaderboard() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          {/* Privacy: Only truncated address shown, no link to user page */}
                           <span className="font-mono text-sm">
                             {user.address}
+                            <BlockBadge blockHeight={user.badge_block ?? null} />
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -446,9 +449,9 @@ export default function BlockLeaderboard() {
                         {formatDifficulty(user.difficulty)}
                       </span>
                     </div>
-                    {/* Privacy: Only truncated address shown, no link to user page */}
                     <span className="font-mono text-xs block text-accent-2">
                       {user.address}
+                      <BlockBadge blockHeight={user.badge_block ?? null} />
                     </span>
                     <div className="mt-2 text-xs text-accent-3 font-mono">
                       {percentOfTop.toFixed(1)}% of top

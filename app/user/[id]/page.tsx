@@ -9,6 +9,7 @@ import { getUserData, getHistoricalUserStats, getHashrate, updateAccountMetadata
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
+import BlockBadge from '@/app/components/BlockBadge';
 import SortableTable from '../../components/SortableTable';
 import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/utils/formatters';
 import { parseHashrate } from '@/app/utils/formatters';
@@ -487,6 +488,7 @@ export default function UserDashboard() {
             <div className="flex items-center justify-between mb-4">
               <h1 className="text-2xl lg:text-3xl font-bold wrap-anywhere text-ellipsis line-clamp-1">
                 {userId}
+                <BlockBadge blockHeight={userData?.badge_block ?? null} />
                 {isPrivate && (
                     <span className="text-red-500 text-lg font-semibold"> - Private</span>
                 )}

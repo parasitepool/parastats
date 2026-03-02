@@ -196,6 +196,7 @@ export interface BlockTopDiff {
   block_height: number;
   top_diff_address: string; // Truncated address only
   claimed?: boolean;
+  badge_block?: number | null;
   difficulty: number;
   block_timestamp: number | null;
 }

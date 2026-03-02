@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import { formatAddress } from '../../utils/formatters';
 import Board, { BoardColumn } from './Board';
+import BlockBadge from '../BlockBadge';
 
 interface User {
   id: number;
   address: string;
   claimed?: boolean;
+  badge_block: number | null;
   diff: number;
   total_blocks: number;
   diff_rank: number;
@@ -66,6 +68,7 @@ export default function BoardCombined({ initialData }: BoardCombinedProps) {
       render: (value, item) => (
         <span>
           {formatAddress(value as string)}
+          <BlockBadge blockHeight={item.badge_block} />
         </span>
       )
     },

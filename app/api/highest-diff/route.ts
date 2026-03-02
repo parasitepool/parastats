@@ -4,6 +4,7 @@ import { formatAddress } from '@/app/utils/formatters';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { checkRateLimit, getRateLimitHeaders } from '@/app/api/lib/rate-limit';
 import { getClaimedAddresses } from '@/lib/dispenser-cache';
+import { getBadgeData } from '@/lib/badge-cache';
 import {
   MAX_LIMIT,
   BlockHighestDiffRow,
@@ -46,6 +47,7 @@ export async function GET(request: Request) {
 
     const db = getDb();
     const claimedSet = getClaimedAddresses();
+    const badgeData = getBadgeData();
 
     if (type === 'leaderboard') {
       // Get leaderboard of users by watermark count (how many times they had the top diff)
@@ -69,6 +71,7 @@ export async function GET(request: Request) {
         topUsers.map(u => ({
           address: formatAddress(u.address), // Truncated only
           claimed: claimedSet.has(u.address),
+          badge_block: badgeData.contributors.has(u.address) ? badgeData.blockHeight : null,
           watermark_count: u.watermark_count,
           total_diff: u.total_diff,
           avg_diff: u.avg_diff,
@@ -117,6 +120,7 @@ export async function GET(request: Request) {
           block_timestamp: d.block_timestamp,
           address: formatAddress(d.address), // Truncated only
           claimed: claimedSet.has(d.address),
+          badge_block: badgeData.contributors.has(d.address) ? badgeData.blockHeight : null,
         })),
         { headers: getRateLimitHeaders(rateLimitResult) }
       );
@@ -152,6 +156,7 @@ export async function GET(request: Request) {
           block_height: b.block_height,
           top_diff_address: formatAddress(b.top_diff_address), // Truncated only
           claimed: claimedSet.has(b.top_diff_address),
+          badge_block: badgeData.contributors.has(b.top_diff_address) ? badgeData.blockHeight : null,
           difficulty: b.difficulty,
           block_timestamp: b.block_timestamp,
         })),
@@ -186,6 +191,7 @@ export async function GET(request: Request) {
         block_height: block.block_height,
         top_diff_address: topUser ? formatAddress(topUser.address) : null,
         claimed: topUser ? claimedSet.has(topUser.address) : false,
+        badge_block: topUser && badgeData.contributors.has(topUser.address) ? badgeData.blockHeight : null,
         difficulty: topUser?.difficulty ?? null,
         block_timestamp: block.block_timestamp,
       };

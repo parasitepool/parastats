@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { formatDifficulty } from "../utils/formatters";
 import { type BlockTopDiff } from "../utils/api";
+import BlockBadge from "./BlockBadge";
 
 interface ShadowBlockCardProps {
   blockHeight: number;
@@ -50,9 +51,9 @@ export default function ShadowBlockCard({
           <span className="text-xs font-bold text-accent-1">
             {formatDifficulty(highestDiff.difficulty)}
           </span>
-          {/* Privacy: Only truncated address shown */}
           <div className={"text-[10px] truncate max-w-full mt-0.5 text-foreground/50"}>
             {highestDiff.top_diff_address}
+            <BlockBadge blockHeight={highestDiff.badge_block ?? null} />
           </div>
         </div>
       ) : (
@@ -65,9 +66,9 @@ export default function ShadowBlockCard({
             <div className="text-sm font-bold text-accent-1">
               {formatDifficulty(highestDiff.difficulty)}
             </div>
-            {/* Privacy: Only truncated address shown, no title with full address */}
             <div className={"text-xs truncate mt-0.5 text-foreground/60"}>
               {highestDiff.top_diff_address}
+              <BlockBadge blockHeight={highestDiff.badge_block ?? null} />
             </div>
           </div>
         </div>
