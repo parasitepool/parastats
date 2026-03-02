@@ -30,6 +30,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid btc_address" }, { status: 400 });
     }
 
+    const ALLOWED_METADATA_FIELDS: string[] = ['is_private'];
+    const invalidFields = Object.keys(metadata).filter(key => !ALLOWED_METADATA_FIELDS.includes(key));
+    if (invalidFields.length > 0) {
+      return NextResponse.json(
+        { error: `Invalid metadata fields: ${invalidFields.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
