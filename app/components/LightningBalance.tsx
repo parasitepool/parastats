@@ -225,8 +225,10 @@ export default function LightningBalance({
   const hasData = isLightningAuthenticated && (balance !== null || walletInfo !== null || accountData !== null);
 
   // Check if username matches lightning address
-  const usernameWithDomain = walletInfo?.username ? `${walletInfo.username}@sati.pro` : null;
-  const addressesMatch = usernameWithDomain && displayLnAddress && usernameWithDomain === displayLnAddress;
+  const username = walletInfo?.username || null;
+  const isSati = displayLnAddress?.toLowerCase().endsWith("sati.pro");
+  const lnUsername = displayLnAddress?.split('@')[0] || null;
+  const addressesMatch = username && lnUsername && isSati && username === lnUsername;
 
   // If compact mode, show the old compact view
   if (compact) {
