@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import type { AccountMetadataUpdate } from '@/app/api/account/types';
+import { getDb } from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -63,6 +64,16 @@ export async function POST(request: Request) {
     }
 
     const accountData = await response.json();
+
+    if ('is_private' in metadata) {
+      try {
+        const db = getDb();
+        db.prepare('UPDATE monitored_users SET is_public = ? WHERE address = ?')
+          .run(metadata.is_private ? 0 : 1, btc_address);
+      } catch (dbError) {
+        console.error('Failed to sync is_public to local DB:', dbError);
+      }
+    }
 
     return NextResponse.json(accountData);
   } catch (error) {
