@@ -33,7 +33,7 @@ export async function GET() {
 
     const poolStats: PoolStats = {
       uptime: formatUptime(uptimeSeconds),
-      lastBlockTime: "N/A", // Not sure if this will be available
+      lastBlockTime: "938713", // Not sure if this will be available
       highestDifficulty: formatDifficulty(diffData.bestshare),
       hashrate: parseHashrate(hashrateData.hashrate15m),
       users: statsData.Users,
