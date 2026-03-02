@@ -31,9 +31,25 @@ export async function GET() {
     const currentTime = new Date();
     const uptimeSeconds = Math.floor((currentTime.getTime() - startTime.getTime()) / 1000);
 
+    let lastBlockTime: string | null = null;
+    let lastBlockHash: string | null = null;
+    try {
+      const blocksRes = await fetch('https://mempool.space/api/v1/mining/pool/parasite/blocks');
+      if (blocksRes.ok) {
+        const blocks = await blocksRes.json();
+        if (blocks.length > 0) {
+          lastBlockTime = String(blocks[0].height);
+          lastBlockHash = blocks[0].id;
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching last block from mempool.space:", e);
+    }
+
     const poolStats: PoolStats = {
       uptime: formatUptime(uptimeSeconds),
-      lastBlockTime: "938713", // Not sure if this will be available
+      lastBlockTime,
+      lastBlockHash,
       highestDifficulty: formatDifficulty(diffData.bestshare),
       hashrate: parseHashrate(hashrateData.hashrate15m),
       users: statsData.Users,
