@@ -9,7 +9,7 @@ interface User {
   id: number;
   address: string;
   claimed?: boolean;
-  badge_block: number | null;
+  badge_block?: number | null;
   diff: number;
   total_blocks: number;
   diff_rank: number;
@@ -68,7 +68,7 @@ export default function BoardCombined({ initialData }: BoardCombinedProps) {
       render: (value, item) => (
         <span>
           {formatAddress(value as string)}
-          <BlockBadge blockHeight={item.badge_block} />
+          <BlockBadge blockHeight={item.badge_block ?? null} />
         </span>
       )
     },

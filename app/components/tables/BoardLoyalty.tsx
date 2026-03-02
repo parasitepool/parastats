@@ -9,7 +9,7 @@ interface User {
   id: number;
   address: string;
   claimed?: boolean;
-  badge_block: number | null;
+  badge_block?: number | null;
   total_blocks: number;
   rank?: number;
 }
@@ -64,7 +64,7 @@ export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
       render: (value, item) => (
         <span>
           {formatAddress(value as string)}
-          <BlockBadge blockHeight={item.badge_block} />
+          <BlockBadge blockHeight={item.badge_block ?? null} />
         </span>
       )
     },

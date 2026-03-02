@@ -81,17 +81,18 @@ export async function GET(
     const claimedSet = getClaimedAddresses();
     const badgeData = getBadgeData();
 
+    // Privacy: Only truncated addresses returned — never expose full addresses
     return NextResponse.json({
       block_height: blockData.block_height,
       block_timestamp: blockData.block_timestamp,
       top_diff: topPublicUser ? {
-        address: formatAddress(topPublicUser.address),
+        address: formatAddress(topPublicUser.address), // Truncated only
         claimed: claimedSet.has(topPublicUser.address),
         badge_block: badgeData.contributors.has(topPublicUser.address) ? badgeData.blockHeight : null,
         difficulty: topPublicUser.difficulty,
       } : null,
       users: userDiffs.map(u => ({
-        address: formatAddress(u.address),
+        address: formatAddress(u.address), // Truncated only
         claimed: claimedSet.has(u.address),
         badge_block: badgeData.contributors.has(u.address) ? badgeData.blockHeight : null,
         difficulty: u.difficulty,

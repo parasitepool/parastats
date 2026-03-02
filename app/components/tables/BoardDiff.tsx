@@ -11,7 +11,7 @@ interface User {
   id: number;
   address: string;
   claimed?: boolean;
-  badge_block: number | null;
+  badge_block?: number | null;
   diff: number;
   authorised_at: number;
   rank?: number;
@@ -71,7 +71,7 @@ export default function BoardDiff({ initialData }: LeaderboardProps) {
       render: (value, item) => (
         <span>
           {formatAddress(value as string)}
-          <BlockBadge blockHeight={item.badge_block} />
+          <BlockBadge blockHeight={item.badge_block ?? null} />
         </span>
       )
     },
