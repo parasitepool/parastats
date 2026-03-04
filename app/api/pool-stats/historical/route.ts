@@ -191,25 +191,27 @@ export async function GET(request: Request) {
     // Query for each interval and aggregate
     const results: HistoricalPoolStats[] = [];
     
+    const stmt = db.prepare(`
+      SELECT
+        users,
+        workers,
+        idle,
+        disconnected,
+        hashrate15m,
+        hashrate1hr,
+        hashrate6hr,
+        hashrate1d,
+        hashrate7d,
+        timestamp
+      FROM pool_stats
+      WHERE timestamp >= ? AND timestamp <= ?
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `);
+
     for (const { start, end } of intervals) {
       const clampedEnd = Math.min(end, now);
-      const row = db.prepare(`
-        SELECT
-          users,
-          workers,
-          idle,
-          disconnected,
-          hashrate15m,
-          hashrate1hr,
-          hashrate6hr,
-          hashrate1d,
-          hashrate7d,
-          timestamp
-        FROM pool_stats
-        WHERE timestamp >= ? AND timestamp <= ?
-        ORDER BY timestamp DESC
-        LIMIT 1
-      `).get(start, clampedEnd) as HistoricalPoolStats | undefined;
+      const row = stmt.get(start, clampedEnd) as HistoricalPoolStats | undefined;
 
       if (row) {
         if (row.users > 0 || row.workers > 0 || parseHashrate(row.hashrate15m) > 0 || parseHashrate(row.hashrate1d) > 0) {
