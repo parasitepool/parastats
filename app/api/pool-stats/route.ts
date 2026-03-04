@@ -51,7 +51,7 @@ export async function GET() {
       lastBlockTime,
       lastBlockHash,
       highestDifficulty: formatDifficulty(diffData.bestshare),
-      hashrate: parseHashrate(hashrateData.hashrate15m),
+      hashrate: parseHashrate(hashrateData.hashrate5m),
       users: statsData.Users,
       workers: statsData.Workers
     };

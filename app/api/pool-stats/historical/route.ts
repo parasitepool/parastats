@@ -98,7 +98,7 @@ export async function GET(request: Request) {
         cacheDuration = 900; // 15 minutes
         break;
       case '30m':
-        cacheDuration = 1800; // 30 minutes
+        cacheDuration = 300; // 5 minutes
         break;
       case '1h':
         cacheDuration = 3600; // 1 hour
@@ -192,11 +192,12 @@ export async function GET(request: Request) {
     const results: HistoricalPoolStats[] = [];
     
     for (const { start, end } of intervals) {
+      const clampedEnd = Math.min(end, now);
       const rows = db.prepare(`
-        SELECT 
-          AVG(users) as users, 
-          AVG(workers) as workers, 
-          AVG(idle) as idle, 
+        SELECT
+          AVG(users) as users,
+          AVG(workers) as workers,
+          AVG(idle) as idle,
           AVG(disconnected) as disconnected,
           hashrate15m,
           hashrate1hr,
@@ -204,18 +205,17 @@ export async function GET(request: Request) {
           hashrate1d,
           hashrate7d,
           timestamp
-        FROM pool_stats 
-        WHERE timestamp >= ? AND timestamp < ?
+        FROM pool_stats
+        WHERE timestamp >= ? AND timestamp <= ?
         ORDER BY timestamp DESC
         LIMIT 1
-      `).all(start, end) as HistoricalPoolStats[];
-      
+      `).all(start, clampedEnd) as HistoricalPoolStats[];
+
       if (rows.length > 0) {
         const row = rows[0];
-        // Only include intervals that have real data (non-zero values)
         if (row.users > 0 || row.workers > 0 || parseHashrate(row.hashrate15m) > 0 || parseHashrate(row.hashrate1d) > 0) {
           results.push({
-            timestamp: start,
+            timestamp: row.timestamp,
             users: Math.round(row.users),
             workers: Math.round(row.workers),
             idle: Math.round(row.idle),
