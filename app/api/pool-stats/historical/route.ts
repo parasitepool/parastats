@@ -98,7 +98,7 @@ export async function GET(request: Request) {
         cacheDuration = 900; // 15 minutes
         break;
       case '30m':
-        cacheDuration = 1800; // 30 minutes
+        cacheDuration = 300; // 5 minutes
         break;
       case '1h':
         cacheDuration = 3600; // 1 hour
@@ -191,35 +191,36 @@ export async function GET(request: Request) {
     // Query for each interval and aggregate
     const results: HistoricalPoolStats[] = [];
     
+    const stmt = db.prepare(`
+      SELECT
+        users,
+        workers,
+        idle,
+        disconnected,
+        hashrate15m,
+        hashrate1hr,
+        hashrate6hr,
+        hashrate1d,
+        hashrate7d,
+        timestamp
+      FROM pool_stats
+      WHERE timestamp >= ? AND timestamp <= ?
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `);
+
     for (const { start, end } of intervals) {
-      const rows = db.prepare(`
-        SELECT 
-          AVG(users) as users, 
-          AVG(workers) as workers, 
-          AVG(idle) as idle, 
-          AVG(disconnected) as disconnected,
-          hashrate15m,
-          hashrate1hr,
-          hashrate6hr,
-          hashrate1d,
-          hashrate7d,
-          timestamp
-        FROM pool_stats 
-        WHERE timestamp >= ? AND timestamp < ?
-        ORDER BY timestamp DESC
-        LIMIT 1
-      `).all(start, end) as HistoricalPoolStats[];
-      
-      if (rows.length > 0) {
-        const row = rows[0];
-        // Only include intervals that have real data (non-zero values)
+      const clampedEnd = Math.min(end, now);
+      const row = stmt.get(start, clampedEnd) as HistoricalPoolStats | undefined;
+
+      if (row) {
         if (row.users > 0 || row.workers > 0 || parseHashrate(row.hashrate15m) > 0 || parseHashrate(row.hashrate1d) > 0) {
           results.push({
-            timestamp: start,
-            users: Math.round(row.users),
-            workers: Math.round(row.workers),
-            idle: Math.round(row.idle),
-            disconnected: Math.round(row.disconnected),
+            timestamp: row.timestamp,
+            users: row.users,
+            workers: row.workers,
+            idle: row.idle,
+            disconnected: row.disconnected,
             hashrate15m: parseHashrate(row.hashrate15m),
             hashrate1hr: parseHashrate(row.hashrate1hr),
             hashrate6hr: parseHashrate(row.hashrate6hr),
