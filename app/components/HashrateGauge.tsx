@@ -37,7 +37,7 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
             type: 'gauge',
             center: ['50%', '58%'],
             min: 0,
-            max: 699,
+            max: 1699,
             splitNumber: 10,
             radius: '100%',
             axisLine: {
@@ -78,15 +78,17 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
               distance: 40,
               fontSize: 12,
               formatter: function(value: number) {
-                return value.toFixed(0);
+                return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
               }
             },
             detail: {
               valueAnimation: true,
-              formatter: '{value} PH/s',
+              formatter: function(value: number) {
+                return value.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' PH/s';
+              },
               color: foregroundColor,
               fontSize: 24,
-              offsetCenter: [0, '60%']
+              offsetCenter: [0, '70%']
             },
             title: {
               offsetCenter: [0, '20%'],
@@ -96,7 +98,7 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
             },
             data: [
               {
-                value: totalHashrate > 999 ? totalHashrate?.toFixed(0) : totalHashrate,
+                value: totalHashrate,
               }
             ]
           }
