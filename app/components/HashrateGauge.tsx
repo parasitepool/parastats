@@ -96,7 +96,7 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
             },
             data: [
               {
-                value: totalHashrate,
+                value: totalHashrate > 999 ? totalHashrate?.toFixed(0) : totalHashrate,
               }
             ]
           }
