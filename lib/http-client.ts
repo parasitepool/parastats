@@ -189,7 +189,7 @@ function recreateAgent(): Dispatcher {
  *   headers: { 'Authorization': 'Bearer token' }
  * });
  */
-export type ExtendedRequestInit = RequestInit & { 
+export type ExtendedRequestInit = RequestInit & {
   /** Request timeout in milliseconds. Set to 0 to disable. Default: CONFIG.REQUEST_TIMEOUT */
   timeout?: number;
   /** If true, throws TimeoutError on timeout instead of generic AbortError */

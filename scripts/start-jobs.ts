@@ -7,6 +7,7 @@ import {
 } from "../lib/pool-stats-collector";
 import { startStratumCollector, stopStratumCollector } from "../lib/stratum-collector";
 import { startHighestDiffCollector, stopHighestDiffCollector } from "../lib/highest-diff-collector";
+import { startRoundsCollector, stopRoundsCollector } from "../lib/rounds-collector";
 import { closeDb } from "../lib/db";
 import cron from "node-cron";
 
@@ -32,6 +33,10 @@ console.log("⚡ Stratum collector started");
 // Start highest diff collector (backfills on startup, periodic collection every 10 min)
 let highestDiffCollectorJob = startHighestDiffCollector();
 console.log("🏆 Highest diff collector started");
+
+// Start rounds collector (syncs rounds, polls current round every 10 min)
+startRoundsCollector();
+console.log("🔄 Rounds collector started");
 
 // Set up a job to purge old data daily at midnight
 let purgeJob = cron.schedule("0 0 * * *", () => {
@@ -69,6 +74,9 @@ function shutdown() {
     stopHighestDiffCollector();
     console.log("🏆 Highest diff collector stopped");
   }
+
+  // Stop rounds collector
+  stopRoundsCollector();
 
   // Close database connection
   closeDb();

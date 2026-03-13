@@ -3,6 +3,8 @@
 import { ReactNode, useRef, useState, useEffect } from 'react';
 import { ChevronUpIcon, ChevronDownIcon } from '../icons';
 
+export type RoundMode = 'round' | 'alltime';
+
 export interface BoardColumn<T> {
   key: keyof T;
   header: string;
@@ -19,6 +21,10 @@ interface BoardProps<T> {
     options: string[];
     onChange: (range: string) => void;
   };
+  roundToggle?: {
+    current: RoundMode;
+    onChange: (mode: RoundMode) => void;
+  };
   isLoading?: boolean;
 }
 
@@ -27,6 +33,7 @@ export default function Board<T extends { id: number; rank?: number }>({
   data,
   columns,
   timeRange,
+  roundToggle,
   isLoading
 }: BoardProps<T>) {
   const tableRef = useRef<HTMLDivElement>(null);
@@ -60,8 +67,32 @@ export default function Board<T extends { id: number; rank?: number }>({
 
   return (
     <div className="bg-background p-6 shadow-md border border-border">
-      <div className="flex flex-col md:flex-row justify-between items-center mb-4">
-        <h2 className="text-2xl font-semibold">{title}</h2>
+      <div className="flex justify-between items-center mb-4 gap-4">
+        <h2 className="text-2xl font-semibold whitespace-nowrap">{title}</h2>
+        {roundToggle && (
+          <div className="flex space-x-2">
+            <button
+              onClick={() => roundToggle.onChange('round')}
+              className={`px-3 py-1 transition-colors cursor-pointer ${
+                roundToggle.current === 'round'
+                  ? 'bg-foreground text-background'
+                  : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
+              }`}
+            >
+              This Round
+            </button>
+            <button
+              onClick={() => roundToggle.onChange('alltime')}
+              className={`px-3 py-1 transition-colors cursor-pointer ${
+                roundToggle.current === 'alltime'
+                  ? 'bg-foreground text-background'
+                  : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
+              }`}
+            >
+              All-Time
+            </button>
+          </div>
+        )}
         {timeRange && (
           <div className="flex space-x-2">
             {timeRange.options.map((option) => (
@@ -69,8 +100,8 @@ export default function Board<T extends { id: number; rank?: number }>({
                 key={option}
                 onClick={() => timeRange.onChange(option)}
                 className={`px-3 py-1 transition-colors cursor-pointer ${
-                  timeRange.current === option 
-                    ? 'bg-foreground text-background' 
+                  timeRange.current === option
+                    ? 'bg-foreground text-background'
                     : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
                 }`}
               >

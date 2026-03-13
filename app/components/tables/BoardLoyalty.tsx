@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { formatAddress } from '../../utils/formatters';
 import Board, { BoardColumn } from './Board';
+import { useRoundLeaderboard } from './useRoundLeaderboard';
 
 interface User {
   id: number;
@@ -17,49 +17,13 @@ interface LoyaltyBoardProps {
 }
 
 export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
-  const [data, setData] = useState<User[]>(initialData || []);
-  const [isLoading, setIsLoading] = useState(!initialData);
-
-  useEffect(() => {
-    if (!initialData) {
-      fetchData();
-    }
-    
-    // Set up auto-refresh every 60 seconds
-    const refreshInterval = setInterval(() => {
-      fetchData();
-    }, 60000);
-    
-    // Clean up interval on component unmount
-    return () => clearInterval(refreshInterval);
-  }, [initialData]);
-
-  const fetchData = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch('/api/leaderboard?type=loyalty&limit=99');
-      if (!response.ok) {
-        throw new Error('Failed to fetch data');
-      }
-      const users = await response.json();
-      // Add rank to each user
-      const rankedUsers = users.map((user: User, index: number) => ({
-        ...user,
-        rank: index + 1
-      }));
-      setData(rankedUsers);
-    } catch (error) {
-      console.error('Error fetching loyalty data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { data, isLoading, roundMode, setRoundMode } = useRoundLeaderboard<User>('loyalty', 99, initialData);
 
   const columns: BoardColumn<User>[] = [
     {
       key: 'address',
       header: 'Address',
-      render: (value, item) => (
+      render: (value) => (
         <span>
           {formatAddress(value as string)}
         </span>
@@ -67,7 +31,7 @@ export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
     },
     {
       key: 'total_blocks',
-      header: 'Blocks',
+      header: roundMode === 'round' ? 'Blocks Participated' : 'Blocks',
       align: 'right',
       render: (value) => (value as number).toLocaleString()
     }
@@ -79,6 +43,10 @@ export default function BoardLoyalty({ initialData }: LoyaltyBoardProps) {
       data={data}
       columns={columns}
       isLoading={isLoading}
+      roundToggle={{
+        current: roundMode,
+        onChange: setRoundMode
+      }}
     />
   );
 }

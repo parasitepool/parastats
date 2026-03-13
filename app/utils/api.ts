@@ -228,6 +228,25 @@ export interface UserBlockDiffEntry {
   address: string; // Truncated address only
 }
 
+// User rounds API
+export type { UserRoundsResponse, UserRoundHistoryEntry } from '../api/user/[address]/rounds/route';
+import type { UserRoundsResponse } from '../api/user/[address]/rounds/route';
+
+export async function getUserRounds(address: string, limit: number = 20): Promise<UserRoundsResponse> {
+  try {
+    return await withRetry(async () => {
+      const response = await fetch(`/api/user/${address}/rounds?limit=${limit}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    });
+  } catch (error) {
+    console.error(`Error fetching rounds for user ${address}:`, error);
+    throw error;
+  }
+}
+
 export async function getUserBlockDiffs(address: string, limit: number = 50): Promise<UserBlockDiffEntry[]> {
   try {
     return await withRetry(async () => {

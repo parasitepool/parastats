@@ -15,6 +15,7 @@ interface SortableTableProps<T> {
   defaultSortColumn?: keyof T;
   defaultSortDirection?: 'asc' | 'desc';
   onRowClick?: (item: T) => void;
+  rowClassName?: (item: T) => string;
   className?: string;
 }
 
@@ -24,6 +25,7 @@ export default function SortableTable<T>({
   defaultSortColumn,
   defaultSortDirection = 'asc',
   onRowClick,
+  rowClassName,
   className = ''
 }: SortableTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<keyof T | undefined>(defaultSortColumn);
@@ -80,7 +82,7 @@ export default function SortableTable<T>({
           {sortedData.map((item, index) => (
             <tr
               key={index}
-              className={`hover:bg-foreground/5 ${onRowClick ? 'cursor-pointer' : ''}`}
+              className={`hover:bg-foreground/5 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName ? rowClassName(item) : ''}`}
               onClick={() => onRowClick?.(item)}
             >
               {columns.map((column) => (

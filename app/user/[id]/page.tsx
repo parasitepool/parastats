@@ -2,10 +2,10 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate, updateAccountMetadata, getUserBlockDiffs, type UserBlockDiffEntry } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, updateAccountMetadata, getUserBlockDiffs, getUserRounds, type UserBlockDiffEntry, type UserRoundsResponse } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -19,6 +19,8 @@ import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
 // import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
+
+const CURRENT_ROUND_BLOCK = Number.MAX_SAFE_INTEGER;
 
 export default function UserDashboard() {
   const params = useParams();
@@ -36,6 +38,7 @@ export default function UserDashboard() {
   const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [userBlockDiffs, setUserBlockDiffs] = useState<UserBlockDiffEntry[]>([]);
+  const [roundsData, setRoundsData] = useState<UserRoundsResponse | null>(null);
 
   const {
     address,
@@ -236,6 +239,43 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
+  // Fetch user rounds data on mount and every 60 seconds
+  useEffect(() => {
+    if (!isValidAddress) return;
+
+    let mounted = true;
+
+    const fetchRounds = async () => {
+      try {
+        const data = await getUserRounds(userId);
+        if (mounted) setRoundsData(data);
+      } catch (err) {
+        console.error('Error fetching rounds data:', err);
+      }
+    };
+
+    fetchRounds();
+    const intervalId = setInterval(fetchRounds, 60000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, [userId, isValidAddress]);
+
+  const allRounds = useMemo(() => [
+    ...(roundsData?.current_round ? [{
+      block_height: CURRENT_ROUND_BLOCK,
+      rank: roundsData.current_round.rank,
+      blocks_rank: roundsData.current_round.blocks_rank,
+      total_participants: roundsData.current_round.total_participants,
+      top_diff: roundsData.current_round.top_diff,
+      blocks_participated: roundsData.current_round.blocks_participated,
+      is_winner: false,
+    }] : []),
+    ...(roundsData?.history ?? []),
+  ], [roundsData]);
+
   const isPrivate = accountData?.metadata?.is_private ?? false;
   const isOwnProfile = isConnected && address === userId;
 
@@ -433,15 +473,6 @@ export default function UserDashboard() {
           </svg>
       )
     },
-    {
-      title: 'Uptime',
-      value: userData?.uptime || <span className="text-gray-400">-</span>,
-      icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-          </svg>
-      )
-    }
   ];
 
   // Show error for invalid Bitcoin address
@@ -526,7 +557,7 @@ export default function UserDashboard() {
 
             {/* Stats Cards */}
             <div className="w-full">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 lg:gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
                 {statCards.map((card, index) => (
                     <div key={index}>
                       <div className="bg-background p-4 shadow-md border border-border h-full">
@@ -631,6 +662,102 @@ export default function UserDashboard() {
                 loading={!historicalData}
             />
           </div>
+
+          {/* Round Stats Section */}
+          {(!hasInitiallyLoaded || allRounds.length > 0) && (
+              <div className="w-full mb-6">
+                <h2 className="text-xl font-semibold mb-4">Round Stats</h2>
+
+                {/* Desktop Table */}
+                <div className="hidden md:block">
+                  <SortableTable
+                      data={allRounds}
+                      columns={[
+                        {
+                          key: 'block_height',
+                          header: 'Block',
+                          render: (value) =>
+                              value === CURRENT_ROUND_BLOCK ? (
+                                  <span className="text-accent-3 font-bold">Current</span>
+                              ) : (
+                                  <a
+                                      href={`https://mempool.space/block/${value}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-accent-3 hover:underline"
+                                  >
+                                    {String(value)}
+                                  </a>
+                              ),
+                        },
+                        {
+                          key: 'rank',
+                          header: 'Diff Rank',
+                          render: (_, item) => `${item.rank} / ${item.total_participants}`,
+                        },
+                        {
+                          key: 'top_diff',
+                          header: 'Top Diff',
+                          render: (value) => formatDifficulty(value as number),
+                        },
+                        {
+                          key: 'blocks_rank',
+                          header: 'Blocks Rank',
+                          render: (_, item) => `${item.blocks_rank} / ${item.total_participants}`,
+                        },
+                        {
+                          key: 'blocks_participated',
+                          header: 'Blocks',
+                          render: (value) => Number(value).toLocaleString(),
+                        },
+                      ]}
+                      rowClassName={(item) => item.is_winner ? 'bg-green-500/10 font-bold' : ''}
+                      defaultSortColumn="block_height"
+                      defaultSortDirection="desc"
+                  />
+                </div>
+
+                {/* Mobile Cards */}
+                <div className="md:hidden space-y-4">
+                  {allRounds.map((round) => (
+                      <div key={round.block_height} className={`bg-background border p-4 shadow-sm ${round.is_winner ? 'border-green-500/40 bg-green-500/10 font-bold' : 'border-border'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          {round.block_height === CURRENT_ROUND_BLOCK ? (
+                              <span className="text-accent-3 font-bold text-lg">Current Round</span>
+                          ) : (
+                              <a
+                                  href={`https://mempool.space/block/${round.block_height}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-accent-3 font-bold text-lg hover:underline"
+                              >
+                                Block {round.block_height}
+                              </a>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <p className="text-foreground/60">Diff Rank</p>
+                            <p className="font-medium">{round.rank} / {round.total_participants}</p>
+                          </div>
+                          <div>
+                            <p className="text-foreground/60">Top Diff</p>
+                            <p className="font-medium">{formatDifficulty(round.top_diff)}</p>
+                          </div>
+                          <div>
+                            <p className="text-foreground/60">Blocks Rank</p>
+                            <p className="font-medium">{round.blocks_rank} / {round.total_participants}</p>
+                          </div>
+                          <div>
+                            <p className="text-foreground/60">Blocks</p>
+                            <p className="font-medium">{round.blocks_participated.toLocaleString()}</p>
+                          </div>
+                        </div>
+                      </div>
+                  ))}
+                </div>
+              </div>
+          )}
 
           {/* Mining Projections - Uncomment when UserMiningStats is implemented */}
           {/* <UserMiningStats

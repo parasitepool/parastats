@@ -1,6 +1,7 @@
 import net from 'net';
 import { getDb } from './db';
 import { triggerDelayedCollection, getCurrentBlockHeight } from './highest-diff-collector';
+import { triggerRoundsSync } from './rounds-collector';
 
 interface StratumMessage {
   id?: number;
@@ -215,6 +216,9 @@ class StratumCollector {
         // Trigger highest diff collection for the previous block
         // The new block means the previous block is now complete
         this.triggerHighestDiffCollection();
+
+        // Trigger rounds re-sync in case a new round was found
+        triggerRoundsSync();
       }
 
     } catch (error) {

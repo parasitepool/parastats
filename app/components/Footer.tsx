@@ -3,6 +3,7 @@
 import React, { Suspense, useEffect, useState } from "react";
 import { Terminal } from "./eastereggs/Terminal";
 import HelpModal from "./modals/HelpModal";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const FooterWithSearchParams = () => {
@@ -33,6 +34,11 @@ const FooterWithSearchParams = () => {
                     <a href={"https://github.com/parasitepool/para"}>
                         <span className="cursor-pointer">Github</span>
                     </a>
+                </div>
+                <div className="flex-1 text-center italic break-all">
+                    <Link href="/rounds">
+                        <span className="cursor-pointer">Rounds</span>
+                    </Link>
                 </div>
                 <div className="flex-1 text-center italic break-all">
           <span className="cursor-pointer" onClick={() => setShowHelpModal(true)}>
@@ -67,6 +73,11 @@ const FooterFallback = () => (
             <a href={"https://github.com/parasitepool/para"}>
                 <span className="cursor-pointer">Github</span>
             </a>
+        </div>
+        <div className="flex-1 text-center italic break-all">
+            <Link href="/rounds">
+                <span className="cursor-pointer">Rounds</span>
+            </Link>
         </div>
         <div className="flex-1 text-center italic break-all">
             <span className="cursor-pointer">Help</span>
