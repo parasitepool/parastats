@@ -28,8 +28,8 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'combined';
-    const limit = parseInt(searchParams.get('limit') || '9', 10);
-    
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '9', 10) || 9, 1), 999);
+
     const db = getDb();
     const claimedSet = getClaimedAddresses();
 
@@ -102,9 +102,9 @@ export async function GET(request: Request) {
         }));
         break;
     }
-    
+
     return NextResponse.json(users);
-    
+
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     return NextResponse.json(
