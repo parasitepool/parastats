@@ -55,11 +55,7 @@ export async function GET() {
       workers: statsData.Workers
     };
     
-    return NextResponse.json(poolStats, {
-      headers: {
-        'Cache-Control': 's-maxage=10, stale-while-revalidate=20',
-      },
-    });
+    return NextResponse.json(poolStats);
   } catch (error) {
     console.error("Error fetching pool stats:", error);
     return NextResponse.json({ error: "Failed to fetch pool stats" }, { status: 500 });

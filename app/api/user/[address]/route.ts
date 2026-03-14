@@ -89,11 +89,7 @@ export async function GET(
       workerData: processWorkerData(userData.worker),
     };
 
-    return NextResponse.json(processedData, {
-      headers: {
-        'Cache-Control': 's-maxage=10, stale-while-revalidate=20',
-      },
-    });
+    return NextResponse.json(processedData);
   } catch (error) {
     console.error("Error fetching user data:", error);
     return NextResponse.json(
