@@ -68,7 +68,6 @@ export async function GET(
 
     const response = await fetch(`${apiUrl}/aggregator/users/${address}`, {
       headers,
-      next: { revalidate: 10 } // Cache for 10 seconds
     });
     
     if (!response.ok) {
@@ -90,7 +89,11 @@ export async function GET(
       workerData: processWorkerData(userData.worker),
     };
 
-    return NextResponse.json(processedData);
+    return NextResponse.json(processedData, {
+      headers: {
+        'Cache-Control': 's-maxage=10, stale-while-revalidate=20',
+      },
+    });
   } catch (error) {
     console.error("Error fetching user data:", error);
     return NextResponse.json(

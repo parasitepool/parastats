@@ -17,7 +17,6 @@ export async function GET() {
     }
     const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
       headers,
-      next: { revalidate: 10 } // Cache for 10 seconds
     });
     const text = await response.text();
     
@@ -56,7 +55,11 @@ export async function GET() {
       workers: statsData.Workers
     };
     
-    return NextResponse.json(poolStats);
+    return NextResponse.json(poolStats, {
+      headers: {
+        'Cache-Control': 's-maxage=10, stale-while-revalidate=20',
+      },
+    });
   } catch (error) {
     console.error("Error fetching pool stats:", error);
     return NextResponse.json({ error: "Failed to fetch pool stats" }, { status: 500 });
