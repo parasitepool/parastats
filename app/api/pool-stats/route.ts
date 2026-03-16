@@ -17,7 +17,6 @@ export async function GET() {
     }
     const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
       headers,
-      next: { revalidate: 10 } // Cache for 10 seconds
     });
     const text = await response.text();
     
