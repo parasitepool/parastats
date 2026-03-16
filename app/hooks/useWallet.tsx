@@ -44,30 +44,35 @@ const walletStorage = {
 };
 
 const lightningStorage = {
-  load: (): { token: string; timestamp: number } | null => {
-    const token = localStorage.getItem(LIGHTNING_TOKEN_KEY);
-    const timestamp = localStorage.getItem(LIGHTNING_TOKEN_TIMESTAMP_KEY);
-    
+  load: (address: string): { token: string; timestamp: number } | null => {
+    const token = localStorage.getItem(`${LIGHTNING_TOKEN_KEY}_${address}`);
+    const timestamp = localStorage.getItem(`${LIGHTNING_TOKEN_TIMESTAMP_KEY}_${address}`);
+
     if (!token || !timestamp) return null;
-    
+
     const now = Date.now();
     const tokenAge = now - parseInt(timestamp);
     const validityMs = TOKEN_VALIDITY_HOURS * 60 * 60 * 1000;
-    
+
     if (tokenAge < validityMs) {
       return { token, timestamp: parseInt(timestamp) };
     }
-    
-    lightningStorage.clear();
+
+    lightningStorage.clear(address);
     return null;
   },
-  
-  save: (token: string) => {
-    localStorage.setItem(LIGHTNING_TOKEN_KEY, token);
-    localStorage.setItem(LIGHTNING_TOKEN_TIMESTAMP_KEY, Date.now().toString());
+
+  save: (token: string, address: string) => {
+    localStorage.setItem(`${LIGHTNING_TOKEN_KEY}_${address}`, token);
+    localStorage.setItem(`${LIGHTNING_TOKEN_TIMESTAMP_KEY}_${address}`, Date.now().toString());
   },
-  
-  clear: () => {
+
+  clear: (address?: string) => {
+    if (address) {
+      localStorage.removeItem(`${LIGHTNING_TOKEN_KEY}_${address}`);
+      localStorage.removeItem(`${LIGHTNING_TOKEN_TIMESTAMP_KEY}_${address}`);
+    }
+    // Clean up legacy un-scoped keys
     localStorage.removeItem(LIGHTNING_TOKEN_KEY);
     localStorage.removeItem(LIGHTNING_TOKEN_TIMESTAMP_KEY);
   }
@@ -88,12 +93,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setAddress(savedAddress);
       setAddressPublicKey(savedPublicKey);
       setIsConnected(true);
-    }
 
-    const savedLightning = lightningStorage.load();
-    if (savedLightning) {
-      setLightningToken(savedLightning.token);
-      setIsLightningAuthenticated(true);
+      const savedLightning = lightningStorage.load(savedAddress);
+      if (savedLightning) {
+        setLightningToken(savedLightning.token);
+        setIsLightningAuthenticated(true);
+      }
     }
 
     setIsInitialized(true);
@@ -200,10 +205,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     
     const token = await loginWithSignature(userAddress, publicKey, signature, nonce);
     
-    lightningStorage.save(token);
+    lightningStorage.save(token, userAddress);
     setLightningToken(token);
     setIsLightningAuthenticated(true);
-    
+
     return token;
   }, [requestNonce, signNonce, loginWithSignature]);
 
@@ -264,7 +269,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       await addAddressToMonitoring(paymentAddress.address);
 
-      const savedLightning = lightningStorage.load();
+      const savedLightning = lightningStorage.load(paymentAddress.address);
       if (savedLightning) {
         setLightningToken(savedLightning.token);
         setIsLightningAuthenticated(true);
@@ -313,14 +318,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const disconnect = useCallback(() => {
     walletStorage.clear();
-    lightningStorage.clear();
-    
+    lightningStorage.clear(address || undefined);
+
     setAddress(null);
     setAddressPublicKey(null);
     setIsConnected(false);
     setLightningToken(null);
     setIsLightningAuthenticated(false);
-  }, []);
+  }, [address]);
 
   return (
     <WalletContext.Provider value={{ 

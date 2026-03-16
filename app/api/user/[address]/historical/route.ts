@@ -171,16 +171,18 @@ export async function GET(
     // Query for each interval and aggregate
     const results: HistoricalUserStats[] = [];
 
+    const stmt = db.prepare(`
+      SELECT
+        ${hashrateColumn} as hashrate,
+        created_at as timestamp
+      FROM user_stats_history
+      WHERE user_id = ? AND created_at >= ? AND created_at < ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+
     for (const { start, end } of intervals) {
-      const rows = db.prepare(`
-        SELECT 
-          ${hashrateColumn} as hashrate,
-          created_at as timestamp
-        FROM user_stats_history 
-        WHERE user_id = ? AND created_at >= ? AND created_at < ?
-        ORDER BY created_at DESC
-        LIMIT 1
-      `).all(user.id, start, end) as { timestamp: number; hashrate: string }[];
+      const rows = stmt.all(user.id, start, end) as { timestamp: number; hashrate: string }[];
 
       if (rows.length > 0) {
         const row = rows[0];
