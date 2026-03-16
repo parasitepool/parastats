@@ -43,7 +43,11 @@ let purgeJob = cron.schedule("0 0 * * *", () => {
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
 
+let isShuttingDown = false;
+
 function shutdown() {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
   console.log("🛑 Shutting down jobs...");
 
   // Stop cron jobs
