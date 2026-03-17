@@ -7,7 +7,10 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'difficulty';
-    const limit = parseInt(searchParams.get('limit') || '99', 10);
+    const parsedLimit = Number.parseInt(searchParams.get('limit') || '', 10);
+    const limit = Number.isFinite(parsedLimit)
+      ? Math.min(Math.max(parsedLimit, 1), 999)
+      : 99;
 
     const db = getDb();
     const claimedSet = getClaimedAddresses();

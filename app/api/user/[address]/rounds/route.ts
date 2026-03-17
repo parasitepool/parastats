@@ -31,7 +31,10 @@ export async function GET(
   try {
     const { address } = await params;
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10), 1), 100);
+    const parsedLimit = Number.parseInt(searchParams.get('limit') || '', 10);
+    const limit = Number.isFinite(parsedLimit)
+      ? Math.min(Math.max(parsedLimit, 1), 100)
+      : 20;
 
     const db = getDb();
 
