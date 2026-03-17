@@ -44,6 +44,7 @@ class StratumCollector {
   private notificationCount: number = 0;
   private readonly CLEANUP_INTERVAL = 50; // Run cleanup every 50 notifications
   private readonly MAX_NOTIFICATIONS = 100; // Keep only latest 100 notifications
+  private readonly MAX_BUFFER_SIZE = 1024 * 1024; // 1MB max buffer size
 
   constructor(
     private host: string = 'parasite.wtf',
@@ -115,7 +116,14 @@ class StratumCollector {
     try {
       // Add new data to buffer
       this.messageBuffer += typeof data === 'string' ? data : data.toString();
-      
+
+      // Guard against unbounded buffer growth from malformed data
+      if (this.messageBuffer.length > this.MAX_BUFFER_SIZE) {
+        console.warn(`Stratum message buffer exceeded ${this.MAX_BUFFER_SIZE} bytes, clearing`);
+        this.messageBuffer = '';
+        return;
+      }
+
       // Process complete messages (separated by newlines)
       const lines = this.messageBuffer.split('\n');
       
@@ -420,15 +428,3 @@ export function stopStratumCollector(): void {
   }
 }
 
-// Handle process termination
-process.on('SIGINT', () => {
-  console.log('Shutting down stratum collector...');
-  stopStratumCollector();
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  console.log('Shutting down stratum collector...');
-  stopStratumCollector();
-  process.exit(0);
-});

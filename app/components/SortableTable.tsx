@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 interface Column<T> {
   key: keyof T;
@@ -40,9 +40,9 @@ export default function SortableTable<T>({
     }
   };
 
-  const sortedData = [...data].sort((a, b) => {
+  const sortedData = useMemo(() => [...data].sort((a, b) => {
     if (!sortColumn) return 0;
-    
+
     const aValue = a[sortColumn];
     const bValue = b[sortColumn];
 
@@ -52,7 +52,7 @@ export default function SortableTable<T>({
 
     const comparison = String(aValue).localeCompare(String(bValue), undefined, { numeric: true });
     return sortDirection === 'asc' ? comparison : -comparison;
-  });
+  }), [data, sortColumn, sortDirection]);
 
   return (
     <div className={`overflow-x-auto w-full ${className}`}>
