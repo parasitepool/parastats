@@ -19,7 +19,7 @@
     "bitcoinjs-lib": "^7.0.1",
     "dotenv": "^17.3.1",
     "echarts": "6.0.0",
-    "framer-motion": "12.37.0",
+    "framer-motion": "12.38.0",
     "next": "16.1.7",
     "node-cron": "^4.2.1",
     "pg": "8.20.0",
