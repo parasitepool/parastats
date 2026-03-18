@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { formatDifficulty, formatAddress } from '../../utils/formatters';
 import Board, { BoardColumn } from './Board';
 import { InfoIcon } from '../icons';
 import DifficultyInfoModal from '../modals/DifficultyInfoModal';
+import { useRoundLeaderboard } from './useRoundLeaderboard';
 
 interface User {
   id: number;
@@ -19,54 +20,15 @@ interface LeaderboardProps {
   initialData?: User[];
 }
 
-// type TimeRange = 'weekly' | 'monthly' | 'lifetime';
-
 export default function BoardDiff({ initialData }: LeaderboardProps) {
-  const [data, setData] = useState<User[]>(initialData || []);
-  const [isLoading, setIsLoading] = useState(!initialData);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
-  // const [timeRange, setTimeRange] = useState<TimeRange>('weekly');
-
-  useEffect(() => {
-    if (!initialData) {
-      fetchData();
-    }
-    
-    // Set up auto-refresh every 60 seconds
-    const refreshInterval = setInterval(() => {
-      fetchData();
-    }, 60000);
-    
-    // Clean up interval on component unmount
-    return () => clearInterval(refreshInterval);
-  }, [initialData]);
-
-  const fetchData = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch('/api/leaderboard?type=difficulty&limit=99');
-      if (!response.ok) {
-        throw new Error('Failed to fetch data');
-      }
-      const users = await response.json();
-      // Add rank to each user
-      const rankedUsers = users.map((user: User, index: number) => ({
-        ...user,
-        rank: index + 1
-      }));
-      setData(rankedUsers);
-    } catch (error) {
-      console.error('Error fetching difficulty data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { data, isLoading, roundMode, setRoundMode } = useRoundLeaderboard<User>('difficulty', 99, initialData);
 
   const columns: BoardColumn<User>[] = [
     {
       key: 'address',
       header: 'Address',
-      render: (value, item) => (
+      render: (value) => (
         <span>
           {formatAddress(value as string)}
         </span>
@@ -74,7 +36,7 @@ export default function BoardDiff({ initialData }: LeaderboardProps) {
     },
     {
       key: 'diff',
-      header: 'Diff',
+      header: roundMode === 'round' ? 'Top Diff' : 'Best Ever',
       align: 'right',
       render: (value) => formatDifficulty(value as number)
     }
@@ -98,11 +60,10 @@ export default function BoardDiff({ initialData }: LeaderboardProps) {
         data={data}
         columns={columns}
         isLoading={isLoading}
-        // timeRange={{
-        //   current: timeRange,
-        //   options: ['weekly', 'monthly', 'lifetime'],
-        //   onChange: (range) => setTimeRange(range as TimeRange)
-        // }}
+        roundToggle={{
+          current: roundMode,
+          onChange: setRoundMode
+        }}
       />
       <DifficultyInfoModal
         isOpen={isInfoModalOpen}

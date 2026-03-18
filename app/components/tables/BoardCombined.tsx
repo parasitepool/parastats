@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { formatAddress } from '../../utils/formatters';
 import Board, { BoardColumn } from './Board';
+import { useRoundLeaderboard } from './useRoundLeaderboard';
 
 interface User {
   id: number;
@@ -21,49 +21,13 @@ interface BoardCombinedProps {
 }
 
 export default function BoardCombined({ initialData }: BoardCombinedProps) {
-  const [data, setData] = useState<User[]>(initialData || []);
-  const [isLoading, setIsLoading] = useState(!initialData);
-
-  useEffect(() => {
-    if (!initialData) {
-      fetchData();
-    }
-    
-    // Set up auto-refresh every 60 seconds
-    const refreshInterval = setInterval(() => {
-      fetchData();
-    }, 60000);
-    
-    // Clean up interval on component unmount
-    return () => clearInterval(refreshInterval);
-  }, [initialData]);
-
-  const fetchData = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch('/api/leaderboard?type=combined&limit=9');
-      if (!response.ok) {
-        throw new Error('Failed to fetch data');
-      }
-      const users = await response.json();
-      // Add rank to each user
-      const rankedUsers = users.map((user: User, index: number) => ({
-        ...user,
-        rank: index + 1
-      }));
-      setData(rankedUsers);
-    } catch (error) {
-      console.error('Error fetching combined data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { data, isLoading, roundMode, setRoundMode } = useRoundLeaderboard<User>('combined', 9, initialData);
 
   const columns: BoardColumn<User>[] = [
     {
       key: 'address',
       header: 'Address',
-      render: (value, item) => (
+      render: (value) => (
         <span>
           {formatAddress(value as string)}
         </span>
@@ -85,10 +49,14 @@ export default function BoardCombined({ initialData }: BoardCombinedProps) {
 
   return (
     <Board
-      title="User Leaderboard"
+      title="Leaderboard"
       data={data}
       columns={columns}
       isLoading={isLoading}
+      roundToggle={{
+        current: roundMode,
+        onChange: setRoundMode
+      }}
     />
   );
 }

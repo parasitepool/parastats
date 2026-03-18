@@ -194,6 +194,42 @@ function initializeTables() {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_user_block_diff_address ON user_block_diff(address);
   `);
+
+  // Create rounds table (caches completed round metadata from GET /rounds)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rounds (
+      block_height INTEGER PRIMARY KEY,
+      block_hash TEXT NOT NULL,
+      coinbase_value INTEGER,
+      winner_diff REAL,
+      winner_username TEXT,
+      participant_status TEXT NOT NULL DEFAULT 'pending',
+      participant_fetched_at INTEGER,
+      error_message TEXT,
+      created_at INTEGER NOT NULL
+    )
+  `);
+
+  // Create round participants table (per-user stats per round)
+  // block_height = 0 is a sentinel for current-round data from /rounds/current
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS round_participants (
+      block_height INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      top_diff REAL NOT NULL DEFAULT 0,
+      blocks_participated INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (block_height, username)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_round_participants_diff
+      ON round_participants(block_height, top_diff DESC);
+    CREATE INDEX IF NOT EXISTS idx_round_participants_blocks
+      ON round_participants(block_height, blocks_participated DESC);
+    CREATE INDEX IF NOT EXISTS idx_round_participants_username
+      ON round_participants(username, block_height DESC);
+  `);
 }
 
 // Close the database connection when the app is shutting down
