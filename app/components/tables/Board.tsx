@@ -79,7 +79,7 @@ export default function Board<T extends { id: number; rank?: number }>({
                   : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
               }`}
             >
-              This Round
+              Since Last Block
             </button>
             <button
               onClick={() => roundToggle.onChange('alltime')}
