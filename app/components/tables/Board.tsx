@@ -70,10 +70,10 @@ export default function Board<T extends { id: number; rank?: number }>({
       <div className="flex justify-between items-center mb-4 gap-4">
         <h2 className="text-2xl font-semibold whitespace-nowrap">{title}</h2>
         {roundToggle && (
-          <div className="flex space-x-2">
+          <div className="flex space-x-1">
             <button
               onClick={() => roundToggle.onChange('round')}
-              className={`px-3 py-1 transition-colors cursor-pointer ${
+              className={`px-2 py-1.5 text-xs leading-none transition-colors cursor-pointer ${
                 roundToggle.current === 'round'
                   ? 'bg-foreground text-background'
                   : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
@@ -83,7 +83,7 @@ export default function Board<T extends { id: number; rank?: number }>({
             </button>
             <button
               onClick={() => roundToggle.onChange('alltime')}
-              className={`px-3 py-1 transition-colors cursor-pointer ${
+              className={`px-2 py-1.5 text-xs leading-none transition-colors cursor-pointer ${
                 roundToggle.current === 'alltime'
                   ? 'bg-foreground text-background'
                   : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
