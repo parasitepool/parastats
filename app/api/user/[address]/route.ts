@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { formatDifficulty, parseHashrate } from '@/app/utils/formatters';
 import { formatRelativeTime } from '@/app/utils/formatters';
 import { fetch } from '@/lib/http-client';
+import { fetchWithCache } from '@/lib/aggregator-cache';
 
 export interface WorkerData {
   workername: string;
@@ -66,18 +67,18 @@ export async function GET(
       headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
     }
 
-    const response = await fetch(`${apiUrl}/aggregator/users/${address}`, {
-      headers,
-    });
-    
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Failed to fetch user data: ${response.statusText}` },
-        { status: response.status }
-      );
-    }
-    
-    const userData: UserData = await response.json();
+    const { data: userData } = await fetchWithCache<UserData>(
+      `${apiUrl}/aggregator/users/${address}`,
+      async () => {
+        const response = await fetch(`${apiUrl}/aggregator/users/${address}`, {
+          headers,
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch user data: ${response.statusText} (${response.status})`);
+        }
+        return await response.json() as UserData;
+      },
+    );
 
     // Process the user data
     const processedData: ProcessedUserData = {

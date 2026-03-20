@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { type PoolStats } from '../../utils/api';
 import { formatDifficulty, parseHashrate } from '../../utils/formatters';
 import { fetch } from '@/lib/http-client';
+import { fetchWithCache } from '@/lib/aggregator-cache';
+
+interface AggregatorPoolData {
+  statsData: Record<string, number>;
+  hashrateData: Record<string, string>;
+  diffData: Record<string, number>;
+}
 
 export async function GET() {
   try {
@@ -15,16 +22,21 @@ export async function GET() {
     if (process.env.API_TOKEN) {
       headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
     }
-    const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
-      headers,
-    });
-    const text = await response.text();
-    
-    // Split the response into lines and parse each JSON object
-    const jsonLines = text.trim().split('\n').map(line => JSON.parse(line));
-    
-    // Combine the data from all three objects
-    const [statsData, hashrateData, diffData] = jsonLines;
+
+    const { data: poolData } = await fetchWithCache<AggregatorPoolData>(
+      `${apiUrl}/aggregator/pool/pool.status`,
+      async () => {
+        const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
+          headers,
+        });
+        const text = await response.text();
+        const jsonLines = text.trim().split('\n').map(line => JSON.parse(line));
+        const [statsData, hashrateData, diffData] = jsonLines;
+        return { statsData, hashrateData, diffData };
+      },
+    );
+
+    const { statsData, hashrateData, diffData } = poolData;
 
     const startTime = new Date('2025-04-20T16:20:00-04:00');
     const currentTime = new Date();

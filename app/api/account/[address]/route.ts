@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import type { CombinedAccountResponse, AccountData, WalletInfo, BalanceResponse } from '@/app/api/account/types';
 import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
+import { fetchWithCache } from '@/lib/aggregator-cache';
 
 export async function GET(
   request: Request,
@@ -41,14 +42,20 @@ export async function GET(
     }
 
     try {
-      const response = await fetchWithTimeout(`${apiUrl}/account/${address}`, {
-        headers,
-      });
-
-      if (response.ok) {
-        accountData = await response.json();
-      }
-      // If response is not ok (e.g., 404), accountData stays null
+      const { data } = await fetchWithCache<AccountData | null>(
+        `${apiUrl}/account/${address}`,
+        async () => {
+          const response = await fetchWithTimeout(`${apiUrl}/account/${address}`, {
+            headers,
+          });
+          if (response.ok) {
+            return await response.json() as AccountData;
+          }
+          // 404 etc. — not an error, just no account
+          return null;
+        },
+      );
+      accountData = data;
     } catch (error) {
       console.error("Error fetching account data:", error instanceof Error ? error.message : 'Unknown error');
       // accountData stays null
