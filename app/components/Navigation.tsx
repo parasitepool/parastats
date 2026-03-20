@@ -56,7 +56,7 @@ export default function Navigation({
       <div className="container mx-auto flex flex-col md:flex-row md:items-end gap-4">
         {/* Left: Logo */}
         <Link href="/" className="flex flex-shrink-0 w-[200px] lg:w-[300px] justify-start">
-          <Image src={parasiteLogo} alt="Parasite Logo" height={64} />
+          <Image src={parasiteLogo} alt="Parasite Logo" height={64} loading="eager" />
         </Link>
 
         {/* Center: Search input */}
