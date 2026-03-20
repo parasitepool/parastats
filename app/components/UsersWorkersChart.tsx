@@ -191,25 +191,6 @@ export default function UsersWorkersChart({
       ],
       series: [
         {
-          name: "Users",
-          type: "line",
-          yAxisIndex: 0,
-          data: chartData?.users || [],
-          smooth: true,
-          sampling: "average",
-          lineStyle: {
-            color: usersColor,
-            width: 3,
-          },
-          itemStyle: {
-            color: usersColor,
-          },
-          symbol: "circle",
-          symbolSize: 8,
-          showSymbol: false,
-          showAllSymbol: "auto",
-        },
-        {
           name: "Workers",
           type: "line",
           yAxisIndex: 1,
@@ -222,6 +203,25 @@ export default function UsersWorkersChart({
           },
           itemStyle: {
             color: workersColor,
+          },
+          symbol: "circle",
+          symbolSize: 8,
+          showSymbol: false,
+          showAllSymbol: "auto",
+        },
+        {
+          name: "Users",
+          type: "line",
+          yAxisIndex: 0,
+          data: chartData?.users || [],
+          smooth: true,
+          sampling: "average",
+          lineStyle: {
+            color: usersColor,
+            width: 3,
+          },
+          itemStyle: {
+            color: usersColor,
           },
           symbol: "circle",
           symbolSize: 8,
