@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
+// Ensure the data directory exists - configurable via environment variable
 const dataDir = process.env.PARASTATS_DATA_DIR || path.join(process.cwd(), 'data');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
@@ -9,6 +10,7 @@ if (!fs.existsSync(dataDir)) {
 
 const dbPath = path.join(dataDir, 'pool-stats.db');
 
+// Singleton database instance
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
