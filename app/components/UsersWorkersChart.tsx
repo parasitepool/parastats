@@ -363,10 +363,10 @@ export default function UsersWorkersChart({
           },
           series: [
             {
-              data: data.users,
+              data: data.workers,
             },
             {
-              data: data.workers,
+              data: data.users,
             },
           ],
         },
