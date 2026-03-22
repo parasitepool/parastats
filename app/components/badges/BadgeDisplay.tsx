@@ -22,12 +22,9 @@ export default function BadgeDisplay({ rounds, loading }: BadgeDisplayProps) {
     return <span className="text-gray-400">-</span>;
   }
 
-  // Sort by block height descending (newest first)
-  const sorted = [...rounds].sort((a, b) => b.block_height - a.block_height);
-
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {sorted.map((round, index) => (
+      {rounds.map((round, index) => (
         <BlockBadge
           key={round.block_height}
           blockHeight={round.block_height}
