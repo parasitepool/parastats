@@ -717,7 +717,7 @@ export default function UserDashboard() {
                           render: (value) => Number(value).toLocaleString(),
                         },
                       ]}
-                      rowClassName={(item) => item.is_winner ? 'bg-green-500/10 font-bold' : ''}
+                      rowClassName={(item) => item.is_winner ? 'bg-white/5 font-bold' : ''}
                       defaultSortColumn="block_height"
                       defaultSortDirection="desc"
                   />
@@ -726,7 +726,7 @@ export default function UserDashboard() {
                 {/* Mobile Cards */}
                 <div className="md:hidden space-y-4">
                   {allRounds.map((round) => (
-                      <div key={round.block_height} className={`bg-background border p-4 shadow-sm ${round.is_winner ? 'border-green-500/40 bg-green-500/10 font-bold' : 'border-border'}`}>
+                      <div key={round.block_height} className={`bg-background border p-4 shadow-sm ${round.is_winner ? 'border-white/20 bg-white/5 font-bold' : 'border-border'}`}>
                         <div className="flex items-center justify-between mb-2">
                           {round.block_height === CURRENT_ROUND_BLOCK ? (
                               <span className="text-accent-3 font-bold text-lg">Current Round</span>
