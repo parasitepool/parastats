@@ -15,28 +15,34 @@ type MedalTier = 'gold' | 'silver' | 'bronze';
 
 const TIER_COLORS = {
   gold: {
-    face: ['#FFF1A8', '#FFD700', '#DAA520', '#B8860B'],
-    ring: ['#DAA520', '#8B6914', '#DAA520'],
-    innerStroke: '#B8860B',
-    icon: '#7A5C00',
-    text: '#5A3E00',
-    glow: '#FFD700',
+    face: ['#3d372a', '#332e22', '#29251b', '#201d15'],
+    ring: ['#b8a878', '#7a6f4e', '#b8a878'],
+    innerStroke: '#9a8a5a',
+    icon: '#d4c8a0',
+    text: '#e8dfc0',
+    glow: '#a89868',
+    glowStrength: 3,
+    glowOpacity: 0.35,
   },
   silver: {
-    face: ['#E8E8E8', '#C0C0C0', '#909090', '#606060'],
-    ring: ['#808080', '#404040', '#808080'],
-    innerStroke: '#505050',
-    icon: '#1A1A1A',
-    text: '#1A1A1A',
-    glow: null,
+    face: ['#2e3035', '#252729', '#1c1e22', '#151618'],
+    ring: ['#8a8e98', '#4a4d55', '#8a8e98'],
+    innerStroke: '#606672',
+    icon: '#b0b4be',
+    text: '#c8ccd4',
+    glow: '#6a7080',
+    glowStrength: 1.5,
+    glowOpacity: 0.15,
   },
   bronze: {
-    face: ['#E8C8A0', '#CD7F32', '#A0622E', '#7A4A1E'],
-    ring: ['#A0622E', '#5C3310', '#A0622E'],
-    innerStroke: '#7A4A1E',
-    icon: '#4A2800',
-    text: '#3A1E00',
+    face: ['#2a2420', '#211c18', '#191411', '#13100d'],
+    ring: ['#6b5a48', '#3a3028', '#6b5a48'],
+    innerStroke: '#504030',
+    icon: '#8a7a68',
+    text: '#9a8a78',
     glow: null,
+    glowStrength: 0,
+    glowOpacity: 0,
   },
 } as const;
 
@@ -91,11 +97,11 @@ export default function BlockBadge({
             <stop offset="100%" stopColor={colors.ring[2]} />
           </linearGradient>
 
-          {/* Glow filter (gold only) */}
+          {/* Glow filter */}
           {colors.glow && (
             <filter id={glowId} x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
-              <feFlood floodColor={colors.glow} floodOpacity="0.5" result="color" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={colors.glowStrength} result="blur" />
+              <feFlood floodColor={colors.glow} floodOpacity={colors.glowOpacity} result="color" />
               <feComposite in="color" in2="blur" operator="in" result="glow" />
               <feMerge>
                 <feMergeNode in="glow" />
@@ -123,12 +129,12 @@ export default function BlockBadge({
           cx="24" cy="24" r="16"
           fill="none"
           stroke={colors.innerStroke}
-          strokeWidth="0.5"
-          strokeOpacity="0.5"
+          strokeWidth={tier === 'gold' ? '0.75' : '0.5'}
+          strokeOpacity={tier === 'gold' ? '0.7' : '0.5'}
         />
 
         {/* Crossed pickaxes — Stylized for better visibility at small scale */}
-        <g opacity="0.65" transform="translate(24, 19)">
+        <g opacity="0.8" transform="translate(24, 19)">
           {/* Left pickaxe */}
           <g transform="rotate(-35)">
             <rect
@@ -170,7 +176,6 @@ export default function BlockBadge({
       {hovered && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-background border border-border rounded shadow-lg text-xs whitespace-nowrap z-20">
           Block {formattedHeight} — Rank #{rank}/{totalParticipants}
-          {tier === 'gold' && <span style={{ color: '#FFD700' }}> ★</span>}
         </div>
       )}
     </motion.a>
