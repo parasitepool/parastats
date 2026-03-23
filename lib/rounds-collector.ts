@@ -123,6 +123,24 @@ async function fetchCurrentRound(): Promise<RoundParticipant[]> {
 }
 
 /**
+ * Fetch block participants (users who submitted shares at the exact block height)
+ */
+async function fetchBlockParticipantsFromApi(blockHeight: number): Promise<string[]> {
+  const { url: apiUrl, headers } = getApiHeaders();
+
+  return withRetry(async () => {
+    const url = `${apiUrl}/participants/${blockHeight}`;
+    const response = await fetch(url, { headers, timeout: CONFIG.PARTICIPANT_FETCH_TIMEOUT });
+
+    if (!response.ok) {
+      throw new HttpError(response.status, response.statusText, url);
+    }
+
+    return await response.json() as string[];
+  }, `GET /participants/${blockHeight}`);
+}
+
+/**
  * Fetch participants for a completed round from the pool API
  */
 async function fetchRoundParticipantsFromApi(blockHeight: number): Promise<RoundParticipant[]> {
@@ -296,6 +314,53 @@ export async function fetchPendingRoundParticipants(): Promise<void> {
         db.prepare('UPDATE rounds SET participant_status = ?, error_message = ? WHERE block_height = ?')
           .run('error', errorMsg, blockHeight);
         console.error(`❌ Round ${blockHeight} participant fetch failed: ${errorMsg}`);
+      }
+    }
+
+    // Fetch block participants for rounds that have completed round-participant fetch
+    const pendingBlockParticipants = db.prepare(`
+      SELECT block_height, block_participant_status, block_participant_fetched_at
+      FROM rounds
+      WHERE block_participant_status IN ('pending', 'error', 'fetching')
+        AND participant_status = 'complete'
+      ORDER BY block_height ASC
+    `).all() as { block_height: number; block_participant_status: string; block_participant_fetched_at: number | null }[];
+
+    for (const round of pendingBlockParticipants) {
+      if (round.block_participant_fetched_at && (now - round.block_participant_fetched_at) < CONFIG.PARTICIPANT_REFETCH_COOLDOWN / 1000) {
+        continue;
+      }
+
+      const blockHeight = round.block_height;
+
+      db.prepare('UPDATE rounds SET block_participant_status = ?, block_participant_fetched_at = ? WHERE block_height = ?')
+        .run('fetching', now, blockHeight);
+
+      try {
+        const usernames = await fetchBlockParticipantsFromApi(blockHeight);
+
+        db.transaction(() => {
+          db.prepare('DELETE FROM block_participants WHERE block_height = ?').run(blockHeight);
+
+          const insert = db.prepare(`
+            INSERT INTO block_participants (block_height, username)
+            VALUES (?, ?)
+          `);
+
+          for (const username of usernames) {
+            insert.run(blockHeight, username);
+          }
+
+          db.prepare('UPDATE rounds SET block_participant_status = ? WHERE block_height = ?')
+            .run('complete', blockHeight);
+        })();
+
+        console.log(`✅ Block ${blockHeight}: ${usernames.length} block participants cached`);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        db.prepare('UPDATE rounds SET block_participant_status = ?, error_message = ? WHERE block_height = ?')
+          .run('error', errorMsg, blockHeight);
+        console.error(`❌ Block ${blockHeight} participant fetch failed: ${errorMsg}`);
       }
     }
   } finally {

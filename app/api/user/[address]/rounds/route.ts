@@ -77,9 +77,9 @@ export async function GET(
       `SELECT COUNT(*) AS count FROM rounds WHERE winner_username = ?`
     ).get(address) as { count: number };
 
-    // Total rounds participated (exclude current round sentinel)
+    // Total rounds participated (based on block participants)
     const participatedRow = db.prepare(
-      `SELECT COUNT(*) AS count FROM round_participants WHERE username = ? AND block_height > 0`
+      `SELECT COUNT(*) AS count FROM block_participants WHERE username = ?`
     ).get(address) as { count: number };
 
     // History with rank, total participants, and winner status per round
@@ -96,7 +96,7 @@ export async function GET(
         FROM round_participants
         WHERE block_height > 0
           AND block_height IN (
-            SELECT block_height FROM round_participants WHERE username = ? AND block_height > 0
+            SELECT block_height FROM block_participants WHERE username = ?
           )
       )
       SELECT

@@ -28,9 +28,6 @@ export default function BadgeDisplay({ rounds, loading }: BadgeDisplayProps) {
         <BlockBadge
           key={round.block_height}
           blockHeight={round.block_height}
-          rank={round.rank}
-          totalParticipants={round.total_participants}
-          isWinner={round.is_winner}
           index={index}
         />
       ))}

@@ -230,6 +230,37 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_round_participants_username
       ON round_participants(username, block_height DESC);
   `);
+
+  // Create block participants table (users who submitted shares at the exact block height)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS block_participants (
+      block_height INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      PRIMARY KEY (block_height, username)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_block_participants_username
+      ON block_participants(username, block_height DESC)
+  `);
+
+  // Add block_participant_status column to rounds table
+  try {
+    db.exec(`ALTER TABLE rounds ADD COLUMN block_participant_status TEXT NOT NULL DEFAULT 'pending'`);
+  } catch (error: unknown) {
+    if (error instanceof Error && !error.message.includes('duplicate column name')) {
+      console.error('Error adding block_participant_status column:', error);
+    }
+  }
+
+  try {
+    db.exec(`ALTER TABLE rounds ADD COLUMN block_participant_fetched_at INTEGER`);
+  } catch (error: unknown) {
+    if (error instanceof Error && !error.message.includes('duplicate column name')) {
+      console.error('Error adding block_participant_fetched_at column:', error);
+    }
+  }
 }
 
 // Close the database connection when the app is shutting down
