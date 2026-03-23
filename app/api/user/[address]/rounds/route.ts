@@ -77,27 +77,28 @@ export async function GET(
       `SELECT COUNT(*) AS count FROM rounds WHERE winner_username = ?`
     ).get(address) as { count: number };
 
-    // Total rounds participated (exclude current round sentinel)
+    // Total rounds participated (based on block participants)
     const participatedRow = db.prepare(
-      `SELECT COUNT(*) AS count FROM round_participants WHERE username = ? AND block_height > 0`
+      `SELECT COUNT(*) AS count FROM block_participants WHERE username = ?`
     ).get(address) as { count: number };
 
     // History with rank, total participants, and winner status per round
     const history = db.prepare(`
-      WITH ranked AS (
+      WITH user_blocks AS (
+        SELECT block_height FROM block_participants WHERE username = ?
+      ),
+      ranked AS (
         SELECT
-          block_height,
-          username,
-          top_diff,
-          blocks_participated,
-          RANK() OVER (PARTITION BY block_height ORDER BY top_diff DESC) AS rank,
-          RANK() OVER (PARTITION BY block_height ORDER BY blocks_participated DESC) AS blocks_rank,
-          COUNT(*) OVER (PARTITION BY block_height) AS total_participants
-        FROM round_participants
-        WHERE block_height > 0
-          AND block_height IN (
-            SELECT block_height FROM round_participants WHERE username = ? AND block_height > 0
-          )
+          rp.block_height,
+          rp.username,
+          rp.top_diff,
+          rp.blocks_participated,
+          RANK() OVER (PARTITION BY rp.block_height ORDER BY rp.top_diff DESC) AS rank,
+          RANK() OVER (PARTITION BY rp.block_height ORDER BY rp.blocks_participated DESC) AS blocks_rank,
+          COUNT(*) OVER (PARTITION BY rp.block_height) AS total_participants
+        FROM round_participants rp
+        INNER JOIN user_blocks ub ON ub.block_height = rp.block_height
+        WHERE rp.block_height > 0
       )
       SELECT
         ranked.block_height,

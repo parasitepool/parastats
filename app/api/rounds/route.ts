@@ -26,6 +26,7 @@ export async function GET() {
         winner_diff: null,
         winner_username: null,
         participant_status: 'complete',
+        block_participant_status: 'complete',
       });
     }
 

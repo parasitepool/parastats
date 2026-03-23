@@ -16,6 +16,7 @@ export interface RoundRow {
   winner_diff: number | null;
   winner_username: string | null;
   participant_status: ParticipantStatus;
+  block_participant_status: ParticipantStatus;
 }
 
 /**
