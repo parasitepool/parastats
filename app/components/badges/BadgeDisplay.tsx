@@ -24,11 +24,10 @@ export default function BadgeDisplay({ rounds, loading }: BadgeDisplayProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {rounds.map((round, index) => (
+      {rounds.map((round) => (
         <BlockBadge
           key={round.block_height}
           blockHeight={round.block_height}
-          index={index}
         />
       ))}
     </div>

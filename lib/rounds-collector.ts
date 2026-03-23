@@ -317,7 +317,8 @@ export async function fetchPendingRoundParticipants(): Promise<void> {
       }
     }
 
-    // Fetch block participants for rounds that have completed round-participant fetch
+    const blockParticipantNow = Math.floor(Date.now() / 1000);
+
     const pendingBlockParticipants = db.prepare(`
       SELECT block_height, block_participant_status, block_participant_fetched_at
       FROM rounds
@@ -327,14 +328,14 @@ export async function fetchPendingRoundParticipants(): Promise<void> {
     `).all() as { block_height: number; block_participant_status: string; block_participant_fetched_at: number | null }[];
 
     for (const round of pendingBlockParticipants) {
-      if (round.block_participant_fetched_at && (now - round.block_participant_fetched_at) < CONFIG.PARTICIPANT_REFETCH_COOLDOWN / 1000) {
+      if (round.block_participant_fetched_at && (blockParticipantNow - round.block_participant_fetched_at) < CONFIG.PARTICIPANT_REFETCH_COOLDOWN / 1000) {
         continue;
       }
 
       const blockHeight = round.block_height;
 
       db.prepare('UPDATE rounds SET block_participant_status = ?, block_participant_fetched_at = ? WHERE block_height = ?')
-        .run('fetching', now, blockHeight);
+        .run('fetching', blockParticipantNow, blockHeight);
 
       try {
         const usernames = await fetchBlockParticipantsFromApi(blockHeight);

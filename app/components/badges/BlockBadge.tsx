@@ -1,18 +1,14 @@
 interface BlockBadgeProps {
   blockHeight: number;
-  index?: number;
 }
 
-export default function BlockBadge({ blockHeight, index = 0 }: BlockBadgeProps) {
-  const formattedHeight = String(blockHeight);
-
+export default function BlockBadge({ blockHeight }: BlockBadgeProps) {
   return (
     <a
       href={`https://mempool.space/block/${blockHeight}`}
       target="_blank"
       rel="noopener noreferrer"
       className="group relative inline-flex flex-col items-center no-underline transition-transform duration-150 hover:scale-[1.15]"
-      style={{ animationDelay: `${index * 80}ms` }}
     >
       <svg viewBox="0 0 48 48" width={44} height={44}>
         {/* Outer ring */}
@@ -63,13 +59,13 @@ export default function BlockBadge({ blockHeight, index = 0 }: BlockBadgeProps) 
           fontFamily="'Courier New', Courier, monospace"
           fontWeight="bold"
         >
-          {formattedHeight}
+          {blockHeight}
         </text>
       </svg>
 
       {/* Tooltip on hover */}
       <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-background border border-border rounded shadow-lg text-xs whitespace-nowrap z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-        Mined on Block {formattedHeight}
+        Mined on Block {blockHeight}
       </div>
     </a>
   );
