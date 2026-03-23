@@ -27,6 +27,16 @@ export function getDb(): Database.Database {
   return db;
 }
 
+function addColumnIfNotExists(db: Database.Database, alterStatement: string) {
+  try {
+    db.exec(alterStatement);
+  } catch (error: unknown) {
+    if (error instanceof Error && !error.message.includes('duplicate column name')) {
+      console.error(`Error running "${alterStatement}":`, error);
+    }
+  }
+}
+
 function initializeTables() {
   const db = getDb();
   
@@ -71,25 +81,8 @@ function initializeTables() {
     )
   `);
 
-  // Add failed_attempts column if it doesn't exist since we added this field later
-  try {
-    db.exec(`ALTER TABLE monitored_users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0`);
-  } catch (error: unknown) {
-    // Column might already exist, which is fine
-    if (error instanceof Error && !error.message.includes('duplicate column name')) {
-      console.error('Error adding failed_attempts column:', error);
-    }
-  }
-
-  // Add total_blocks column for loyalty ranking based on blocks mined
-  try {
-    db.exec(`ALTER TABLE monitored_users ADD COLUMN total_blocks INTEGER NOT NULL DEFAULT 0`);
-  } catch (error: unknown) {
-    // Column might already exist, which is fine
-    if (error instanceof Error && !error.message.includes('duplicate column name')) {
-      console.error('Error adding total_blocks column:', error);
-    }
-  }
+  addColumnIfNotExists(db, `ALTER TABLE monitored_users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0`);
+  addColumnIfNotExists(db, `ALTER TABLE monitored_users ADD COLUMN total_blocks INTEGER NOT NULL DEFAULT 0`);
 
   // Create index on address for faster lookups
   db.exec(`
@@ -230,6 +223,23 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_round_participants_username
       ON round_participants(username, block_height DESC);
   `);
+
+  // Create block participants table (users who submitted shares at the exact block height)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS block_participants (
+      block_height INTEGER NOT NULL,
+      username TEXT NOT NULL,
+      PRIMARY KEY (block_height, username)
+    )
+  `);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_block_participants_username
+      ON block_participants(username, block_height DESC)
+  `);
+
+  addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_status TEXT NOT NULL DEFAULT 'pending'`);
+  addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_fetched_at INTEGER`);
 }
 
 // Close the database connection when the app is shutting down
