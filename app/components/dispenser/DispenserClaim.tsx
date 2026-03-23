@@ -54,8 +54,16 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
     const [localClaimed, setLocalClaimed] = useState<Set<number>>(new Set());
     const [error, setError] = useState<string | null>(null);
     const [txHex, setTxHex] = useState<string | null>(null);
+    const [copiedSlot, setCopiedSlot] = useState<number | null>(null);
 
     const isOwner = address === userId;
+
+    const handleCopyLink = async (inscriptionId: string, slotIndex: number) => {
+        const url = `${window.location.origin}/dispenser/share/${inscriptionId}`;
+        await navigator.clipboard.writeText(url);
+        setCopiedSlot(slotIndex);
+        setTimeout(() => setCopiedSlot(null), 2000);
+    };
 
     const fetchEligibility = useCallback(async () => {
         setLoading(true);
@@ -201,15 +209,40 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                                     "Eligible"
                                 )}
                             </p>
-                            {isOwner && !slot.claimed && (
-                                <button
-                                    onClick={() => handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
-                                    disabled={claiming || claimingSlot !== null}
-                                    className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {claiming ? "Signing..." : "Claim"}
-                                </button>
-                            )}
+                            <div className="flex items-center gap-2">
+                                {slot.claimed && (
+                                    <button
+                                        onClick={() => handleCopyLink(slot.inscriptionId, slot.index)}
+                                        className="flex items-center gap-1 px-2 py-1 border border-border hover:bg-secondary-hover transition-colors text-xs font-medium flex-shrink-0"
+                                        title="Copy share link"
+                                    >
+                                        {copiedSlot === slot.index ? (
+                                            <>
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                Copied
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                </svg>
+                                                Link
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                                {isOwner && !slot.claimed && (
+                                    <button
+                                        onClick={() => handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
+                                        disabled={claiming || claimingSlot !== null}
+                                        className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {claiming ? "Signing..." : "Claim"}
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
