@@ -351,7 +351,7 @@ export async function fetchPendingRoundParticipants(): Promise<void> {
             insert.run(blockHeight, username);
           }
 
-          db.prepare('UPDATE rounds SET block_participant_status = ? WHERE block_height = ?')
+          db.prepare('UPDATE rounds SET block_participant_status = ?, error_message = NULL WHERE block_height = ?')
             .run('complete', blockHeight);
         })();
 
