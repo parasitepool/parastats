@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
-import { AddressPurpose, request } from '@sats-connect/core';
+import { AddressPurpose, MessageSigningProtocols, request } from '@sats-connect/core';
 
 interface WalletContextType {
   address: string | null;
@@ -148,7 +148,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const response = await request('signMessage', {
         address: userAddress,
-        message: message
+        message: message,
+        protocol: MessageSigningProtocols.ECDSA
       });
 
       if (response.status === 'success') {
