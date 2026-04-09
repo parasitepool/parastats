@@ -20,6 +20,7 @@ import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
 // import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
 import BadgeDisplay from '@/app/components/badges/BadgeDisplay';
+import Orders from '@/app/components/Orders';
 
 const CURRENT_ROUND_BLOCK = Number.MAX_SAFE_INTEGER;
 
@@ -622,6 +623,8 @@ export default function UserDashboard() {
               )}
             </div>
           </div>
+
+          {isOwnProfile && <Orders address={userId} />}
 
           <div className="w-full mb-6">
             <HashrateChart

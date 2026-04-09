@@ -24,23 +24,16 @@ export function formatDifficulty(value: number | string | undefined): string {
   }
 }
 
-/**
- * Formats a hashrate value with appropriate unit suffix (H/s, KH/s, MH/s, etc.)
- * e.g. 1234 -> 1.23 KH/s, 1234567 -> 1.23 MH/s, etc.
- */
-export function formatHashrate(value: number | string | undefined): string {
-  if (!value) return '0 H/s';
-  
+function formatScaled(value: number | string | undefined, units: string[]): string {
+  if (!value) return `0 ${units[0]}`;
+
   const numValue = typeof value === 'string' ? parseFloat(value) : value;
-  if (numValue === 0) return '0 H/s';
-  
-  const units = ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s', 'ZH/s', 'YH/s'];
+  if (numValue === 0) return `0 ${units[0]}`;
+
   const floor = Math.floor(Math.log10(numValue) / 3);
   const unitIndex = Math.min(floor, units.length - 1);
-  
   const scaledValue = numValue / Math.pow(1000, unitIndex);
-  
-  // Always show 3 significant digits with space before unit
+
   if (scaledValue >= 100) {
     return `${Math.round(scaledValue)} ${units[unitIndex]}`;
   } else if (scaledValue >= 10) {
@@ -48,6 +41,10 @@ export function formatHashrate(value: number | string | undefined): string {
   } else {
     return `${scaledValue.toFixed(2)} ${units[unitIndex]}`;
   }
+}
+
+export function formatHashrate(value: number | string | undefined): string {
+  return formatScaled(value, ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s', 'ZH/s', 'YH/s']);
 }
 
 export function formatPrice(price: number | null): string {
@@ -172,6 +169,10 @@ export function formatCompactNumber(value: bigint | number): string {
   } else {
     return `${scaledValue.toFixed(3)}${suffixes[suffixIndex]}`;
   }
+}
+
+export function formatHashDays(value: number | string | undefined): string {
+  return formatScaled(value, ['Hd', 'KHd', 'MHd', 'GHd', 'THd', 'PHd', 'EHd', 'ZHd', 'YHd']);
 }
 
 /**

@@ -232,10 +232,13 @@ export interface UserBlockDiffEntry {
 export type { UserRoundsResponse, UserRoundHistoryEntry } from '../api/user/[address]/rounds/route';
 import type { UserRoundsResponse } from '../api/user/[address]/rounds/route';
 
-export async function getUserRounds(address: string, limit: number = 20): Promise<UserRoundsResponse> {
+export async function getUserRounds(address: string, limit: number = 20): Promise<UserRoundsResponse | null> {
   try {
     return await withRetry(async () => {
       const response = await fetch(`/api/user/${address}/rounds?limit=${limit}`);
+      if (response.status === 403) {
+        return null;
+      }
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
