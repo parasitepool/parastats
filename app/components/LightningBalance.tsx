@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
+import CardHeader from "@/app/components/CardHeader";
+import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
 import { LightningIcon } from "@/app/components/icons";
 import { useWallet } from "@/app/hooks/useWallet";
 import LightningModal from "@/app/components/modals/LightningModal";
@@ -13,6 +15,8 @@ interface LightningBalanceProps {
   compact?: boolean;
   userId?: string;
   loading?: boolean;
+  collapsed?: boolean;
+  onToggle?: () => void;
 }
 
 export default function LightningBalance({
@@ -20,6 +24,8 @@ export default function LightningBalance({
   compact = false,
   userId,
   loading = false,
+  collapsed = false,
+  onToggle,
 }: LightningBalanceProps) {
   const router = useRouter();
   const {
@@ -40,6 +46,24 @@ export default function LightningBalance({
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [isFetching, setIsFetching] = useState<boolean>(false);
+  const containerClassName = getCollapsibleContainerClassName(
+    `bg-background p-4 sm:p-6 shadow-md border border-border ${className}`.trim(),
+    collapsed,
+    Boolean(onToggle),
+  );
+  const compactContainerClassName = getCollapsibleContainerClassName(
+    `bg-background p-4 shadow-md border border-border ${className}`.trim(),
+    collapsed,
+    Boolean(onToggle),
+  );
+
+  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!onToggle || !shouldToggleCollapse(event)) {
+      return;
+    }
+
+    onToggle();
+  };
 
   const fetchCombinedData = useCallback(async () => {
     if (!userId) return;
@@ -172,48 +196,46 @@ export default function LightningBalance({
   if (isLoading && compact) {
     return (
       <div
-        className={`bg-background p-4 shadow-md border border-border ${className}`}
+        className={compactContainerClassName}
+        onClick={handleClick}
       >
-        <div className="flex items-center mb-2">
-          <div className="mr-2 text-accent-3">
-            <LightningIcon />
-          </div>
-          <h3 className="text-sm font-medium text-accent-2">Lightning</h3>
-        </div>
-        <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
+        <CardHeader
+          title="Lightning"
+          icon={<LightningIcon />}
+          className={collapsed ? "" : "mb-2"}
+          titleClassName="text-sm font-medium text-accent-2"
+        />
+        {!collapsed && <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>}
       </div>
     );
   }
 
   if (isLoading) {
     return (
-      <div className={`bg-background p-4 sm:p-6 shadow-md border border-border ${className}`}>
-        <div className="flex items-center mb-4 sm:mb-6">
-          <div className="flex items-center">
-            <div className="mr-2 text-accent-3">
-              <LightningIcon />
+      <div className={containerClassName} onClick={handleClick}>
+        <CardHeader
+          title="Lightning"
+          icon={<LightningIcon />}
+          className={collapsed ? "" : "mb-4 sm:mb-6"}
+        />
+
+        {!collapsed && (
+          <div className="grid grid-cols-1 gap-4 sm:gap-6">
+            <div className="flex flex-col">
+              <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
+              <div className="bg-secondary p-3 sm:p-4 border border-border h-[5rem] flex items-center">
+                <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
+              </div>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold">Lightning</h2>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 gap-4 sm:gap-6">
-          {/* LN Address shimmer */}
-          <div className="flex flex-col">
-            <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
-            <div className="bg-secondary p-3 sm:p-4 border border-border h-[5rem] flex items-center">
-              <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-3/4"></div>
-            </div>
-          </div>
-          
-          {/* Balance shimmer */}
-          <div className="flex flex-col">
-            <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
-            <div className="bg-secondary p-3 sm:p-4 border border-border h-[5rem] flex items-center">
-              <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+
+            <div className="flex flex-col">
+              <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
+              <div className="bg-secondary p-3 sm:p-4 border border-border h-[5rem] flex items-center">
+                <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -233,22 +255,25 @@ export default function LightningBalance({
     return (
       <>
         <div
-          className={`bg-background p-4 shadow-md border border-border ${className}`}
+          className={compactContainerClassName}
+          onClick={handleClick}
         >
-          <div className="flex items-center mb-2">
-            <div className="mr-2 text-accent-3">
-              <LightningIcon />
-            </div>
-            <h3 className="text-sm font-medium text-accent-2">Lightning</h3>
-          </div>
-          {!isLightningAuthenticated ? (
-            <p className="text-2xl font-semibold">
-              <span className="text-gray-400">-</span>
-            </p>
-          ) : (
-            <p className="text-2xl font-semibold">
-              {balance !== null ? balance.toLocaleString() : "--"}
-            </p>
+          <CardHeader
+            title="Lightning"
+            icon={<LightningIcon />}
+            className={collapsed ? "" : "mb-2"}
+            titleClassName="text-sm font-medium text-accent-2"
+          />
+          {!collapsed && (
+            !isLightningAuthenticated ? (
+              <p className="text-2xl font-semibold">
+                <span className="text-gray-400">-</span>
+              </p>
+            ) : (
+              <p className="text-2xl font-semibold">
+                {balance !== null ? balance.toLocaleString() : "--"}
+              </p>
+            )
           )}
         </div>
         <LightningModal
@@ -262,127 +287,55 @@ export default function LightningBalance({
   // Expanded full-width view
   return (
     <>
-      <div className={`bg-background p-4 sm:p-6 shadow-md border border-border ${className}`}>
-        <div className="flex items-center mb-4 sm:mb-6">
-          <div className="flex items-center">
-            <div className="mr-2 text-accent-3">
-              <LightningIcon />
-            </div>
-            <h2 className="text-xl sm:text-2xl font-bold">Lightning</h2>
-          </div>
-        </div>
+      <div className={containerClassName} onClick={handleClick}>
+        <CardHeader
+          title="Lightning"
+          icon={<LightningIcon />}
+          className={collapsed ? "" : "mb-4 sm:mb-6"}
+        />
 
-        {!isLightningAuthenticated ? (
-          <div className="flex justify-center py-8">
-            <button
-              onClick={async () => {
-                setIsConnecting(true);
-                setError(null);
-                try {
-                  const result = await connectWithLightning();
-                  if (result) {
-                    router.push(`/user/${result.address}`);
-                  } else {
-                    setError('Failed to connect wallet');
-                  }
-                } catch (err) {
-                  console.error('Connection error:', err);
-                  setError(err instanceof Error ? err.message : 'Failed to connect wallet');
-                } finally {
-                  setIsConnecting(false);
-                }
-              }}
-              disabled={isConnecting}
-              className="px-6 py-3 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isConnecting ? 'Connecting...' : 'Connect'}
-            </button>
-          </div>
-        ) : !hasData ? (
-          <div className="text-center py-8">
-            <p className="text-2xl font-semibold text-gray-400">-</p>
-          </div>
-        ) : addressesMatch ? (
-          // If addresses match, show Lightning Address and Balance as separate boxes
-          <div className="grid grid-cols-1 gap-4 sm:gap-6">
-            {/* LN Address */}
-            <div className="flex flex-col">
-              <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
-              <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
-                <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
-                {isOwner && isLightningAuthenticated && (
-                  <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium flex-shrink-0"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    <span>Edit</span>
-                  </button>
-                )}
+        {!collapsed && (
+          <>
+            {!isLightningAuthenticated ? (
+              <div className="flex justify-center py-8">
+                <button
+                  onClick={async () => {
+                    setIsConnecting(true);
+                    setError(null);
+                    try {
+                      const result = await connectWithLightning();
+                      if (result) {
+                        router.push(`/user/${result.address}`);
+                      } else {
+                        setError('Failed to connect wallet');
+                      }
+                    } catch (err) {
+                      console.error('Connection error:', err);
+                      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+                    } finally {
+                      setIsConnecting(false);
+                    }
+                  }}
+                  disabled={isConnecting}
+                  className="px-6 py-3 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isConnecting ? 'Connecting...' : 'Connect'}
+                </button>
               </div>
-            </div>
-
-            {/* Balance - only show if available */}
-            {balance !== null && (
-              <div className="flex flex-col">
-                <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
-                  <p className="text-lg sm:text-xl font-semibold">
-                    {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
-                  </p>
-                  {isOwner && isLightningAuthenticated && (
-                    <div className="relative group">
-                      <button
-                        onClick={() => balance >= 8000 && setIsWithdrawModalOpen(true)}
-                        disabled={balance < 8000}
-                        className={`flex items-center gap-1 px-2 py-1 text-xs font-medium flex-shrink-0 ${
-                          balance >= 8000
-                            ? 'bg-foreground text-background hover:bg-gray-700 transition-colors cursor-pointer'
-                            : 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-50'
-                        }`}
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>Withdraw</span>
-                      </button>
-                      {balance < 8000 && (
-                        <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-48 p-2 bg-background border border-border shadow-lg text-xs z-10">
-                          Minimum balance of 8,000 sats required to withdraw
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+            ) : !hasData ? (
+              <div className="text-center py-8">
+                <p className="text-2xl font-semibold text-gray-400">-</p>
               </div>
-            )}
-          </div>
-        ) : (
-          // If addresses don't match or address not set, show lightning address with appropriate button
-          <div className="space-y-4">
-            {displayLnAddress && (
-              <div className="flex flex-col">
-                <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
-                <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2 h-[5rem]">
-                  <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {walletInfo?.username && isOwner && (
-                      <button
-                        onClick={handleResetClick}
-                        className="flex items-center gap-1 px-2 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        <span>Reset</span>
-                      </button>
-                    )}
+            ) : addressesMatch ? (
+              <div className="grid grid-cols-1 gap-4 sm:gap-6">
+                <div className="flex flex-col">
+                  <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
+                  <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
+                    <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
                     {isOwner && isLightningAuthenticated && (
                       <button
                         onClick={() => setIsModalOpen(true)}
-                        className="flex items-center gap-1 px-2 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
+                        className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium flex-shrink-0"
                       >
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -392,15 +345,84 @@ export default function LightningBalance({
                     )}
                   </div>
                 </div>
+
+                {balance !== null && (
+                  <div className="flex flex-col">
+                    <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
+                    <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
+                      <p className="text-lg sm:text-xl font-semibold">
+                        {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
+                      </p>
+                      {isOwner && isLightningAuthenticated && (
+                        <div className="relative group">
+                          <button
+                            onClick={() => balance >= 8000 && setIsWithdrawModalOpen(true)}
+                            disabled={balance < 8000}
+                            className={`flex items-center gap-1 px-2 py-1 text-xs font-medium flex-shrink-0 ${
+                              balance >= 8000
+                                ? 'bg-foreground text-background hover:bg-gray-700 transition-colors cursor-pointer'
+                                : 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-50'
+                            }`}
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Withdraw</span>
+                          </button>
+                          {balance < 8000 && (
+                            <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-48 p-2 bg-background border border-border shadow-lg text-xs z-10">
+                              Minimum balance of 8,000 sats required to withdraw
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {displayLnAddress && (
+                  <div className="flex flex-col">
+                    <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
+                    <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2 h-[5rem]">
+                      <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {walletInfo?.username && isOwner && (
+                          <button
+                            onClick={handleResetClick}
+                            className="flex items-center gap-1 px-2 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span>Reset</span>
+                          </button>
+                        )}
+                        {isOwner && isLightningAuthenticated && (
+                          <button
+                            onClick={() => setIsModalOpen(true)}
+                            className="flex items-center gap-1 px-2 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            <span>Edit</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {error && (
-          <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
-            {error}
-          </div>
+            {error && (
+              <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
+                {error}
+              </div>
+            )}
+          </>
         )}
       </div>
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, type MouseEvent, type ReactNode } from "react";
 import * as echarts from "echarts";
 import { CallbackDataParams } from "echarts/types/dist/shared";
+import CardHeader from "@/app/components/CardHeader";
+import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
 import { formatDifficulty, formatHashrate } from "../utils/formatters";
 
 // Constants
@@ -33,6 +35,9 @@ interface HashrateChartProps {
   bestDiffs?: BestDiffPoint[];
   loading?: boolean;
   title?: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
+  icon?: ReactNode;
 }
 
 /**
@@ -93,10 +98,36 @@ function mapBestDiffsToSeriesData(
   return seriesData;
 }
 
-export default function HashrateChart({ data, bestDiffs, loading = false, title = "Historic Hashrate" }: HashrateChartProps) {
+export default function HashrateChart({
+  data,
+  bestDiffs,
+  loading = false,
+  title = "Historic Hashrate",
+  collapsed = false,
+  onToggle,
+  icon,
+}: HashrateChartProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
   const isInitializedRef = useRef(false);
+  const containerClassName = onToggle
+    ? getCollapsibleContainerClassName(
+        "bg-background p-4 sm:p-6 shadow-md border border-border",
+        collapsed,
+        true,
+      )
+    : "bg-background shadow-md border border-border py-6";
+  const titleClassName = onToggle
+    ? "text-xl sm:text-2xl font-semibold"
+    : "text-2xl font-semibold";
+
+  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!onToggle || !shouldToggleCollapse(event, '[data-collapse-ignore]')) {
+      return;
+    }
+
+    onToggle();
+  };
 
   // Build chart options function - memoized to avoid recreating on every render
   const buildChartOptions = useCallback((chartData: typeof data, diffData?: BestDiffPoint[]) => {
@@ -355,6 +386,10 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
   // Combined effect for chart initialization and data updates
   // Only initializes when we have valid data to prevent ECharts errors
   useEffect(() => {
+    if (collapsed) {
+      return;
+    }
+
     if (!chartRef.current) return;
     
     // Don't initialize chart until we have valid data with timestamps
@@ -448,7 +483,19 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
     if (isInitializedRef.current) {
       chart.setOption(buildChartOptions(data, bestDiffs), { notMerge: true });
     }
-  }, [data, bestDiffs, buildChartOptions]);
+  }, [bestDiffs, buildChartOptions, collapsed, data]);
+
+  useEffect(() => {
+    if (!collapsed) {
+      return;
+    }
+
+    if (chartInstanceRef.current && !chartInstanceRef.current.isDisposed()) {
+      chartInstanceRef.current.dispose();
+      chartInstanceRef.current = null;
+      isInitializedRef.current = false;
+    }
+  }, [collapsed]);
 
   // Resize handler effect - separate to avoid recreating on data changes
   useEffect(() => {
@@ -477,10 +524,19 @@ export default function HashrateChart({ data, bestDiffs, loading = false, title 
   }, []);
 
   return (
-    <div className="bg-background shadow-md border border-border py-6">
-      <h2 className="text-2xl font-semibold mb-4 px-6">{title}</h2>
-      {loading && <p className="text-center">Loading data...</p>}
-      <div ref={chartRef} style={{ width: "100%", height: "400px" }}></div>
+    <div className={containerClassName} onClick={handleClick}>
+      <CardHeader
+        title={title}
+        icon={icon}
+        className={onToggle ? (collapsed ? "" : "mb-4 sm:mb-6") : "mb-4 px-6"}
+        titleClassName={titleClassName}
+      />
+      {!collapsed && (
+        <>
+          {loading && <p className="text-center">Loading data...</p>}
+          <div data-collapse-ignore ref={chartRef} style={{ width: "100%", height: "400px" }}></div>
+        </>
+      )}
     </div>
   );
 }

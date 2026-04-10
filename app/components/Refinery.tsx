@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, type MouseEvent } from 'react';
+import CardHeader from './CardHeader';
+import { getCollapsibleContainerClassName, shouldToggleCollapse } from './collapsible';
 import SortableTable from './SortableTable';
 import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/formatters';
 import CreateOrderModal from './modals/CreateOrderModal';
@@ -70,9 +72,28 @@ const columns = [
   },
 ];
 
-export default function Refinery({ address }: { address: string }) {
+interface RefineryProps {
+  address: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}
+
+export default function Refinery({ address, collapsed = false, onToggle }: RefineryProps) {
   const [status, setStatus] = useState<RefineryStatus | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const containerClassName = getCollapsibleContainerClassName(
+    'w-full mt-6 mb-6 bg-background border border-border p-4 sm:p-6 shadow-sm',
+    collapsed,
+    Boolean(onToggle),
+  );
+
+  const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!onToggle || !shouldToggleCollapse(event, '[data-collapse-ignore]')) {
+      return;
+    }
+
+    onToggle();
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -116,79 +137,81 @@ export default function Refinery({ address }: { address: string }) {
       delivered: o.upstream?.hash_days ?? 0,
     }));
   }, [status]);
-
   const closeModal = useCallback(() => setIsModalOpen(false), []);
 
   return (
-    <div className="w-full mt-6 mb-6 bg-background border border-border p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center">
-          <div className="mr-2 text-accent-3">
-            <RefineryIcon />
-          </div>
-          <h2 className="text-xl sm:text-2xl font-bold">Refinery</h2>
-        </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80"
-        >
-          Create Order
-        </button>
-      </div>
+    <div className={containerClassName} onClick={handleClick}>
+      <CardHeader
+        title="Refinery"
+        icon={<RefineryIcon />}
+        className={collapsed ? '' : 'mb-4'}
+        action={collapsed ? null : (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80"
+          >
+            Create Order
+          </button>
+        )}
+      />
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div className="bg-secondary border border-border p-3">
-          <p className="text-sm text-foreground/60">Capacity</p>
-          <p className="text-lg font-semibold">{formatHashrate(capacity)}</p>
-        </div>
-        <div className="bg-secondary border border-border p-3">
-          <p className="text-sm text-foreground/60">Used</p>
-          <p className="text-lg font-semibold">{formatHashrate(used)}</p>
-        </div>
-      </div>
-
-      {rows.length > 0 && (
-        <div className="hidden md:block">
-          <SortableTable
-            data={rows}
-            columns={columns}
-            defaultSortColumn="id"
-            defaultSortDirection="desc"
-          />
-        </div>
-      )}
-
-      {rows.length > 0 && (
-        <div className="md:hidden space-y-4">
-          {rows.map(order => (
-            <div key={order.id} className="bg-background border border-border p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-accent-3 font-bold text-lg">
-                  Order {order.id}
-                </span>
-                <span className={`font-medium ${statusColor(order.status)}`}>{order.status}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <p className="text-foreground/60">Requested</p>
-                  <p className="font-medium">{order.requested != null ? formatHashDays(order.requested) : 'Unlimited'}</p>
-                </div>
-                <div>
-                  <p className="text-foreground/60">Delivered</p>
-                  <p className="font-medium">{formatHashDays(order.delivered)}</p>
-                </div>
-                <div>
-                  <p className="text-foreground/60">Hashrate</p>
-                  <p className="font-medium">{formatHashrate(order.hashrate)}</p>
-                </div>
-                <div>
-                  <p className="text-foreground/60">Best Share</p>
-                  <p className="font-medium">{formatDifficulty(order.best_share)}</p>
-                </div>
-              </div>
+      {!collapsed && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
+              <p className="text-sm text-foreground/60">Capacity</p>
+              <p className="text-lg font-semibold">{formatHashrate(capacity)}</p>
             </div>
-          ))}
-        </div>
+            <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
+              <p className="text-sm text-foreground/60">Used</p>
+              <p className="text-lg font-semibold">{formatHashrate(used)}</p>
+            </div>
+          </div>
+
+          {rows.length > 0 && (
+            <div className="hidden md:block" data-collapse-ignore>
+              <SortableTable
+                data={rows}
+                columns={columns}
+                defaultSortColumn="id"
+                defaultSortDirection="desc"
+              />
+            </div>
+          )}
+
+          {rows.length > 0 && (
+            <div className="md:hidden space-y-4">
+              {rows.map(order => (
+                <div key={order.id} className="bg-background border border-border p-4 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-accent-3 font-bold text-lg">
+                      Order {order.id}
+                    </span>
+                    <span className={`font-medium ${statusColor(order.status)}`}>{order.status}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-foreground/60">Requested</p>
+                      <p className="font-medium">{order.requested != null ? formatHashDays(order.requested) : 'Unlimited'}</p>
+                    </div>
+                    <div>
+                      <p className="text-foreground/60">Delivered</p>
+                      <p className="font-medium">{formatHashDays(order.delivered)}</p>
+                    </div>
+                    <div>
+                      <p className="text-foreground/60">Hashrate</p>
+                      <p className="font-medium">{formatHashrate(order.hashrate)}</p>
+                    </div>
+                    <div>
+                      <p className="text-foreground/60">Best Share</p>
+                      <p className="font-medium">{formatDifficulty(order.best_share)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} address={address} />

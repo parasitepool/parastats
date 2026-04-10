@@ -251,6 +251,26 @@ export const RefineryIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => 
   </svg>
 );
 
+export const PickaxeIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    viewBox="0 0 20 20"
+    fill="currentColor"
+  >
+    <g transform="translate(10 10)">
+      <g transform="rotate(-35)">
+        <rect x="-0.75" y="-7" width="1.5" height="12" rx="0.75" />
+        <path d="M-5.5-8c1.5-1.5 3.8-1.5 5.5-1.5S4-9.5 5.5-8L0-6.5z" />
+      </g>
+      <g transform="rotate(35)">
+        <rect x="-0.75" y="-7" width="1.5" height="12" rx="0.75" />
+        <path d="M-5.5-8c1.5-1.5 3.8-1.5 5.5-1.5S4-9.5 5.5-8L0-6.5z" />
+      </g>
+    </g>
+  </svg>
+);
+
 export const CopyIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -262,4 +282,3 @@ export const CopyIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
     <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z" />
   </svg>
 );
-

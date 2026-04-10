@@ -10,7 +10,7 @@ import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
 import SortableTable from '../../components/SortableTable';
-import { formatDifficulty, formatHashrate, formatRelativeTime } from '@/app/utils/formatters';
+import { formatDifficulty, formatHashrate } from '@/app/utils/formatters';
 import { parseHashrate } from '@/app/utils/formatters';
 import LightningBalance from '@/app/components/LightningBalance';
 import StratumInfo from '@/app/components/StratumInfo';
@@ -18,11 +18,43 @@ import AnimatedCounter from '@/app/components/AnimatedCounter';
 import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
+import { TrendingUpIcon } from '@/app/components/icons';
 // import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
 import BadgeDisplay from '@/app/components/badges/BadgeDisplay';
 import Refinery from '@/app/components/Refinery';
+import UserMiners from '@/app/components/UserMiners';
 
 const CURRENT_ROUND_BLOCK = Number.MAX_SAFE_INTEGER;
+const ACCOUNT_COLLAPSE_STORAGE_PREFIX = 'parasite_account_collapse_';
+
+interface CollapsedSections {
+  stratumLightning: boolean;
+  refinery: boolean;
+  hashrateChart: boolean;
+  miners: boolean;
+}
+
+const defaultCollapsedSections: CollapsedSections = {
+  stratumLightning: false,
+  refinery: false,
+  hashrateChart: false,
+  miners: false,
+};
+
+function parseCollapsedSections(value: string | null): CollapsedSections {
+  if (!value) {
+    return defaultCollapsedSections;
+  }
+
+  const parsedState = JSON.parse(value) as Partial<CollapsedSections>;
+
+  return {
+    stratumLightning: Boolean(parsedState.stratumLightning),
+    refinery: Boolean(parsedState.refinery),
+    hashrateChart: Boolean(parsedState.hashrateChart),
+    miners: Boolean(parsedState.miners),
+  };
+}
 
 export default function UserDashboard() {
   const params = useParams();
@@ -41,6 +73,8 @@ export default function UserDashboard() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [userBlockDiffs, setUserBlockDiffs] = useState<UserBlockDiffEntry[]>([]);
   const [roundsData, setRoundsData] = useState<UserRoundsResponse | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<CollapsedSections>(defaultCollapsedSections);
+  const [loadedCollapsePreferencesUserId, setLoadedCollapsePreferencesUserId] = useState<string | null>(null);
 
   const {
     address,
@@ -55,6 +89,34 @@ export default function UserDashboard() {
     const isValid = isValidBitcoinAddress(userId.trim());
     setIsValidAddress(isValid);
   }, [userId]);
+
+  useEffect(() => {
+    try {
+      setCollapsedSections(
+        parseCollapsedSections(window.localStorage.getItem(`${ACCOUNT_COLLAPSE_STORAGE_PREFIX}${userId}`)),
+      );
+    } catch (error) {
+      console.error('Error loading account collapse state:', error);
+      setCollapsedSections(defaultCollapsedSections);
+    } finally {
+      setLoadedCollapsePreferencesUserId(userId);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    if (loadedCollapsePreferencesUserId !== userId) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        `${ACCOUNT_COLLAPSE_STORAGE_PREFIX}${userId}`,
+        JSON.stringify(collapsedSections),
+      );
+    } catch (error) {
+      console.error('Error saving account collapse state:', error);
+    }
+  }, [collapsedSections, loadedCollapsePreferencesUserId, userId]);
 
   // Fetch user data and hashrate on mount and every 10 seconds (only if valid address)
   useEffect(() => {
@@ -280,6 +342,12 @@ export default function UserDashboard() {
 
   const isPrivate = accountData?.metadata?.is_private ?? false;
   const isOwnProfile = isConnected && address === userId;
+  const toggleCollapsedSection = (section: keyof CollapsedSections) => {
+    setCollapsedSections(value => ({
+      ...value,
+      [section]: !value[section],
+    }));
+  };
 
   const handleToggleVisibility = async () => {
     if (!isOwnProfile) return;
@@ -588,8 +656,18 @@ export default function UserDashboard() {
               {!isInitialized || !hasInitiallyLoaded || isLoadingAccountData ? (
                   // Loading state - Show shimmer components while data is loading
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <StratumInfo userId={userId} isLoading={true} />
-                    <LightningBalance userId={userId} loading={true} />
+                    <StratumInfo
+                      userId={userId}
+                      isLoading={true}
+                      collapsed={collapsedSections.stratumLightning}
+                      onToggle={() => toggleCollapsedSection('stratumLightning')}
+                    />
+                    <LightningBalance
+                      userId={userId}
+                      loading={true}
+                      collapsed={collapsedSections.stratumLightning}
+                      onToggle={() => toggleCollapsedSection('stratumLightning')}
+                    />
                   </div>
               ) : !isLightningAuthenticated || !accountData || !accountData.ln_address ? (
                   // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
@@ -613,8 +691,18 @@ export default function UserDashboard() {
                   // Authenticated with account data and lightning address - Show Lightning and Stratum components
                   <div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <StratumInfo userId={userId} isLoading={false} />
-                      <LightningBalance userId={userId} loading={false} />
+                      <StratumInfo
+                        userId={userId}
+                        isLoading={false}
+                        collapsed={collapsedSections.stratumLightning}
+                        onToggle={() => toggleCollapsedSection('stratumLightning')}
+                      />
+                      <LightningBalance
+                        userId={userId}
+                        loading={false}
+                        collapsed={collapsedSections.stratumLightning}
+                        onToggle={() => toggleCollapsedSection('stratumLightning')}
+                      />
                     </div>
                     {/* <div className="grid grid-cols-1 gap-4 mt-4">
                       <DispenserClaim userId={userId} />
@@ -624,11 +712,20 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {isOwnProfile && <Refinery address={userId} />}
+          {isOwnProfile && (
+            <Refinery
+              address={userId}
+              collapsed={collapsedSections.refinery}
+              onToggle={() => toggleCollapsedSection('refinery')}
+            />
+          )}
 
           <div className="w-full mb-6">
             <HashrateChart
                 title="Hashrate & Difficulty"
+                icon={<TrendingUpIcon />}
+                collapsed={collapsedSections.hashrateChart}
+                onToggle={() => toggleCollapsedSection('hashrateChart')}
                 data={historicalData ? {
                   timestamps: historicalData.map(d => {
                     const date = new Date(d.timestamp);
@@ -775,96 +872,12 @@ export default function UserDashboard() {
 
           {/* Workers Table/Cards - show shimmer when loading or actual data when loaded */}
           {(!hasInitiallyLoaded || (userData && userData.workerData && userData.workerData.length > 0)) && (
-              <div className="w-full bg-background pb-6 shadow-md">
-                <h2 className="text-xl font-semibold mb-4">
-                  {!hasInitiallyLoaded ? 'Miners' : `Miners(${userData?.workerData?.length || 0})`}
-                </h2>
-
-                {/* Desktop Table - Hidden on mobile */}
-                <div className="hidden md:block">
-                  {!hasInitiallyLoaded ? (
-                      <div className="space-y-3">
-                        <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                        <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                        <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                      </div>
-                  ) : userData?.workerData ? (
-                      <SortableTable
-                          data={userData.workerData}
-                          columns={[
-                            {
-                              key: 'name',
-                              header: 'Name',
-                              render: (value) => (
-                                  // <Link href={`/worker/${worker.id}`} className="text-foreground font-bold hover:underline">
-                                  <Link href='#' className="text-foreground font-bold hover:underline">
-                                    {value as string}
-                                  </Link>
-                              )
-                            },
-                            {
-                              key: 'hashrate',
-                              header: 'Hashrate',
-                              render: (value) => formatHashrate(parseHashrate(value as string))
-                            },
-                            {
-                              key: 'bestDifficulty',
-                              header: 'Best Difficulty',
-                              render: (value) => formatDifficulty(value as string)
-                            },
-                            {
-                              key: 'lastSubmission',
-                              header: 'Last Submission',
-                              render: (value) => formatRelativeTime(parseInt(value as string))
-                            }
-                          ]}
-                          defaultSortColumn="hashrate"
-                          defaultSortDirection="desc"
-                      />
-                  ) : null}
-                </div>
-
-                {/* Mobile Cards - Visible only on mobile */}
-                <div className="md:hidden space-y-4">
-                  {!hasInitiallyLoaded ? (
-                      <>
-                        <div className="bg-background border border-border p-4 shadow-sm space-y-3">
-                          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                        </div>
-                        <div className="bg-background border border-border p-4 shadow-sm space-y-3">
-                          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse"></div>
-                        </div>
-                      </>
-                  ) : userData?.workerData ? (
-                      userData.workerData.map((worker) => (
-                          <div key={worker.id} className="bg-background border border-border p-4 shadow-sm">
-                            {/* <Link href={`/worker/${worker.id}`} className="text-foreground font-bold text-lg block mb-2 hover:underline"> */}
-                            <Link href='#' className="text-foreground font-bold text-lg block mb-2 hover:underline">
-                              {worker.name}
-                            </Link>
-                            <div className="grid grid-cols-2 gap-2 text-sm">
-                              <div>
-                                <p className="text-gray-500">Hashrate</p>
-                                <p className="font-medium">{formatHashrate(parseHashrate(worker.hashrate))}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-500">Best Difficulty</p>
-                                <p className="font-medium">{formatDifficulty(worker.bestDifficulty)}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-500">Last Submission</p>
-                                <p className="font-medium">{formatRelativeTime(parseInt(worker.lastSubmission))}</p>
-                              </div>
-                            </div>
-                          </div>
-                      ))
-                  ) : null}
-                </div>
-              </div>
+              <UserMiners
+                workers={userData?.workerData}
+                isLoading={!hasInitiallyLoaded}
+                collapsed={collapsedSections.miners}
+                onToggle={() => toggleCollapsedSection('miners')}
+              />
           )}
 
         </main>
