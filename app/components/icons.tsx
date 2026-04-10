@@ -240,6 +240,17 @@ export const StratumIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
   </svg>
 );
 
+export const RefineryIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    viewBox="0 0 20 20"
+    fill="currentColor"
+  >
+    <path d="M3 17V11h2V3h3v8h4V5h3v6h2v6H3z" />
+  </svg>
+);
+
 export const CopyIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"

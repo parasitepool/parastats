@@ -4,12 +4,20 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import SortableTable from './SortableTable';
 import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/formatters';
 import CreateOrderModal from './modals/CreateOrderModal';
+import { RefineryIcon } from '@/app/components/icons';
 
 interface OrderDetail {
   id: number;
   status: string;
   target_work: number | null;
+  upstream: { hash_days: number } | null;
   stats: { hashrate_1m: number; hash_days: number; best_share: number };
+}
+
+interface RefineryStatus {
+  orders: OrderDetail[];
+  stats: { hashrate_1m: number };
+  used: number;
 }
 
 interface OrderRow {
@@ -22,7 +30,8 @@ interface OrderRow {
 }
 
 function statusColor(status: string): string {
-  if (status === 'active' || status === 'fulfilled') return 'text-green-500';
+  if (status === 'active') return 'text-green-500';
+  if (status === 'fulfilled') return 'text-blue-500';
   if (status === 'pending') return 'text-yellow-500';
   if (status === 'cancelled' || status === 'disconnected' || status === 'expired') return 'text-red-500';
   if (status === 'paid_late') return 'text-orange-500';
@@ -61,45 +70,31 @@ const columns = [
   },
 ];
 
-export default function Orders({ address }: { address: string }) {
-  const [orders, setOrders] = useState<OrderDetail[]>([]);
+export default function Refinery({ address }: { address: string }) {
+  const [status, setStatus] = useState<RefineryStatus | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
-    const fetchOrders = async () => {
+    const fetchStatus = async () => {
       try {
-        const url = new URL('/api/router/orders', window.location.origin);
+        const url = new URL('/api/router/status', window.location.origin);
         url.searchParams.set('address', address);
-        const idsRes = await fetch(url);
-        if (!idsRes.ok) {
-          if (mounted) setOrders([]);
+        const res = await fetch(url);
+        if (!res.ok) {
+          if (mounted) setStatus(null);
           return;
         }
-        const ids: number[] = await idsRes.json();
-        if (ids.length === 0) {
-          if (mounted) setOrders([]);
-          return;
-        }
-        const results = await Promise.allSettled(
-          ids.map(id => fetch(`/api/router/order/${id}`).then(r => {
-            if (!r.ok) throw new Error(`${r.status}`);
-            return r.json() as Promise<OrderDetail>;
-          }))
-        );
-        if (!mounted) return;
-        const fulfilled = results
-          .filter((r): r is PromiseFulfilledResult<OrderDetail> => r.status === 'fulfilled')
-          .map(r => r.value);
-        setOrders(fulfilled);
+        const data: RefineryStatus = await res.json();
+        if (mounted) setStatus(data);
       } catch {
-        if (mounted) setOrders([]);
+        if (mounted) setStatus(null);
       }
     };
 
-    fetchOrders();
-    const intervalId = setInterval(fetchOrders, 30000);
+    fetchStatus();
+    const intervalId = setInterval(fetchStatus, 30000);
 
     return () => {
       mounted = false;
@@ -107,30 +102,49 @@ export default function Orders({ address }: { address: string }) {
     };
   }, [address]);
 
-  const rows = useMemo<OrderRow[]>(() =>
-    orders.map(o => ({
+  const capacity = status?.stats.hashrate_1m ?? 0;
+  const used = status?.used ?? 0;
+
+  const rows = useMemo<OrderRow[]>(() => {
+    if (!status) return [];
+    return status.orders.map(o => ({
       id: o.id,
       status: o.status,
       requested: o.target_work,
       hashrate: o.stats.hashrate_1m,
       best_share: o.stats.best_share,
-      delivered: o.stats.hash_days,
-    })),
-    [orders]
-  );
+      delivered: o.upstream?.hash_days ?? 0,
+    }));
+  }, [status]);
 
   const closeModal = useCallback(() => setIsModalOpen(false), []);
 
   return (
     <div className="w-full mt-6 mb-6 bg-background border border-border p-4 shadow-sm">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Orders ({rows.length})</h2>
+        <div className="flex items-center">
+          <div className="mr-2 text-accent-3">
+            <RefineryIcon />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold">Refinery</h2>
+        </div>
         <button
           onClick={() => setIsModalOpen(true)}
           className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80"
         >
           Create Order
         </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="bg-secondary border border-border p-3">
+          <p className="text-sm text-foreground/60">Capacity</p>
+          <p className="text-lg font-semibold">{formatHashrate(capacity)}</p>
+        </div>
+        <div className="bg-secondary border border-border p-3">
+          <p className="text-sm text-foreground/60">Used</p>
+          <p className="text-lg font-semibold">{formatHashrate(used)}</p>
+        </div>
       </div>
 
       {rows.length > 0 && (
