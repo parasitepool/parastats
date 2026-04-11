@@ -12,7 +12,7 @@ interface OrderDetail {
   id: number;
   status: string;
   target_work: number | null;
-  upstream: { hash_days: number } | null;
+  upstream: { hash_days: number; best_share: number } | null;
   stats: { hashrate_1m: number; hash_days: number; best_share: number };
 }
 
@@ -133,7 +133,7 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
       status: o.status,
       requested: o.target_work,
       hashrate: o.stats.hashrate_1m,
-      best_share: o.stats.best_share,
+      best_share: o.upstream?.best_share ?? o.stats.best_share,
       delivered: o.upstream?.hash_days ?? 0,
     }));
   }, [status]);
