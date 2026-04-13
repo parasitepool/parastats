@@ -19,7 +19,7 @@ import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
 import { TrendingUpIcon } from '@/app/components/icons';
-// import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
+import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
 import BadgeDisplay from '@/app/components/badges/BadgeDisplay';
 import Refinery from '@/app/components/Refinery';
 import UserMiners from '@/app/components/UserMiners';
@@ -704,9 +704,9 @@ export default function UserDashboard() {
                         onToggle={() => toggleCollapsedSection('stratumLightning')}
                       />
                     </div>
-                    {/* <div className="grid grid-cols-1 gap-4 mt-4">
+                    {<div className="grid grid-cols-1 gap-4 mt-4">
                       <DispenserClaim userId={userId} />
-                    </div> */}
+                    </div>}
                   </div>
               )}
             </div>
