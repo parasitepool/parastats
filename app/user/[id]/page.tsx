@@ -18,11 +18,13 @@ import AnimatedCounter from '@/app/components/AnimatedCounter';
 import { useWallet } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
-import { TrendingUpIcon } from '@/app/components/icons';
+import { BookmarkIcon, TrendingUpIcon } from '@/app/components/icons';
 import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
 import BadgeDisplay from '@/app/components/badges/BadgeDisplay';
 import Refinery from '@/app/components/Refinery';
 import UserMiners from '@/app/components/UserMiners';
+import CardHeader from '@/app/components/CardHeader';
+import { getCollapsibleContainerClassName, shouldToggleCollapse } from '@/app/components/collapsible';
 
 const CURRENT_ROUND_BLOCK = Number.MAX_SAFE_INTEGER;
 const ACCOUNT_COLLAPSE_STORAGE_PREFIX = 'parasite_account_collapse_';
@@ -31,6 +33,7 @@ interface CollapsedSections {
   stratumLightning: boolean;
   refinery: boolean;
   hashrateChart: boolean;
+  rounds: boolean;
   miners: boolean;
 }
 
@@ -38,6 +41,7 @@ const defaultCollapsedSections: CollapsedSections = {
   stratumLightning: false,
   refinery: false,
   hashrateChart: false,
+  rounds: false,
   miners: false,
 };
 
@@ -52,6 +56,7 @@ function parseCollapsedSections(value: string | null): CollapsedSections {
     stratumLightning: Boolean(parsedState.stratumLightning),
     refinery: Boolean(parsedState.refinery),
     hashrateChart: Boolean(parsedState.hashrateChart),
+    rounds: Boolean(parsedState.rounds),
     miners: Boolean(parsedState.miners),
   };
 }
@@ -765,102 +770,6 @@ export default function UserDashboard() {
             />
           </div>
 
-          {/* Round Stats Section */}
-          {(!hasInitiallyLoaded || allRounds.length > 0) && (
-              <div className="w-full">
-                <h2 className="text-xl font-semibold mb-4">Round Stats</h2>
-
-                {/* Desktop Table */}
-                <div className="hidden md:block">
-                  <SortableTable
-                      data={allRounds}
-                      columns={[
-                        {
-                          key: 'block_height',
-                          header: 'Block',
-                          render: (value) =>
-                              value === CURRENT_ROUND_BLOCK ? (
-                                  <span className="text-accent-3 font-bold">Current</span>
-                              ) : (
-                                  <a
-                                      href={`https://mempool.space/block/${value}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-accent-3 hover:underline"
-                                  >
-                                    {String(value)}
-                                  </a>
-                              ),
-                        },
-                        {
-                          key: 'rank',
-                          header: 'Diff Rank',
-                          render: (_, item) => `${item.rank} / ${item.total_participants}`,
-                        },
-                        {
-                          key: 'top_diff',
-                          header: 'Top Diff',
-                          render: (value) => formatDifficulty(value as number),
-                        },
-                        {
-                          key: 'blocks_rank',
-                          header: 'Blocks Rank',
-                          render: (_, item) => `${item.blocks_rank} / ${item.total_participants}`,
-                        },
-                        {
-                          key: 'blocks_participated',
-                          header: 'Blocks',
-                          render: (value) => Number(value).toLocaleString(),
-                        },
-                      ]}
-                      rowClassName={(item) => item.is_winner ? 'bg-white/5 font-bold' : ''}
-                      defaultSortColumn="block_height"
-                      defaultSortDirection="desc"
-                  />
-                </div>
-
-                {/* Mobile Cards */}
-                <div className="md:hidden space-y-4">
-                  {allRounds.map((round) => (
-                      <div key={round.block_height} className={`bg-background border p-4 shadow-sm ${round.is_winner ? 'border-white/20 bg-white/5 font-bold' : 'border-border'}`}>
-                        <div className="flex items-center justify-between mb-2">
-                          {round.block_height === CURRENT_ROUND_BLOCK ? (
-                              <span className="text-accent-3 font-bold text-lg">Current Round</span>
-                          ) : (
-                              <a
-                                  href={`https://mempool.space/block/${round.block_height}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-accent-3 font-bold text-lg hover:underline"
-                              >
-                                Block {round.block_height}
-                              </a>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div>
-                            <p className="text-foreground/60">Diff Rank</p>
-                            <p className="font-medium">{round.rank} / {round.total_participants}</p>
-                          </div>
-                          <div>
-                            <p className="text-foreground/60">Top Diff</p>
-                            <p className="font-medium">{formatDifficulty(round.top_diff)}</p>
-                          </div>
-                          <div>
-                            <p className="text-foreground/60">Blocks Rank</p>
-                            <p className="font-medium">{round.blocks_rank} / {round.total_participants}</p>
-                          </div>
-                          <div>
-                            <p className="text-foreground/60">Blocks</p>
-                            <p className="font-medium">{round.blocks_participated.toLocaleString()}</p>
-                          </div>
-                        </div>
-                      </div>
-                  ))}
-                </div>
-              </div>
-          )}
-
           {/* Mining Projections - Uncomment when UserMiningStats is implemented */}
           {/* <UserMiningStats
         userHashrate={userData.displayHashrate}
@@ -876,6 +785,122 @@ export default function UserDashboard() {
                 collapsed={collapsedSections.miners}
                 onToggle={() => toggleCollapsedSection('miners')}
               />
+          )}
+
+          {/* Rounds Section */}
+          {(!hasInitiallyLoaded || allRounds.length > 0) && (
+              <div
+                className={getCollapsibleContainerClassName(
+                  'w-full bg-background border border-border p-4 sm:p-6 shadow-md',
+                  collapsedSections.rounds,
+                  true,
+                )}
+                onClick={(event) => {
+                  if (shouldToggleCollapse(event, '[data-collapse-ignore]')) {
+                    toggleCollapsedSection('rounds');
+                  }
+                }}
+              >
+                <CardHeader
+                  title="Rounds"
+                  icon={<BookmarkIcon />}
+                  className={collapsedSections.rounds ? '' : 'mb-4 sm:mb-6'}
+                  titleClassName="text-xl sm:text-2xl font-semibold"
+                />
+
+                {!collapsedSections.rounds && (
+                  <>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block" data-collapse-ignore>
+                      <SortableTable
+                          data={allRounds}
+                          columns={[
+                            {
+                              key: 'block_height',
+                              header: 'Block',
+                              render: (value) =>
+                                  value === CURRENT_ROUND_BLOCK ? (
+                                      <span className="text-accent-3 font-bold">Current</span>
+                                  ) : (
+                                      <a
+                                          href={`https://mempool.space/block/${value}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-accent-3 hover:underline"
+                                      >
+                                        {String(value)}
+                                      </a>
+                                  ),
+                            },
+                            {
+                              key: 'rank',
+                              header: 'Diff Rank',
+                              render: (_, item) => `${item.rank} / ${item.total_participants}`,
+                            },
+                            {
+                              key: 'top_diff',
+                              header: 'Top Diff',
+                              render: (value) => formatDifficulty(value as number),
+                            },
+                            {
+                              key: 'blocks_rank',
+                              header: 'Blocks Rank',
+                              render: (_, item) => `${item.blocks_rank} / ${item.total_participants}`,
+                            },
+                            {
+                              key: 'blocks_participated',
+                              header: 'Blocks',
+                              render: (value) => Number(value).toLocaleString(),
+                            },
+                          ]}
+                          rowClassName={(item) => item.is_winner ? 'bg-white/5 font-bold' : ''}
+                          defaultSortColumn="block_height"
+                          defaultSortDirection="desc"
+                      />
+                    </div>
+
+                    {/* Mobile Cards */}
+                    <div className="md:hidden space-y-4">
+                      {allRounds.map((round) => (
+                          <div key={round.block_height} className={`bg-background border p-4 shadow-sm ${round.is_winner ? 'border-white/20 bg-white/5 font-bold' : 'border-border'}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              {round.block_height === CURRENT_ROUND_BLOCK ? (
+                                  <span className="text-accent-3 font-bold text-lg">Current Round</span>
+                              ) : (
+                                  <a
+                                      href={`https://mempool.space/block/${round.block_height}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-accent-3 font-bold text-lg hover:underline"
+                                  >
+                                    Block {round.block_height}
+                                  </a>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <p className="text-foreground/60">Diff Rank</p>
+                                <p className="font-medium">{round.rank} / {round.total_participants}</p>
+                              </div>
+                              <div>
+                                <p className="text-foreground/60">Top Diff</p>
+                                <p className="font-medium">{formatDifficulty(round.top_diff)}</p>
+                              </div>
+                              <div>
+                                <p className="text-foreground/60">Blocks Rank</p>
+                                <p className="font-medium">{round.blocks_rank} / {round.total_participants}</p>
+                              </div>
+                              <div>
+                                <p className="text-foreground/60">Blocks</p>
+                                <p className="font-medium">{round.blocks_participated.toLocaleString()}</p>
+                              </div>
+                            </div>
+                          </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
           )}
 
         </main>

@@ -166,51 +166,47 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
             </div>
           </div>
 
-          {rows.length > 0 && (
-            <>
-              <h3 className="text-sm font-medium text-accent-2 mb-2">Your Orders</h3>
+          <h3 className="text-sm font-medium text-accent-2 mb-2">Your Orders</h3>
 
-              <div className="hidden md:block" data-collapse-ignore>
-                <SortableTable
-                  data={rows}
-                  columns={columns}
-                  defaultSortColumn="id"
-                  defaultSortDirection="desc"
-                />
-              </div>
+          <div className="hidden md:block" data-collapse-ignore>
+            <SortableTable
+              data={rows}
+              columns={columns}
+              defaultSortColumn="id"
+              defaultSortDirection="desc"
+            />
+          </div>
 
-              <div className="md:hidden space-y-4">
-                {rows.map(order => (
-                  <div key={order.id} className="bg-background border border-border p-4 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-accent-3 font-bold text-lg">
-                        Order {order.id}
-                      </span>
-                      <span className={`font-medium ${statusColor(order.status)}`}>{order.status}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div>
-                        <p className="text-foreground/60">Requested</p>
-                        <p className="font-medium">{order.requested != null ? formatHashDays(order.requested) : 'Unlimited'}</p>
-                      </div>
-                      <div>
-                        <p className="text-foreground/60">Delivered</p>
-                        <p className="font-medium">{formatHashDays(order.delivered)}</p>
-                      </div>
-                      <div>
-                        <p className="text-foreground/60">Hashrate</p>
-                        <p className="font-medium">{formatHashrate(order.hashrate)}</p>
-                      </div>
-                      <div>
-                        <p className="text-foreground/60">Best Share</p>
-                        <p className="font-medium">{formatDifficulty(order.best_share)}</p>
-                      </div>
-                    </div>
+          <div className="md:hidden space-y-4">
+            {rows.map(order => (
+              <div key={order.id} className="bg-background border border-border p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-accent-3 font-bold text-lg">
+                    Order {order.id}
+                  </span>
+                  <span className={`font-medium ${statusColor(order.status)}`}>{order.status}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-foreground/60">Requested</p>
+                    <p className="font-medium">{order.requested != null ? formatHashDays(order.requested) : 'Unlimited'}</p>
                   </div>
-                ))}
+                  <div>
+                    <p className="text-foreground/60">Delivered</p>
+                    <p className="font-medium">{formatHashDays(order.delivered)}</p>
+                  </div>
+                  <div>
+                    <p className="text-foreground/60">Hashrate</p>
+                    <p className="font-medium">{formatHashrate(order.hashrate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-foreground/60">Best Share</p>
+                    <p className="font-medium">{formatDifficulty(order.best_share)}</p>
+                  </div>
+                </div>
               </div>
-            </>
-          )}
+            ))}
+          </div>
         </>
       )}
 
