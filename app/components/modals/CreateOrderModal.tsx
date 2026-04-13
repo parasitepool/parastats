@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { sendBtcTransaction, BitcoinNetworkType } from '@sats-connect/core';
 import { useWallet } from '@/app/hooks/useWallet';
+import type { OrderResponse } from '@/app/api/router/types';
 
 interface CreateOrderModalProps {
   isOpen: boolean;
@@ -45,8 +46,13 @@ export default function CreateOrderModal({ isOpen, onClose, address }: CreateOrd
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          target: { endpoint: 'parasite.wtf:42069', username: `${address}.order`, password: null },
-          target_work: 1e15,
+          upstream_target: {
+            endpoint: 'parasite.wtf:42069',
+            username: `${address}.order`,
+            password: null,
+          },
+          hashdays: 1e15,
+          price: 45000,
         }),
       });
 
@@ -55,13 +61,13 @@ export default function CreateOrderModal({ isOpen, onClose, address }: CreateOrd
         throw new Error(text || `Failed to create order (${res.status})`);
       }
 
-      const data: { address: string; amount: number } = await res.json();
+      const data: OrderResponse = await res.json();
 
       await sendBtcTransaction({
         payload: {
           network: { type: BitcoinNetworkType.Mainnet },
           senderAddress: walletAddress!,
-          recipients: [{ address: data.address, amountSats: BigInt(data.amount) }],
+          recipients: [{ address: data.payment_address, amountSats: BigInt(data.payment_amount) }],
         },
         onFinish: () => window.location.reload(),
         onCancel: () => onClose(),

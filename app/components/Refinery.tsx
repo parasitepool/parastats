@@ -7,20 +7,7 @@ import SortableTable from './SortableTable';
 import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/formatters';
 import CreateOrderModal from './modals/CreateOrderModal';
 import { RefineryIcon } from '@/app/components/icons';
-
-interface OrderDetail {
-  id: number;
-  status: string;
-  target_work: number | null;
-  upstream: { hash_days: number; best_share: number } | null;
-  stats: { hashrate_1m: number; hash_days: number; best_share: number };
-}
-
-interface RefineryStatus {
-  orders: OrderDetail[];
-  stats: { hashrate_1m: number };
-  used: number;
-}
+import type { OrderDetail, RouterStatus } from '@/app/api/router/types';
 
 interface OrderRow {
   id: number;
@@ -79,7 +66,8 @@ interface RefineryProps {
 }
 
 export default function Refinery({ address, collapsed = false, onToggle }: RefineryProps) {
-  const [status, setStatus] = useState<RefineryStatus | null>(null);
+  const [status, setStatus] = useState<RouterStatus | null>(null);
+  const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const containerClassName = getCollapsibleContainerClassName(
     'w-full mt-6 mb-6 bg-background border border-border p-4 sm:p-6 shadow-sm',
@@ -99,19 +87,18 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
     let mounted = true;
 
     const fetchStatus = async () => {
-      try {
-        const url = new URL('/api/router/status', window.location.origin);
-        url.searchParams.set('address', address);
-        const res = await fetch(url);
-        if (!res.ok) {
-          if (mounted) setStatus(null);
-          return;
-        }
-        const data: RefineryStatus = await res.json();
-        if (mounted) setStatus(data);
-      } catch {
-        if (mounted) setStatus(null);
-      }
+      const ordersUrl = new URL('/api/router/orders', window.location.origin);
+      ordersUrl.searchParams.set('address', address);
+
+      const [statusRes, ordersRes] = await Promise.all([
+        fetch('/api/router/status').catch(() => null),
+        fetch(ordersUrl).catch(() => null),
+      ]);
+
+      if (!mounted) return;
+
+      setStatus(statusRes?.ok ? await statusRes.json() : null);
+      setOrders(ordersRes?.ok ? await ordersRes.json() : []);
     };
 
     fetchStatus();
@@ -123,20 +110,19 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
     };
   }, [address]);
 
-  const capacity = status?.stats.hashrate_1m ?? 0;
-  const used = status?.used ?? 0;
+  const capacity = status?.downstream.stats.hashrate_1m ?? 0;
+  const used = status?.upstream.stats.hashrate_1m ?? 0;
 
-  const rows = useMemo<OrderRow[]>(() => {
-    if (!status) return [];
-    return status.orders.map(o => ({
+  const rows = useMemo<OrderRow[]>(() =>
+    orders.map(o => ({
       id: o.id,
       status: o.status,
-      requested: o.target_work,
-      hashrate: o.stats.hashrate_1m,
-      best_share: o.upstream?.best_share ?? o.stats.best_share,
-      delivered: o.upstream?.hash_days ?? 0,
-    }));
-  }, [status]);
+      requested: o.hashdays,
+      hashrate: o.downstream.hashrate_1m,
+      best_share: o.upstream?.stats.best_share ?? o.downstream.best_share ?? 0,
+      delivered: o.upstream?.stats.hash_days ?? 0,
+    })),
+  [orders]);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
 
   return (
