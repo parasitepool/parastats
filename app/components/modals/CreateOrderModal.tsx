@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { sendBtcTransaction, BitcoinNetworkType } from '@sats-connect/core';
+import { request, RpcErrorCode } from '@sats-connect/core';
 import { useWallet } from '@/app/hooks/useWallet';
 import type { OrderResponse } from '@/app/api/router/types';
 
 interface CreateOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onCreated?: () => void | Promise<void>;
   address: string;
 }
 
-export default function CreateOrderModal({ isOpen, onClose, address }: CreateOrderModalProps) {
+export default function CreateOrderModal({ isOpen, onClose, onCreated, address }: CreateOrderModalProps) {
   const { address: walletAddress, isConnected } = useWallet();
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +49,7 @@ export default function CreateOrderModal({ isOpen, onClose, address }: CreateOrd
         body: JSON.stringify({
           upstream_target: {
             endpoint: 'parasite.wtf:42069',
-            username: `${address}.order`,
+            username: `${address}.refinery`,
             password: null,
           },
           hashdays: 1e15,
@@ -63,21 +64,22 @@ export default function CreateOrderModal({ isOpen, onClose, address }: CreateOrd
 
       const data: OrderResponse = await res.json();
 
-      await sendBtcTransaction({
-        payload: {
-          network: { type: BitcoinNetworkType.Mainnet },
-          senderAddress: walletAddress!,
-          recipients: [{ address: data.payment_address, amountSats: BigInt(data.payment_amount) }],
-        },
-        onFinish: () => window.location.reload(),
-        onCancel: () => onClose(),
+      const response = await request('sendTransfer', {
+        recipients: [{ address: data.payment_address, amount: data.payment_amount }],
       });
+
+      if (response.status !== 'success') {
+        if (response.error?.code === RpcErrorCode.USER_REJECTION) {
+          onClose();
+          return;
+        }
+        throw new Error(response.error?.message || 'Failed to send transaction');
+      }
+
+      onClose();
+      await onCreated?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (message.toLowerCase().includes('cancel')) {
-        onClose();
-        return;
-      }
       setError(message || 'Failed to create order');
     }
   };
@@ -104,7 +106,7 @@ export default function CreateOrderModal({ isOpen, onClose, address }: CreateOrd
           <div>
             <h3 className="text-sm font-medium text-accent-2 mb-2">Target</h3>
             <div className="bg-secondary p-3 border border-border">
-              <p className="text-foreground break-all">{address}.order</p>
+              <p className="text-foreground break-all">{address}.refinery</p>
             </div>
           </div>
           <div>

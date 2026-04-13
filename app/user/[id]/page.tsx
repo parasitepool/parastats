@@ -583,8 +583,8 @@ export default function UserDashboard() {
   // Show dashboard (works even without userData - will show shimmer or empty states)
   return (
       <>
-        <main className="flex min-h-screen flex-col items-start py-8">
-          <div className="w-full mb-2">
+        <main className="flex min-h-screen flex-col items-start py-8 gap-4">
+          <div className="w-full">
             <div className="flex items-center justify-between mb-4">
               <h1 className="text-2xl lg:text-3xl font-bold wrap-anywhere text-ellipsis line-clamp-1">
                 {userId}
@@ -704,9 +704,7 @@ export default function UserDashboard() {
                         onToggle={() => toggleCollapsedSection('stratumLightning')}
                       />
                     </div>
-                    {<div className="grid grid-cols-1 gap-4 mt-4">
-                      <DispenserClaim userId={userId} />
-                    </div>}
+                    <DispenserClaim userId={userId} className="mt-4" />
                   </div>
               )}
             </div>
@@ -720,7 +718,7 @@ export default function UserDashboard() {
             />
           )}
 
-          <div className="w-full mb-6">
+          <div className="w-full">
             <HashrateChart
                 title="Hashrate & Difficulty"
                 icon={<TrendingUpIcon />}
@@ -769,7 +767,7 @@ export default function UserDashboard() {
 
           {/* Round Stats Section */}
           {(!hasInitiallyLoaded || allRounds.length > 0) && (
-              <div className="w-full mb-6">
+              <div className="w-full">
                 <h2 className="text-xl font-semibold mb-4">Round Stats</h2>
 
                 {/* Desktop Table */}

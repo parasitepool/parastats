@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, type MouseEvent } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, type MouseEvent } from 'react';
 import CardHeader from './CardHeader';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from './collapsible';
 import SortableTable from './SortableTable';
@@ -69,8 +69,13 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
   const [status, setStatus] = useState<RouterStatus | null>(null);
   const [orders, setOrders] = useState<OrderDetail[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const containerClassName = getCollapsibleContainerClassName(
-    'w-full mt-6 mb-6 bg-background border border-border p-4 sm:p-6 shadow-sm',
+    'w-full bg-background border border-border p-4 sm:p-6 shadow-sm',
     collapsed,
     Boolean(onToggle),
   );
@@ -83,29 +88,34 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
     onToggle();
   };
 
-  useEffect(() => {
-    let mounted = true;
+  const fetchOrders = useCallback(async () => {
+    const ordersUrl = new URL('/api/router/orders', window.location.origin);
+    ordersUrl.searchParams.set('address', address);
+    const res = await fetch(ordersUrl, { cache: 'no-store' }).catch(() => null);
+    if (!mountedRef.current) return;
+    if (res?.ok) setOrders(await res.json());
+  }, [address]);
 
-    const fetchStatus = async () => {
+  useEffect(() => {
+    const fetchAll = async () => {
       const ordersUrl = new URL('/api/router/orders', window.location.origin);
       ordersUrl.searchParams.set('address', address);
 
       const [statusRes, ordersRes] = await Promise.all([
         fetch('/api/router/status').catch(() => null),
-        fetch(ordersUrl).catch(() => null),
+        fetch(ordersUrl, { cache: 'no-store' }).catch(() => null),
       ]);
 
-      if (!mounted) return;
+      if (!mountedRef.current) return;
 
-      setStatus(statusRes?.ok ? await statusRes.json() : null);
-      setOrders(ordersRes?.ok ? await ordersRes.json() : []);
+      if (statusRes?.ok) setStatus(await statusRes.json());
+      if (ordersRes?.ok) setOrders(await ordersRes.json());
     };
 
-    fetchStatus();
-    const intervalId = setInterval(fetchStatus, 30000);
+    fetchAll();
+    const intervalId = setInterval(fetchAll, 30000);
 
     return () => {
-      mounted = false;
       clearInterval(intervalId);
     };
   }, [address]);
@@ -124,6 +134,8 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
     })),
   [orders]);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
+
+  if (!status) return null;
 
   return (
     <div className={containerClassName} onClick={handleClick}>
@@ -155,52 +167,54 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
           </div>
 
           {rows.length > 0 && (
-            <div className="hidden md:block" data-collapse-ignore>
-              <SortableTable
-                data={rows}
-                columns={columns}
-                defaultSortColumn="id"
-                defaultSortDirection="desc"
-              />
-            </div>
-          )}
+            <>
+              <h3 className="text-sm font-medium text-accent-2 mb-2">Your Orders</h3>
 
-          {rows.length > 0 && (
-            <div className="md:hidden space-y-4">
-              {rows.map(order => (
-                <div key={order.id} className="bg-background border border-border p-4 shadow-sm">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-accent-3 font-bold text-lg">
-                      Order {order.id}
-                    </span>
-                    <span className={`font-medium ${statusColor(order.status)}`}>{order.status}</span>
+              <div className="hidden md:block" data-collapse-ignore>
+                <SortableTable
+                  data={rows}
+                  columns={columns}
+                  defaultSortColumn="id"
+                  defaultSortDirection="desc"
+                />
+              </div>
+
+              <div className="md:hidden space-y-4">
+                {rows.map(order => (
+                  <div key={order.id} className="bg-background border border-border p-4 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-accent-3 font-bold text-lg">
+                        Order {order.id}
+                      </span>
+                      <span className={`font-medium ${statusColor(order.status)}`}>{order.status}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-foreground/60">Requested</p>
+                        <p className="font-medium">{order.requested != null ? formatHashDays(order.requested) : 'Unlimited'}</p>
+                      </div>
+                      <div>
+                        <p className="text-foreground/60">Delivered</p>
+                        <p className="font-medium">{formatHashDays(order.delivered)}</p>
+                      </div>
+                      <div>
+                        <p className="text-foreground/60">Hashrate</p>
+                        <p className="font-medium">{formatHashrate(order.hashrate)}</p>
+                      </div>
+                      <div>
+                        <p className="text-foreground/60">Best Share</p>
+                        <p className="font-medium">{formatDifficulty(order.best_share)}</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p className="text-foreground/60">Requested</p>
-                      <p className="font-medium">{order.requested != null ? formatHashDays(order.requested) : 'Unlimited'}</p>
-                    </div>
-                    <div>
-                      <p className="text-foreground/60">Delivered</p>
-                      <p className="font-medium">{formatHashDays(order.delivered)}</p>
-                    </div>
-                    <div>
-                      <p className="text-foreground/60">Hashrate</p>
-                      <p className="font-medium">{formatHashrate(order.hashrate)}</p>
-                    </div>
-                    <div>
-                      <p className="text-foreground/60">Best Share</p>
-                      <p className="font-medium">{formatDifficulty(order.best_share)}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </>
       )}
 
-      <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} address={address} />
+      <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} onCreated={fetchOrders} address={address} />
     </div>
   );
 }

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   const routerBase = process.env.ROUTER_API_URL;
   if (!routerBase) {
@@ -11,7 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const url = new URL(`${routerBase}/api/router/orders`);
     if (address) url.searchParams.set('address', address);
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-store' });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch {
