@@ -53,8 +53,8 @@ dependencies:
     specifier: 0.34.5
     version: 0.34.5
   undici:
-    specifier: ^7.24.5
-    version: 7.24.5
+    specifier: ^8.1.0
+    version: 8.1.0
 
 devDependencies:
   '@eslint/eslintrc':
@@ -4524,9 +4524,9 @@ packages:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
     dev: true
 
-  /undici@7.24.5:
-    resolution: {integrity: sha512-3IWdCpjgxp15CbJnsi/Y9TCDE7HWVN19j1hmzVhoAkY/+CJx449tVxT5wZc1Gwg8J+P0LWvzlBzxYRnHJ+1i7Q==}
-    engines: {node: '>=20.18.1'}
+  /undici@8.1.0:
+    resolution: {integrity: sha512-E9MkTS4xXLnRPYqxH2e6Hr2/49e7WFDKczKcCaFH4VaZs2iNvHMqeIkyUAD9vM8kujy9TjVrRlQ5KkdEJxB2pw==}
+    engines: {node: '>=22.19.0'}
     dev: false
 
   /unrs-resolver@1.11.1:
