@@ -77,11 +77,13 @@ export interface SessionDetail {
   stats: MiningStats;
 }
 
+export type OrderKind = 'sink' | { bucket: number };
+
 export interface OrderDetail {
   id: number;
   status: OrderStatus;
   upstream_target: UpstreamTarget;
-  hashdays: number | null;
+  kind: OrderKind;
   payment_address: string;
   payment_amount: number;
   upstream: UpstreamInfo | null;

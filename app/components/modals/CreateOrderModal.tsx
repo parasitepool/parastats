@@ -90,7 +90,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-background border border-foreground p-6 max-w-md w-full mx-4 shadow-xl"
+        className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-start mb-4">
@@ -104,7 +104,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
 
         <div className="space-y-4">
           <div>
-            <h3 className="text-sm font-medium text-accent-2 mb-2">Target</h3>
+            <h3 className="text-sm font-medium text-accent-2 mb-2">Workername</h3>
             <div className="bg-secondary p-3 border border-border">
               <p className="text-foreground break-all">{address}.refinery</p>
             </div>
@@ -119,6 +119,12 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
             <h3 className="text-sm font-medium text-accent-2 mb-2">Work</h3>
             <div className="bg-secondary p-3 border border-border">
               <p className="text-foreground">1 PHd</p>
+            </div>
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-accent-2 mb-2">Price</h3>
+            <div className="bg-secondary p-3 border border-border">
+              <p className="text-foreground">45,000 sats</p>
             </div>
           </div>
 

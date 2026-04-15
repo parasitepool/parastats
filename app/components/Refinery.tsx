@@ -127,7 +127,7 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
     orders.map(o => ({
       id: o.id,
       status: o.status,
-      requested: o.hashdays,
+      requested: o.kind === 'sink' ? null : o.kind.bucket,
       hashrate: o.downstream.hashrate_1m,
       best_share: o.upstream?.stats.best_share ?? o.downstream.best_share ?? 0,
       delivered: o.upstream?.stats.hash_days ?? 0,
@@ -165,8 +165,6 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
               <p className="text-lg font-semibold">{formatHashrate(used)}</p>
             </div>
           </div>
-
-          <h3 className="text-sm font-medium text-accent-2 mb-2">Your Orders</h3>
 
           <div className="hidden md:block" data-collapse-ignore>
             <SortableTable
