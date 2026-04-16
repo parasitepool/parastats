@@ -10,9 +10,10 @@ interface CreateOrderModalProps {
   onClose: () => void;
   onCreated?: () => void | Promise<void>;
   address: string;
+  hashPrice: number;
 }
 
-export default function CreateOrderModal({ isOpen, onClose, onCreated, address }: CreateOrderModalProps) {
+export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice }: CreateOrderModalProps) {
   const { address: walletAddress, isConnected } = useWallet();
   const [error, setError] = useState<string | null>(null);
 
@@ -53,7 +54,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
             password: null,
           },
           hashdays: 1e15,
-          price: 45000,
+          price: hashPrice,
         }),
       });
 
@@ -124,7 +125,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
           <div>
             <h3 className="text-sm font-medium text-accent-2 mb-2">Price</h3>
             <div className="bg-secondary p-3 border border-border">
-              <p className="text-foreground">45,000 sats</p>
+              <p className="text-foreground">{hashPrice.toLocaleString()} sats</p>
             </div>
           </div>
 

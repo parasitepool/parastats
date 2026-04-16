@@ -120,8 +120,8 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
     };
   }, [address]);
 
-  const capacity = status?.downstream.stats.hashrate_1m ?? 0;
-  const used = status?.upstream.stats.hashrate_1m ?? 0;
+  const capacity = status?.capacity_hashrate ?? 0;
+  const available = status?.available_hashrate ?? 0;
 
   const rows = useMemo<OrderRow[]>(() =>
     orders.map(o => ({
@@ -161,8 +161,8 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
               <p className="text-lg font-semibold">{formatHashrate(capacity)}</p>
             </div>
             <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
-              <p className="text-sm text-foreground/60">Used</p>
-              <p className="text-lg font-semibold">{formatHashrate(used)}</p>
+              <p className="text-sm text-foreground/60">Available</p>
+              <p className="text-lg font-semibold">{formatHashrate(available)}</p>
             </div>
           </div>
 
@@ -208,7 +208,7 @@ export default function Refinery({ address, collapsed = false, onToggle }: Refin
         </>
       )}
 
-      <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} onCreated={fetchOrders} address={address} />
+      <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} onCreated={fetchOrders} address={address} hashPrice={status.hash_price} />
     </div>
   );
 }

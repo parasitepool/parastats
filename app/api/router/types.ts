@@ -46,11 +46,6 @@ export interface UpstreamInfo {
   stats: MiningStats;
 }
 
-export interface RouterUpstreamInfo {
-  order_count: number;
-  stats: MiningStats;
-}
-
 export interface DownstreamInfo {
   user_count: number;
   worker_count: number;
@@ -62,7 +57,12 @@ export interface DownstreamInfo {
 
 export interface RouterStatus {
   uptime_secs: number;
-  upstream: RouterUpstreamInfo;
+  hash_price: number;
+  capacity_hashrate: number;
+  available_hashrate: number;
+  bucket_order_count: number;
+  sink_order_count: number;
+  upstream: MiningStats;
   downstream: DownstreamInfo;
 }
 
