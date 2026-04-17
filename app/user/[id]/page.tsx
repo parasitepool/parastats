@@ -347,6 +347,9 @@ export default function UserDashboard() {
 
   const isPrivate = accountData?.metadata?.is_private ?? false;
   const isOwnProfile = isConnected && address === userId;
+  const refineryLoading = !isInitialized || !hasInitiallyLoaded || isLoadingAccountData;
+  const refineryActivated = Boolean(isLightningAuthenticated && accountData && accountData.ln_address);
+  const showRefinery = isOwnProfile && (refineryLoading || refineryActivated);
   const toggleCollapsedSection = (section: keyof CollapsedSections) => {
     setCollapsedSections(value => ({
       ...value,
@@ -590,47 +593,41 @@ export default function UserDashboard() {
       <>
         <main className="flex min-h-screen flex-col items-start py-8 gap-4">
           <div className="w-full">
-            <div className="flex items-center justify-between mb-4">
+            <div className="bg-background p-4 shadow-md border border-border mb-4 flex items-center justify-between gap-4">
               <h1 className="text-2xl lg:text-3xl font-bold wrap-anywhere text-ellipsis line-clamp-1">
                 {userId}
-                {isPrivate && (
-                    <span className="text-red-500 text-lg font-semibold"> - Private</span>
-                )}
               </h1>
 
-              <div className="flex items-center gap-2">
-                {/* Visibility Toggle Button - only show for own profile when wallet is connected */}
-                {isOwnProfile && (
-                    <button
-                        onClick={handleToggleVisibility}
-                        disabled={isTogglingVisibility}
-                        title="Stats are only visible on leaderboards when set to Public"
-                        className={`flex items-center gap-2 px-4 py-2 border disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors ${
-                            isPrivate
-                                ? 'bg-red-500/10 border-red-500/40 hover:bg-red-500/20 text-red-500'
-                                : 'border-border text-foreground hover:bg-muted'
-                        }`}
-                    >
-                      {!isPrivate ? (
-                          <>
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                              <circle cx="12" cy="12" r="3" />
-                            </svg>
-                            <span className="text-sm font-bold">Public</span>
-                          </>
-                      ) : (
-                          <>
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                              <line x1="1" y1="1" x2="23" y2="23" />
-                            </svg>
-                            <span className="text-sm font-bold">Private</span>
-                          </>
-                      )}
-                    </button>
-                )}
-              </div>
+              {isOwnProfile && (
+                  <button
+                      onClick={handleToggleVisibility}
+                      disabled={isTogglingVisibility}
+                      title="Stats are only visible on leaderboards when set to Public"
+                      className={`flex items-center gap-2 px-4 py-2 text-sm font-medium disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors flex-shrink-0 ${
+                          isPrivate
+                              ? 'bg-red-500 text-background hover:bg-red-500/80'
+                              : 'bg-foreground text-background hover:bg-foreground/80'
+                      }`}
+                  >
+                    {!isPrivate ? (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                          <span className="text-sm font-bold">Public</span>
+                        </>
+                    ) : (
+                        <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                          </svg>
+                          <span className="text-sm font-bold">Private</span>
+                        </>
+                    )}
+                  </button>
+              )}
             </div>
 
             {/* Stats Cards */}
@@ -715,9 +712,10 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {isOwnProfile && (
+          {showRefinery && (
             <Refinery
               address={userId}
+              isLoading={refineryLoading}
               collapsed={collapsedSections.refinery}
               onToggle={() => toggleCollapsedSection('refinery')}
             />

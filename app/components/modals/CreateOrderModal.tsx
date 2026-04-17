@@ -129,6 +129,10 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             </div>
           </div>
 
+          <div className="text-[10px] text-gray-300 italic mt-10">
+            Each order will deliver exactly 1 PHd of work. Delivery will start after 1 confirmation. Confirmation must happen within one hour otherwise the order will expire. Please use a high feerate.
+          </div>
+
           {error && (
             <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
               {error}
