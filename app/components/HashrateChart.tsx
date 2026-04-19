@@ -238,12 +238,7 @@ export default function HashrateChart({
             fontFamily: '"Courier New", Courier, monospace',
             fontWeight: "bold",
             formatter: function (value: number) {
-              if (value >= 1e15) return (value / 1e15).toFixed(1) + " PH/s";
-              if (value >= 1e12) return (value / 1e12).toFixed(1) + " TH/s";
-              if (value >= 1e9) return (value / 1e9).toFixed(1) + " GH/s";
-              if (value >= 1e6) return (value / 1e6).toFixed(1) + " MH/s";
-              if (value >= 1e3) return (value / 1e3).toFixed(1) + " KH/s";
-              return value + " H/s";
+              return formatHashrate(value);
             },
           },
           splitLine: {

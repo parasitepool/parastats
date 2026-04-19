@@ -146,7 +146,7 @@ export default function Dashboard() {
         />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full mb-6">
-        <HashrateGauge totalHashrate={(poolStats?.hashrate || 0) / 1000000000000000} />
+        <HashrateGauge hashrate={poolStats?.hashrate || 0} />
         <div className="lg:col-span-2">
           <HashrateChart data={hashrateChartData} loading={historicalLoading} />
         </div>

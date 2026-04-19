@@ -2,18 +2,23 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
+import { formatHashrate } from '../utils/formatters';
 
 interface HashrateGaugeProps {
-  totalHashrate?: number; // in PH/s
+  hashrate?: number; // in H/s
 }
 
-export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps) {
+export default function HashrateGauge({ hashrate = 0 }: HashrateGaugeProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(false);
-  
+
   useEffect(() => {
     if (chartRef.current) {
       const chart = echarts.init(chartRef.current);
+
+      const tier = hashrate >= 1e18
+        ? { divisor: 1e18, max: 2, decimals: 1 }
+        : { divisor: 1e15, max: 1699, decimals: 0 };
       
       // Check for mobile screen
       const checkMobile = () => {
@@ -37,7 +42,7 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
             type: 'gauge',
             center: ['50%', '58%'],
             min: 0,
-            max: 1699,
+            max: tier.max,
             splitNumber: 10,
             radius: '100%',
             axisLine: {
@@ -78,13 +83,16 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
               distance: 40,
               fontSize: 12,
               formatter: function(value: number) {
-                return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+                return value.toLocaleString(undefined, {
+                  minimumFractionDigits: tier.decimals,
+                  maximumFractionDigits: tier.decimals,
+                });
               }
             },
             detail: {
               valueAnimation: true,
               formatter: function(value: number) {
-                return value.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' PH/s';
+                return formatHashrate(value * tier.divisor);
               },
               color: foregroundColor,
               fontSize: 24,
@@ -98,7 +106,7 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
             },
             data: [
               {
-                value: totalHashrate,
+                value: hashrate / tier.divisor,
               }
             ]
           }
@@ -119,7 +127,7 @@ export default function HashrateGauge({ totalHashrate = 0 }: HashrateGaugeProps)
         window.removeEventListener('resize', handleResize);
       };
     }
-  }, [totalHashrate, isMobile]);
+  }, [hashrate, isMobile]);
   
   return (
     <div className="bg-background p-6 shadow-md border border-border">
