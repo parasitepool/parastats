@@ -53,7 +53,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
     const [claimingSlot, setClaimingSlot] = useState<number | null>(null);
     const [localClaimed, setLocalClaimed] = useState<Set<number>>(new Set());
     const [error, setError] = useState<string | null>(null);
-    const [txHex, setTxHex] = useState<string | null>(null);
+    // const [txHex, setTxHex] = useState<string | null>(null);
     const [copiedSlot, setCopiedSlot] = useState<number | null>(null);
 
     const isOwner = address === userId;
@@ -97,7 +97,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
 
         setClaimingSlot(slotIndex);
         setError(null);
-        setTxHex(null);
+        // setTxHex(null);
 
         try {
             const { request, MessageSigningProtocols, AddressPurpose } = await import("@sats-connect/core");
@@ -161,7 +161,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 throw new Error(data.error || "Failed to submit claim");
             }
 
-            setTxHex(data.hex);
+            // setTxHex(data.hex);
             setLocalClaimed((prev) => new Set(prev).add(slotIndex));
         } catch (err) {
             console.error("Claim error:", err);
@@ -285,14 +285,14 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 </div>
             )}
 
-            {txHex && (
+            {/**txHex && (
                 <div className="mt-4">
                     <h3 className="text-sm font-medium text-accent-2 mb-2">Transaction</h3>
                     <div className="bg-secondary p-3 sm:p-4 border border-border">
                         <p className="text-xs font-mono break-all text-foreground/70">{txHex}</p>
                     </div>
                 </div>
-            )}
+            )**/}
 
             {error && (
                 <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
