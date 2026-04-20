@@ -21,7 +21,7 @@ import type { AccountData, CombinedAccountResponse } from '@/app/api/account/typ
 import { BookmarkIcon, TrendingUpIcon } from '@/app/components/icons';
 import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
 import BadgeDisplay from '@/app/components/badges/BadgeDisplay';
-import Refinery from '@/app/components/Refinery';
+// import Refinery from '@/app/components/Refinery';
 import UserMiners from '@/app/components/UserMiners';
 import CardHeader from '@/app/components/CardHeader';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from '@/app/components/collapsible';
@@ -712,14 +712,14 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {showRefinery && (
+          {/* {showRefinery && (
             <Refinery
               address={userId}
               isLoading={refineryLoading}
               collapsed={collapsedSections.refinery}
               onToggle={() => toggleCollapsedSection('refinery')}
             />
-          )}
+          )} */}
 
           <div className="w-full">
             <HashrateChart
