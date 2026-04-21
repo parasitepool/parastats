@@ -17,8 +17,8 @@ export default function HashrateGauge({ hashrate = 0 }: HashrateGaugeProps) {
       const chart = echarts.init(chartRef.current);
 
       const tier = hashrate >= 1e18
-        ? { divisor: 1e18, max: 2, decimals: 1 }
-        : { divisor: 1e15, max: 1699, decimals: 0 };
+        ? { divisor: 1e18, max: 9.99, decimals: 2 }
+        : { divisor: 1e15, max: 9999, decimals: 0 };
       
       // Check for mobile screen
       const checkMobile = () => {
@@ -43,16 +43,16 @@ export default function HashrateGauge({ hashrate = 0 }: HashrateGaugeProps) {
             center: ['50%', '58%'],
             min: 0,
             max: tier.max,
-            splitNumber: 10,
+            splitNumber: 9,
             radius: '100%',
             axisLine: {
               lineStyle: {
                 width: 30,
                 color: [
-                  [0.2, '#222222'],
-                  [0.4, '#444444'],
-                  [0.6, '#666666'],
-                  [0.8, '#888888'],
+                  [2/9, '#222222'],
+                  [4/9, '#444444'],
+                  [6/9, '#666666'],
+                  [8/9, '#888888'],
                   [1, '#aaaaaa']
                 ]
               }

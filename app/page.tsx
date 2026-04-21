@@ -135,7 +135,7 @@ export default function Dashboard() {
       <div className="w-full mb-6">
         {/* <RetroProgressBarExample /> */}
         <RetroProgressBar
-          current={(poolStats?.hashrate || 0) / 10000000000000000}
+          current={(poolStats?.hashrate || 0) / 1e17}
           max={100}
           showLabel={true}
           label="Parasite Power"
