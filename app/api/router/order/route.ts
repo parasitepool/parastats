@@ -13,8 +13,16 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+    const contentType = res.headers.get('content-type') ?? '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      return NextResponse.json(data, { status: res.status });
+    }
+    if (contentType.includes('text/plain')) {
+      const text = await res.text();
+      return NextResponse.json({ error: text }, { status: res.status });
+    }
+    return NextResponse.json({ error: 'Router unavailable' }, { status: 502 });
   } catch {
     return NextResponse.json({ error: 'Router unavailable' }, { status: 502 });
   }

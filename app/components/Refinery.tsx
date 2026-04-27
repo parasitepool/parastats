@@ -18,15 +18,6 @@ interface OrderRow {
   delivered: number;
 }
 
-function statusColor(status: string): string {
-  if (status === 'active') return 'text-green-500';
-  if (status === 'fulfilled') return 'text-blue-500';
-  if (status === 'pending') return 'text-yellow-500';
-  if (status === 'cancelled' || status === 'disconnected' || status === 'expired') return 'text-red-500';
-  if (status === 'paid_late') return 'text-orange-500';
-  return 'text-foreground';
-}
-
 const columns = [
   {
     key: 'id' as keyof OrderRow,
@@ -35,7 +26,6 @@ const columns = [
   {
     key: 'status' as keyof OrderRow,
     header: 'Status',
-    render: (value: OrderRow[keyof OrderRow]) => <span className={statusColor(String(value))}>{value}</span>,
   },
   {
     key: 'requested' as keyof OrderRow,
@@ -130,10 +120,10 @@ export default function Refinery({ address, isLoading = false, collapsed = false
     orders.map(o => ({
       id: o.id,
       status: o.status,
-      requested: o.kind === 'sink' ? null : o.kind.bucket,
+      requested: o.target_hashdays,
       hashrate: o.downstream.hashrate_1m,
-      best_share: o.upstream?.stats.best_share ?? o.downstream.best_share ?? 0,
-      delivered: o.upstream?.stats.hash_days ?? 0,
+      best_share: o.stats?.best_share ?? 0,
+      delivered: o.stats?.hash_days ?? 0,
     })),
   [orders]);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
@@ -203,7 +193,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
                 <span className="relative inline-flex group" data-collapse-ignore>
                   <InfoIcon className="h-4 w-4 text-foreground/60 cursor-help" />
                   <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs font-normal text-foreground opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    PHd = petahash-day: Work done by 1 PH/s over 1 day
+                    PHd (petahash-day): Work done by 1 PH/s over 1 day. Conceptually like a KWh (kilowatt-hour).
                   </span>
                 </span>
               </p>
@@ -226,7 +216,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
                   <span className="text-accent-3 font-bold text-lg">
                     Order {order.id}
                   </span>
-                  <span className={`font-medium ${statusColor(order.status)}`}>{order.status}</span>
+                  <span className="font-medium">{order.status}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>

@@ -43,7 +43,6 @@ export interface UpstreamInfo {
   enonce1: string;
   enonce2_size: number;
   version_mask: number | null;
-  stats: MiningStats;
 }
 
 export interface DownstreamInfo {
@@ -62,13 +61,14 @@ export interface RouterStatus {
   available_hashrate: number;
   bucket_order_count: number;
   sink_order_count: number;
+  wallet_synced: boolean;
   upstream: MiningStats;
   downstream: DownstreamInfo;
 }
 
 export interface SessionDetail {
   id: string;
-  upstream_id: number;
+  order_id: number;
   address: string;
   worker_name: string;
   username: string;
@@ -77,16 +77,17 @@ export interface SessionDetail {
   stats: MiningStats;
 }
 
-export type OrderKind = 'sink' | { bucket: number };
-
 export interface OrderDetail {
   id: number;
   status: OrderStatus;
   upstream_target: UpstreamTarget;
-  kind: OrderKind;
-  payment_address: string;
-  payment_amount: number;
+  target_hashdays: number | null;
+  payment_address: string | null;
+  payment_amount: number | null;
+  created_at: number;
+  created_at_height: number;
   upstream: UpstreamInfo | null;
+  stats: MiningStats;
   downstream: MiningStats;
   sessions: SessionDetail[];
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { request, RpcErrorCode } from '@sats-connect/core';
 import { useWallet } from '@/app/hooks/useWallet';
+import { InfoIcon } from '@/app/components/icons';
 import type { OrderResponse } from '@/app/api/router/types';
 
 interface CreateOrderModalProps {
@@ -59,8 +60,8 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `Failed to create order (${res.status})`);
+        const json = await res.json().catch(() => null);
+        throw new Error(json?.error ?? `Failed to create order (${res.status})`);
       }
 
       const data: OrderResponse = await res.json();
@@ -119,7 +120,15 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
           <div>
             <h3 className="text-sm font-medium text-accent-2 mb-2">Work</h3>
             <div className="bg-secondary p-3 border border-border">
-              <p className="text-foreground">1 PHd</p>
+              <p className="text-foreground flex items-center gap-1">
+                1 PHd
+                <span className="relative inline-flex group">
+                  <InfoIcon className="h-4 w-4 text-foreground/60 cursor-help" />
+                  <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs font-normal text-foreground opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    PHd (petahash-day): Work done by 1 PH/s over 1 day. Conceptually like a KWh (kilowatt-hour).
+                  </span>
+                </span>
+              </p>
             </div>
           </div>
           <div>
@@ -130,7 +139,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
           </div>
 
           <div className="text-[10px] text-gray-300 italic mt-10">
-            Each order will deliver exactly 1 PHd of work. Delivery will start after 1 confirmation. Confirmation must happen within one hour otherwise the order will expire. Please use a high feerate.
+            Each order will deliver exactly 1 PHd of work. Delivery will start after 1 confirmation. Confirmation must happen within one hour otherwise the order will expire. Use a high fee rate.
           </div>
 
           {error && (
@@ -140,10 +149,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
           )}
 
           {isOwnProfile ? (
-            <div className="flex gap-2 justify-center mt-6">
-              <button onClick={onClose} className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80">
-                Cancel
-              </button>
+            <div className="flex justify-center mt-6">
               <button onClick={handleCreate} className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80">
                 Create & Pay
               </button>

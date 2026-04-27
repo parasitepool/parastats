@@ -22,6 +22,7 @@ import { BookmarkIcon, TrendingUpIcon } from '@/app/components/icons';
 import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
 import BadgeDisplay from '@/app/components/badges/BadgeDisplay';
 import Refinery from '@/app/components/Refinery';
+import ErrorBoundary from '@/app/components/ErrorBoundary';
 import UserMiners from '@/app/components/UserMiners';
 import CardHeader from '@/app/components/CardHeader';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from '@/app/components/collapsible';
@@ -713,12 +714,14 @@ export default function UserDashboard() {
           </div>
 
           {showRefinery && (
-            <Refinery
-              address={userId}
-              isLoading={refineryLoading}
-              collapsed={collapsedSections.refinery}
-              onToggle={() => toggleCollapsedSection('refinery')}
-            />
+            <ErrorBoundary>
+              <Refinery
+                address={userId}
+                isLoading={refineryLoading}
+                collapsed={collapsedSections.refinery}
+                onToggle={() => toggleCollapsedSection('refinery')}
+              />
+            </ErrorBoundary>
           )}
 
           <div className="w-full">
