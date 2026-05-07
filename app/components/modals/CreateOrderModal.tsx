@@ -50,7 +50,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           upstream_target: {
-            endpoint: 'parasite.wtf:42069',
+            endpoint: 'parasite.wtf:42068',
             username: `${address}.refinery`,
             password: null,
           },
@@ -114,7 +114,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
           <div>
             <h3 className="text-sm font-medium text-accent-2 mb-2">Endpoint</h3>
             <div className="bg-secondary p-3 border border-border">
-              <p className="text-foreground break-all">parasite.wtf:42069</p>
+              <p className="text-foreground break-all">parasite.wtf:42068</p>
             </div>
           </div>
           <div>
