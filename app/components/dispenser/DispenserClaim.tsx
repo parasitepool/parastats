@@ -466,7 +466,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                     }}
                 >
                     <div
-                        className="bg-background border border-foreground p-4 sm:p-6 max-w-2xl w-full mx-4 shadow-xl"
+                        className="bg-background border border-foreground p-4 sm:p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto"
                         onClick={(event) => event.stopPropagation()}
                     >
                         <div className="flex justify-between items-start gap-4 mb-4">
