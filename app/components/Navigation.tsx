@@ -70,6 +70,7 @@ export default function Navigation({
                 onKeyDown={handleKeyDown}
                 placeholder="Enter your wallet address... (Ctrl/Cmd + K)"
                 className="w-full py-2 px-2 xl:px-4 bg-background border border-gray-300 focus:outline-none focus:ring-2 focus:ring-foreground text-xs xl:text-sm"
+                suppressHydrationWarning
               />
               <button
                 onClick={() => onAddressSubmit(address)}
