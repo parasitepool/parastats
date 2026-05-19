@@ -13,7 +13,11 @@ export async function GET(request: NextRequest) {
   try {
     const url = new URL(`${routerBase}/api/router/orders`);
     if (address) url.searchParams.set('address', address);
-    const res = await fetch(url, { cache: 'no-store' });
+    const headers: Record<string, string> = {};
+    if (process.env.ROUTER_API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.ROUTER_API_TOKEN}`;
+    }
+    const res = await fetch(url, { cache: 'no-store', headers });
     const contentType = res.headers.get('content-type') ?? '';
     if (contentType.includes('application/json')) {
       const data = await res.json();

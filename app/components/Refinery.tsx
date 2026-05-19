@@ -4,19 +4,24 @@ import { useState, useEffect, useMemo, useCallback, useRef, type MouseEvent } fr
 import CardHeader from './CardHeader';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from './collapsible';
 import SortableTable from './SortableTable';
-import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/formatters';
+import { formatHashrate, formatHashDays } from '@/app/utils/formatters';
 import CreateOrderModal from './modals/CreateOrderModal';
 import { RefineryIcon, InfoIcon } from '@/app/components/icons';
-import type { OrderDetail, RouterStatus } from '@/app/api/router/types';
+import type { OrderSummary, RouterStatus } from '@/app/api/router/types';
 
 interface OrderRow {
   id: number;
   status: string;
   requested: number | null;
   hashrate: number;
-  best_share: number;
   delivered: number;
 }
+
+const statusColor: Record<string, string> = {
+  active: 'text-green-500',
+  pending: 'text-[#f7931a]',
+  in_mempool: 'text-yellow-500',
+};
 
 const columns = [
   {
@@ -26,6 +31,9 @@ const columns = [
   {
     key: 'status' as keyof OrderRow,
     header: 'Status',
+    render: (value: OrderRow[keyof OrderRow]) => (
+      <span className={statusColor[String(value)] ?? ''}>{String(value)}</span>
+    ),
   },
   {
     key: 'requested' as keyof OrderRow,
@@ -42,11 +50,6 @@ const columns = [
     header: 'Hashrate',
     render: (value: OrderRow[keyof OrderRow]) => formatHashrate(Number(value)),
   },
-  {
-    key: 'best_share' as keyof OrderRow,
-    header: 'Best Share',
-    render: (value: OrderRow[keyof OrderRow]) => formatDifficulty(Number(value)),
-  },
 ];
 
 interface RefineryProps {
@@ -58,7 +61,7 @@ interface RefineryProps {
 
 export default function Refinery({ address, isLoading = false, collapsed = false, onToggle }: RefineryProps) {
   const [status, setStatus] = useState<RouterStatus | null>(null);
-  const [orders, setOrders] = useState<OrderDetail[]>([]);
+  const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -120,10 +123,9 @@ export default function Refinery({ address, isLoading = false, collapsed = false
     orders.map(o => ({
       id: o.id,
       status: o.status,
-      requested: o.target_hashdays,
-      hashrate: o.downstream.hashrate_1m,
-      best_share: o.stats?.best_share ?? 0,
-      delivered: o.stats?.hash_days ?? 0,
+      requested: o.requested_hash_days,
+      hashrate: o.hashrate,
+      delivered: o.delivered_hash_days,
     })),
   [orders]);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
@@ -216,7 +218,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
                   <span className="text-accent-3 font-bold text-lg">
                     Order {order.id}
                   </span>
-                  <span className="font-medium">{order.status}</span>
+                  <span className={`font-medium ${statusColor[order.status] ?? ''}`}>{order.status}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
@@ -230,10 +232,6 @@ export default function Refinery({ address, isLoading = false, collapsed = false
                   <div>
                     <p className="text-foreground/60">Hashrate</p>
                     <p className="font-medium">{formatHashrate(order.hashrate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-foreground/60">Best Share</p>
-                    <p className="font-medium">{formatDifficulty(order.best_share)}</p>
                   </div>
                 </div>
               </div>

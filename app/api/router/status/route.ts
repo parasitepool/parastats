@@ -7,7 +7,11 @@ export async function GET() {
   }
 
   try {
-    const res = await fetch(`${routerBase}/api/router/status`);
+    const headers: Record<string, string> = {};
+    if (process.env.ROUTER_API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.ROUTER_API_TOKEN}`;
+    }
+    const res = await fetch(`${routerBase}/api/router/status`, { headers });
     const contentType = res.headers.get('content-type') ?? '';
     if (contentType.includes('application/json')) {
       const data = await res.json();

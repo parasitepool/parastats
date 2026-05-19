@@ -17,9 +17,13 @@ interface CreateOrderModalProps {
 export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice }: CreateOrderModalProps) {
   const { address: walletAddress, isConnected } = useWallet();
   const [error, setError] = useState<string | null>(null);
+  const [selectedPhd, setSelectedPhd] = useState(1);
 
   useEffect(() => {
-    if (isOpen) setError(null);
+    if (isOpen) {
+      setError(null);
+      setSelectedPhd(1);
+    }
   }, [isOpen]);
 
   useEffect(() => {
@@ -54,8 +58,8 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             username: `${address}.refinery`,
             password: null,
           },
-          hashdays: 1e15,
-          price: hashPrice,
+          hash_days: selectedPhd * 1e15,
+          hash_price: hashPrice,
         }),
       });
 
@@ -118,28 +122,37 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             </div>
           </div>
           <div>
-            <h3 className="text-sm font-medium text-accent-2 mb-2">Work</h3>
-            <div className="bg-secondary p-3 border border-border">
-              <p className="text-foreground flex items-center gap-1">
-                1 PHd
-                <span className="relative inline-flex group">
-                  <InfoIcon className="h-4 w-4 text-foreground/60 cursor-help" />
-                  <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs font-normal text-foreground opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    PHd (petahash-day): Work done by 1 PH/s over 1 day. Conceptually like a KWh (kilowatt-hour).
-                  </span>
+            <h3 className="text-sm font-medium text-accent-2 mb-2 flex items-center gap-1">
+              Work
+              <span className="relative inline-flex group">
+                <InfoIcon className="h-4 w-4 text-foreground/60 cursor-help" />
+                <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs font-normal text-foreground opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  PHd (petahash-day): Work done by 1 PH/s over 1 day. Conceptually like a KWh (kilowatt-hour).
                 </span>
-              </p>
+              </span>
+            </h3>
+            <div className="flex gap-2">
+              {[1, 9, 99].map(phd => (
+                <button
+                  key={phd}
+                  type="button"
+                  onClick={() => setSelectedPhd(phd)}
+                  className={`flex-1 p-3 border text-sm font-medium ${selectedPhd === phd ? 'bg-foreground text-background border-foreground' : 'bg-secondary text-foreground border-border hover:border-foreground/40'}`}
+                >
+                  {phd} PHd
+                </button>
+              ))}
             </div>
           </div>
           <div>
             <h3 className="text-sm font-medium text-accent-2 mb-2">Price</h3>
             <div className="bg-secondary p-3 border border-border">
-              <p className="text-foreground">{hashPrice.toLocaleString()} sats</p>
+              <p className="text-foreground">{(selectedPhd * hashPrice).toLocaleString()} sats</p>
             </div>
           </div>
 
           <div className="text-[10px] text-gray-300 italic mt-10">
-            Each order will deliver exactly 1 PHd of work. Delivery will start after 1 confirmation. Confirmation must happen within one hour otherwise the order will expire. Use a high fee rate.
+            Each order will deliver exactly {selectedPhd} PHd of work. Delivery will start after 1 confirmation. Confirmation must happen within 6 blocks, otherwise the order will expire. Use a high fee rate.
           </div>
 
           {error && (

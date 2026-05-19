@@ -8,9 +8,13 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (process.env.ROUTER_API_TOKEN) {
+      headers['Authorization'] = `Bearer ${process.env.ROUTER_API_TOKEN}`;
+    }
     const res = await fetch(`${routerBase}/api/router/order`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
     const contentType = res.headers.get('content-type') ?? '';

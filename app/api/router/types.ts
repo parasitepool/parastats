@@ -1,11 +1,11 @@
 export type OrderStatus =
   | 'pending'
+  | 'in_mempool'
   | 'active'
   | 'fulfilled'
   | 'cancelled'
   | 'disconnected'
-  | 'expired'
-  | 'paid_late';
+  | 'expired';
 
 export interface MiningStats {
   hashrate_1m: number;
@@ -32,17 +32,6 @@ export interface UpstreamTarget {
   endpoint: string;
   username: string;
   password: string | null;
-}
-
-export interface UpstreamInfo {
-  endpoint: string;
-  connected: boolean;
-  ping_ms: number;
-  difficulty: number;
-  username: string;
-  enonce1: string;
-  enonce2_size: number;
-  version_mask: number | null;
 }
 
 export interface DownstreamInfo {
@@ -77,29 +66,40 @@ export interface SessionDetail {
   stats: MiningStats;
 }
 
+export interface OrderSummary {
+  id: number;
+  status: OrderStatus;
+  endpoint: string;
+  username: string;
+  requested_hash_days: number | null;
+  hashrate: number;
+  delivered_hash_days: number;
+}
+
 export interface OrderDetail {
   id: number;
   status: OrderStatus;
   upstream_target: UpstreamTarget;
-  target_hashdays: number | null;
+  requested_hash_days: number | null;
+  hash_price: number | null;
   payment_address: string | null;
   payment_amount: number | null;
   created_at: number;
   created_at_height: number;
-  upstream: UpstreamInfo | null;
-  stats: MiningStats;
+  upstream: MiningStats;
   downstream: MiningStats;
   sessions: SessionDetail[];
 }
 
 export interface OrderRequest {
   upstream_target: UpstreamTarget;
-  hashdays: number;
-  price: number;
+  hash_days: number;
+  hash_price: number;
 }
 
 export interface OrderResponse {
   order_id: number;
   payment_address: string;
   payment_amount: number;
+  hash_price: number;
 }
