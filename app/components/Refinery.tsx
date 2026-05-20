@@ -170,7 +170,8 @@ export default function Refinery({ address, isLoading = false, collapsed = false
         action={collapsed ? null : (
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80"
+            disabled={status.halt}
+            className={`px-4 py-2 text-sm font-medium ${status.halt ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
           >
             Create Order
           </button>
@@ -240,7 +241,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
         </>
       )}
 
-      <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} onCreated={fetchOrders} address={address} hashPrice={status.hash_price} />
+      <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} onCreated={fetchOrders} address={address} hashPrice={status.hash_price} halt={status.halt} />
     </div>
   );
 }

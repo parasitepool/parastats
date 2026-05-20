@@ -12,9 +12,10 @@ interface CreateOrderModalProps {
   onCreated?: () => void | Promise<void>;
   address: string;
   hashPrice: number;
+  halt: boolean;
 }
 
-export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice }: CreateOrderModalProps) {
+export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice, halt }: CreateOrderModalProps) {
   const { address: walletAddress, isConnected } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [selectedPhd, setSelectedPhd] = useState(1);
@@ -152,10 +153,16 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
           </div>
 
           <div className="text-[10px] text-gray-300 italic mt-10">
-            Each order will deliver exactly {selectedPhd} PHd of work. Delivery will start after 1 confirmation. Confirmation must happen within 6 blocks, otherwise the order will expire. Use a high fee rate.
+            Each order will deliver {selectedPhd} PHd of work. Delivery will start after 1 confirmation. Confirmation must happen within 6 blocks, otherwise the order will expire. Use a high fee rate.
           </div>
 
-          {error && (
+          {halt && (
+            <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
+              Trading halted, come back later
+            </div>
+          )}
+
+          {error && !halt && (
             <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
               {error}
             </div>
@@ -163,7 +170,11 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
 
           {isOwnProfile ? (
             <div className="flex justify-center mt-6">
-              <button onClick={handleCreate} className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80">
+              <button
+                onClick={handleCreate}
+                disabled={halt}
+                className={`px-4 py-2 text-sm font-medium ${halt ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
+              >
                 Create & Pay
               </button>
             </div>

@@ -51,6 +51,8 @@ export interface RouterStatus {
   bucket_order_count: number;
   sink_order_count: number;
   wallet_synced: boolean;
+  halt: boolean;
+  boost: boolean;
   upstream: MiningStats;
   downstream: DownstreamInfo;
 }
