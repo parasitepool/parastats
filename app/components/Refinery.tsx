@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef, type MouseEvent } fr
 import CardHeader from './CardHeader';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from './collapsible';
 import SortableTable from './SortableTable';
-import { formatHashrate, formatHashDays } from '@/app/utils/formatters';
+import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/formatters';
 import CreateOrderModal from './modals/CreateOrderModal';
 import { RefineryIcon, InfoIcon } from '@/app/components/icons';
 import type { OrderSummary, RouterStatus } from '@/app/api/router/types';
@@ -15,6 +15,7 @@ interface OrderRow {
   requested: number | null;
   hashrate: number;
   delivered: number;
+  best_share: number | null;
 }
 
 const statusColor: Record<string, string> = {
@@ -49,6 +50,12 @@ const columns = [
     key: 'hashrate' as keyof OrderRow,
     header: 'Hashrate',
     render: (value: OrderRow[keyof OrderRow]) => formatHashrate(Number(value)),
+  },
+  {
+    key: 'best_share' as keyof OrderRow,
+    header: 'Best Share',
+    render: (value: OrderRow[keyof OrderRow]) =>
+      value != null ? formatDifficulty(Number(value)) : '—',
   },
 ];
 
@@ -126,6 +133,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
       requested: o.requested_hash_days,
       hashrate: o.hashrate,
       delivered: o.delivered_hash_days,
+      best_share: o.best_share,
     })),
   [orders]);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
@@ -233,6 +241,10 @@ export default function Refinery({ address, isLoading = false, collapsed = false
                   <div>
                     <p className="text-foreground/60">Hashrate</p>
                     <p className="font-medium">{formatHashrate(order.hashrate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-foreground/60">Best Share</p>
+                    <p className="font-medium">{order.best_share != null ? formatDifficulty(order.best_share) : '—'}</p>
                   </div>
                 </div>
               </div>

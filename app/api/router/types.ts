@@ -76,6 +76,7 @@ export interface OrderSummary {
   requested_hash_days: number | null;
   hashrate: number;
   delivered_hash_days: number;
+  best_share: number | null;
 }
 
 export interface OrderDetail {
