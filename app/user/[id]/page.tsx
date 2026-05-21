@@ -672,8 +672,9 @@ export default function UserDashboard() {
                       onToggle={() => toggleCollapsedSection('stratumLightning')}
                     />
                   </div>
-              ) : !isLightningAuthenticated || !accountData || !accountData.ln_address ? (
-                  // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
+              ) : isConnected && !isOwnProfile ? null
+              : !isLightningAuthenticated || !accountData || !accountData.ln_address ? (
+                      // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
                   <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
                     <div className="flex flex-col items-center justify-center py-8">
                       <button
@@ -691,7 +692,7 @@ export default function UserDashboard() {
                     </div>
                   </div>
               ) : (
-                  // Authenticated with account data and lightning address - Show Lightning and Stratum components
+                  // Own profile, authenticated with lightning address - Show Lightning, Stratum, and Dispenser
                   <div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                       <StratumInfo
