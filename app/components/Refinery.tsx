@@ -123,8 +123,8 @@ export default function Refinery({ address, isLoading = false, collapsed = false
     };
   }, [address, isLoading]);
 
-  const capacity = status?.capacity_hashrate ?? 0;
-  const available = status?.available_hashrate ?? 0;
+  const capacity = status?.capacity_work ?? 0;
+  const available = status?.available_work ?? 0;
 
   const rows = useMemo<OrderRow[]>(() =>
     orders.map(o => ({
@@ -191,11 +191,11 @@ export default function Refinery({ address, isLoading = false, collapsed = false
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
             <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
               <p className="text-sm text-foreground/60">Capacity</p>
-              <p className="text-lg font-semibold">{formatHashrate(capacity)}</p>
+              <p className="text-lg font-semibold">{formatHashDays(capacity)}</p>
             </div>
             <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
               <p className="text-sm text-foreground/60">Available</p>
-              <p className="text-lg font-semibold">{formatHashrate(available)}</p>
+              <p className="text-lg font-semibold">{formatHashDays(available)}</p>
             </div>
             <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
               <p className="text-sm text-foreground/60">Hashprice</p>

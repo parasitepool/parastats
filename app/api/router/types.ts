@@ -46,10 +46,9 @@ export interface DownstreamInfo {
 export interface RouterStatus {
   uptime_secs: number;
   hash_price: number;
-  capacity_hashrate: number;
-  available_hashrate: number;
-  bucket_order_count: number;
-  sink_order_count: number;
+  capacity_work: number;
+  available_work: number;
+  active_order_count: number;
   wallet_synced: boolean;
   halt: boolean;
   boost: boolean;
