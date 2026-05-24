@@ -118,3 +118,41 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--primary) var(--secondary);
 }
+
+/* PHd slider */
+.phd-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+
+.phd-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--foreground);
+  border: none;
+  cursor: pointer;
+}
+
+.phd-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--foreground);
+  border: none;
+  cursor: pointer;
+}
+
+.phd-slider::-moz-range-track {
+  height: 4px;
+  background: var(--border);
+}
+
+.phd-slider:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 2px;
+}

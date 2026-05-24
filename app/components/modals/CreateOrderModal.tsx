@@ -15,15 +15,28 @@ interface CreateOrderModalProps {
   halt: boolean;
 }
 
+const MIN_PHD = 1;
+const MAX_PHD = 69;
+const LOG_MAX = Math.log(MAX_PHD);
+const NOTCHES = [1, 9, 19, 29, 39, 49, 59, 69];
+const phdToSlider = (phd: number) => Math.log(phd) / LOG_MAX * 100;
+const sliderToPhd = (pos: number) => Math.round(Math.exp((pos / 100) * LOG_MAX));
+
 export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice, halt }: CreateOrderModalProps) {
   const { address: walletAddress, isConnected } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [selectedPhd, setSelectedPhd] = useState(1);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setError(null);
       setSelectedPhd(1);
+      setEditing(false);
+      setEditValue('');
+      setSubmitting(false);
     }
   }, [isOpen]);
 
@@ -36,6 +49,14 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
     return () => window.removeEventListener('keydown', handleEscKey);
   }, [isOpen, onClose]);
 
+  const commitEdit = (raw: string) => {
+    const parsed = parseFloat(raw);
+    if (Number.isFinite(parsed)) {
+      setSelectedPhd(Math.min(MAX_PHD, Math.max(MIN_PHD, Math.round(parsed))));
+    }
+    setEditing(false);
+  };
+
   if (!isOpen) return null;
 
   const isOwnProfile = isConnected && walletAddress === address;
@@ -47,6 +68,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
   };
 
   const handleCreate = async () => {
+    setSubmitting(true);
     setError(null);
 
     try {
@@ -59,7 +81,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             username: `${address}.refinery`,
             password: null,
           },
-          hash_days: selectedPhd * 1e15,
+          hash_days: Math.round(selectedPhd * 1e15),
           hash_price: hashPrice,
         }),
       });
@@ -88,6 +110,8 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message || 'Failed to create order');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -132,23 +156,65 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
                 </span>
               </span>
             </h3>
-            <div className="flex gap-2">
-              {[1, 9, 99].map(phd => (
-                <button
-                  key={phd}
-                  type="button"
-                  onClick={() => setSelectedPhd(phd)}
-                  className={`flex-1 p-3 border text-sm font-medium ${selectedPhd === phd ? 'bg-foreground text-background border-foreground' : 'bg-secondary text-foreground border-border hover:border-foreground/40'}`}
-                >
-                  {phd} PHd
-                </button>
-              ))}
+            <div className="space-y-2">
+              <div className="text-center text-foreground font-medium">
+                {editing ? (
+                  <span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => commitEdit(editValue)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') commitEdit(editValue);
+                      }}
+                      autoFocus
+                      className="w-24 bg-secondary border border-foreground text-center text-foreground outline-none"
+                    /> PHd
+                  </span>
+                ) : (
+                  <span
+                    onClick={() => { setEditValue(String(selectedPhd)); setEditing(true); }}
+                    className="cursor-text hover:underline"
+                  >
+                    {selectedPhd} PHd
+                  </span>
+                )}
+              </div>
+              <div className="relative h-7">
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  value={phdToSlider(selectedPhd)}
+                  onChange={(e) => {
+                    setSelectedPhd(Math.min(MAX_PHD, Math.max(MIN_PHD, sliderToPhd(parseFloat(e.target.value)))));
+                    setEditing(false);
+                  }}
+                  className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full phd-slider z-10"
+                />
+                <div className="absolute inset-0 mx-[8px] pointer-events-none">
+                  {NOTCHES.map(phd => (
+                    <div key={phd} className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-7 bg-foreground/30" style={{ left: `${phdToSlider(phd)}%`, width: '1px' }} />
+                  ))}
+                </div>
+              </div>
+              <div className="relative mx-[8px]">
+                <span className="absolute text-xs text-accent-2 -translate-x-1/2" style={{ left: `${phdToSlider(1)}%` }}>1</span>
+                <span className="absolute text-xs text-accent-2 -translate-x-1/2" style={{ left: `${phdToSlider(69)}%` }}>69</span>
+                <span>&nbsp;</span>
+              </div>
             </div>
           </div>
           <div>
             <h3 className="text-sm font-medium text-accent-2 mb-2">Price</h3>
             <div className="bg-secondary p-3 border border-border">
-              <p className="text-foreground">{(selectedPhd * hashPrice).toLocaleString()} sats</p>
+              <p className="text-foreground">
+                {Math.ceil(selectedPhd * hashPrice).toLocaleString()} sats
+                <span className="text-foreground/40 ml-2">({(Math.ceil(selectedPhd * hashPrice) / 1e8).toFixed(8)} BTC)</span>
+              </p>
             </div>
           </div>
 
@@ -158,7 +224,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
 
           {halt && (
             <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
-              Trading halted, come back later
+              Order creation paused, come back later
             </div>
           )}
 
@@ -172,10 +238,10 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             <div className="flex justify-center mt-6">
               <button
                 onClick={handleCreate}
-                disabled={halt}
-                className={`px-4 py-2 text-sm font-medium ${halt ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
+                disabled={halt || submitting}
+                className={`px-4 py-2 text-sm font-medium ${halt || submitting ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
               >
-                Create & Pay
+                {submitting ? 'Creating…' : 'Create & Pay'}
               </button>
             </div>
           ) : (

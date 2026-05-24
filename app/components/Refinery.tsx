@@ -181,7 +181,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
             disabled={status.halt}
             className={`px-4 py-2 text-sm font-medium ${status.halt ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
           >
-            {status.halt ? 'Trading Halted' : 'Create Order'}
+            {status.halt ? 'Paused' : 'Create Order'}
           </button>
         )}
       />
