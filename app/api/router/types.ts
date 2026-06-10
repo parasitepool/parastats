@@ -93,6 +93,16 @@ export interface OrderDetail {
   sessions: SessionDetail[];
 }
 
+export interface PublicOrderSummary {
+  id: number;
+  status: OrderStatus;
+  address: string;
+  requested_hash_days: number | null;
+  hashrate: number;
+  delivered_hash_days: number;
+  best_share: number | null;
+}
+
 export interface OrderRequest {
   upstream_target: UpstreamTarget;
   hash_days: number;
