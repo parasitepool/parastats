@@ -708,10 +708,11 @@ export default function UserDashboard() {
                         onToggle={() => toggleCollapsedSection('stratumLightning')}
                       />
                     </div>
-                    <DispenserClaim userId={userId} className="mt-4" />
                   </div>
               )}
             </div>
+
+            <DispenserClaim userId={userId} className="mt-4" />
           </div>
 
           {showRefinery && (
