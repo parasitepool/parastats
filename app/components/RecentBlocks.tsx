@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import BlockCard from "./BlockCard";
 import ShadowBlockCard from "./ShadowBlockCard";
 import { Block } from "@mempool/mempool.js/lib/interfaces/bitcoin/blocks";
@@ -43,8 +43,20 @@ export default function RecentBlocks() {
   const [showRightArrow, setShowRightArrow] = useState(false);
   const [isCompact, setIsCompact] = useState(true);
   const [highestDiffs, setHighestDiffs] = useState<Map<number, BlockTopDiff>>(new Map());
-  const initialBlockHeightRef = useRef<number>(0);
+  const [initialBlockHeight, setInitialBlockHeight] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const updateArrows = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (container) {
+      setShowLeftArrow(container.scrollLeft > 20);
+
+      const hasMoreToScroll =
+        container.scrollLeft <
+        container.scrollWidth - container.clientWidth - 10;
+      setShowRightArrow(hasMoreToScroll);
+    }
+  }, []);
 
   // Load isCompact preference from localStorage on initial render
   useEffect(() => {
@@ -68,9 +80,7 @@ export default function RecentBlocks() {
         setLoading(true);
         const blocksTipHeight = await getBlocksTipHeight();
 
-        if (initialBlockHeightRef.current === 0) {
-          initialBlockHeightRef.current = blocksTipHeight;
-        }
+        setInitialBlockHeight((height) => height || blocksTipHeight);
 
         // Only update if the tip height has changed
         if (blocksTipHeight !== currentTipHeight) {
@@ -101,7 +111,7 @@ export default function RecentBlocks() {
       scrollContainerRef.current.scrollLeft = 0;
       updateArrows();
     }
-  }, [blocks]);
+  }, [blocks, updateArrows]);
 
   // Fetch highest diffs for the displayed blocks
   useEffect(() => {
@@ -142,7 +152,7 @@ export default function RecentBlocks() {
           scrollContainer.removeEventListener("scroll", updateArrows);
       }
     }
-  }, [blocks]);
+  }, [blocks, updateArrows]);
 
   // Function to scroll left or right
   const scroll = (direction: "left" | "right") => {
@@ -158,21 +168,6 @@ export default function RecentBlocks() {
         left: targetPosition,
         behavior: "smooth",
       });
-    }
-  };
-
-  // Function to update arrow visibility based on scroll position
-  const updateArrows = () => {
-    const container = scrollContainerRef.current;
-    if (container) {
-      // Show left arrow if scrolled away from the left edge
-      setShowLeftArrow(container.scrollLeft > 20);
-
-      // Show right arrow if there's more content to scroll right
-      const hasMoreToScroll =
-        container.scrollLeft <
-        container.scrollWidth - container.clientWidth - 10;
-      setShowRightArrow(hasMoreToScroll);
     }
   };
 
@@ -220,7 +215,7 @@ export default function RecentBlocks() {
                   <BlockCard
                     key={block.id || block.height || block.timestamp}
                     block={block}
-                    newBlock={block.height > initialBlockHeightRef.current}
+                    newBlock={block.height > initialBlockHeight}
                     isCompact={isCompact}
                   />
                 ))}

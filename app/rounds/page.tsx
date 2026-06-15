@@ -81,20 +81,7 @@ export default function RoundsPage() {
   const expandedStatus = rounds.find(r => r.block_height === expandedRound)?.participant_status;
   const prevStatusRef = useRef(expandedStatus);
 
-  useEffect(() => {
-    fetchRounds();
-  }, []);
-
-  // Always poll rounds: 30s when incomplete rounds exist, 120s otherwise
-  useEffect(() => {
-    const hasIncomplete = rounds.some(
-      r => r.block_height !== 0 && r.participant_status !== 'complete'
-    );
-    const interval = setInterval(fetchRounds, hasIncomplete ? 30_000 : 120_000);
-    return () => clearInterval(interval);
-  }, [rounds]);
-
-  const fetchRounds = async () => {
+  const fetchRounds = useCallback(async () => {
     try {
       const response = await fetch('/api/rounds');
       if (!response.ok) throw new Error('Failed to fetch rounds');
@@ -105,7 +92,20 @@ export default function RoundsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchRounds();
+  }, [fetchRounds]);
+
+  // Always poll rounds: 30s when incomplete rounds exist, 120s otherwise
+  useEffect(() => {
+    const hasIncomplete = rounds.some(
+      r => r.block_height !== 0 && r.participant_status !== 'complete'
+    );
+    const interval = setInterval(fetchRounds, hasIncomplete ? 30_000 : 120_000);
+    return () => clearInterval(interval);
+  }, [rounds, fetchRounds]);
 
   const fetchParticipants = useCallback(async (blockHeight: number) => {
     const requestId = Date.now();

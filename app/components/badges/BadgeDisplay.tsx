@@ -2,13 +2,15 @@
 
 import type { UserRoundHistoryEntry } from '@/app/api/user/[address]/rounds/route';
 import BlockBadge from './BlockBadge';
+import RefineryOperatorBadge from './RefineryOperatorBadge';
 
 interface BadgeDisplayProps {
   rounds: UserRoundHistoryEntry[];
+  hasRefineryOperatorBadge?: boolean;
   loading?: boolean;
 }
 
-export default function BadgeDisplay({ rounds, loading }: BadgeDisplayProps) {
+export default function BadgeDisplay({ rounds, hasRefineryOperatorBadge, loading }: BadgeDisplayProps) {
   if (loading) {
     return (
       <div className="flex items-center gap-2">
@@ -18,7 +20,7 @@ export default function BadgeDisplay({ rounds, loading }: BadgeDisplayProps) {
     );
   }
 
-  if (!rounds || rounds.length === 0) {
+  if ((!rounds || rounds.length === 0) && !hasRefineryOperatorBadge) {
     return <span className="text-gray-400">-</span>;
   }
 
@@ -30,6 +32,7 @@ export default function BadgeDisplay({ rounds, loading }: BadgeDisplayProps) {
           blockHeight={round.block_height}
         />
       ))}
+      {hasRefineryOperatorBadge && <RefineryOperatorBadge />}
     </div>
   );
 }

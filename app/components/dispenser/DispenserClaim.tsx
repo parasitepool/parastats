@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type MouseEvent } from "react";
+import Image from "next/image";
 import { useWallet } from "@/app/hooks/useWallet";
+import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
 
 interface Eligibility {
     username: string;
@@ -25,6 +27,8 @@ interface Slot {
 interface DispenserClaimProps {
     userId: string;
     className?: string;
+    collapsed?: boolean;
+    onToggle?: () => void;
 }
 
 function buildSlots(data: Eligibility): Slot[] {
@@ -46,7 +50,7 @@ function buildSlots(data: Eligibility): Slot[] {
     return slots;
 }
 
-export default function DispenserClaim({ userId, className = "" }: DispenserClaimProps) {
+export default function DispenserClaim({ userId, className = "", collapsed = false, onToggle }: DispenserClaimProps) {
     const { address, isInitialized } = useWallet();
     const [eligibility, setEligibility] = useState<Eligibility | null>(null);
     const [loading, setLoading] = useState(true);
@@ -183,6 +187,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
 
     const miningSlots = slots.filter((s) => s.tier !== "override");
     const whitelistSlots = slots.filter((s) => s.tier === "override");
+    const firstVisibleInscriptionSlotIndex = [...miningSlots, ...whitelistSlots].find((slot) => slot.inscriptionId)?.index;
 
     const renderSlots = (slotsToRender: typeof slots) =>
         slotsToRender.map((slot) => {
@@ -193,9 +198,13 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                     <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
                         {slot.inscriptionId && (
                             <a target="_blank" rel="noopener noreferrer" href={`https://ordinals.com/inscription/${slot.inscriptionId}`}>
-                                <img
+                                <Image
                                     src={`https://ordinals.com/content/${slot.inscriptionId}`}
                                     alt="inscription"
+                                    width={512}
+                                    height={512}
+                                    loading={slot.index === firstVisibleInscriptionSlotIndex ? "eager" : "lazy"}
+                                    unoptimized
                                     className="w-full min-w-[200px] aspect-square bg-transparent"
                                     style={{ imageRendering: "pixelated" }}
                                 />
@@ -249,9 +258,22 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
             );
         });
 
+    const containerClassName = getCollapsibleContainerClassName(
+        `bg-background p-4 sm:p-6 shadow-md border border-border ${className}`,
+        collapsed,
+        Boolean(onToggle),
+    );
+
+    const handleClick = (event: MouseEvent<HTMLDivElement>) => {
+        if (!onToggle || !shouldToggleCollapse(event)) {
+            return;
+        }
+        onToggle();
+    };
+
     return (
-        <div className={`bg-background p-4 sm:p-6 shadow-md border border-border ${className}`}>
-            <div className="flex items-center mb-4 sm:mb-6">
+        <div className={containerClassName} onClick={handleClick}>
+            <div className={`flex items-center ${collapsed ? '' : 'mb-4 sm:mb-6'}`}>
                 <div className="flex items-center">
                     <div className="mr-2 text-accent-3">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -267,7 +289,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 </div>
             </div>
 
-            {miningSlots.length > 0 && (
+            {!collapsed && miningSlots.length > 0 && (
                 <div className="mb-6">
                     <h3 className="text-sm font-medium text-accent-2 mb-3">Mining Reward</h3>
                     <div className="grid gap-4 sm:gap-6 grid-cols-3">
@@ -276,7 +298,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 </div>
             )}
 
-            {whitelistSlots.length > 0 && (
+            {!collapsed && whitelistSlots.length > 0 && (
                 <div className="mb-6 last:mb-0">
                     <h3 className="text-sm font-medium text-accent-2 mb-3">Whitelist</h3>
                     <div className="grid gap-4 sm:gap-6 grid-cols-3">
@@ -294,7 +316,7 @@ export default function DispenserClaim({ userId, className = "" }: DispenserClai
                 </div>
             )**/}
 
-            {error && (
+            {!collapsed && error && (
                 <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
                     {error}
                 </div>

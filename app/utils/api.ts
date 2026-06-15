@@ -264,3 +264,14 @@ export async function getUserBlockDiffs(address: string, limit: number = 50): Pr
     throw error;
   }
 }
+
+export async function getUserRefineryOperatorBadge(address: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/router/refinery-operator?address=${encodeURIComponent(address)}`, { cache: 'no-store' });
+    if (!response.ok) return false;
+    const data = await response.json() as { hasRefineryOperatorBadge?: unknown };
+    return data.hasRefineryOperatorBadge === true;
+  } catch {
+    return false;
+  }
+}

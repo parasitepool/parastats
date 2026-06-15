@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'parasite.sati.pro',
       },
+      {
+        protocol: 'https',
+        hostname: 'ordinals.com',
+        pathname: '/content/**',
+      },
     ],
   },
   async headers() {

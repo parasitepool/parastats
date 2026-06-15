@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 
 interface Props {
@@ -48,9 +49,13 @@ export default async function DispenserSharePage({ params }: Props) {
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    <img
+                    <Image
                         src={`https://ordinals.com/content/${inscriptionId}`}
                         alt="Inscription"
+                        width={256}
+                        height={256}
+                        loading="eager"
+                        unoptimized
                         className="w-64 h-64 bg-transparent"
                         style={{ imageRendering: "pixelated" }}
                     />

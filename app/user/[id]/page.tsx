@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect, useMemo } from 'react';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate, updateAccountMetadata, getUserBlockDiffs, getUserRounds, type UserBlockDiffEntry, type UserRoundsResponse } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, updateAccountMetadata, getUserBlockDiffs, getUserRounds, getUserRefineryOperatorBadge, type UserBlockDiffEntry, type UserRoundsResponse } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -33,6 +33,7 @@ const ACCOUNT_COLLAPSE_STORAGE_PREFIX = 'parasite_account_collapse_';
 interface CollapsedSections {
   stratumLightning: boolean;
   refinery: boolean;
+  dispenser: boolean;
   hashrateChart: boolean;
   rounds: boolean;
   miners: boolean;
@@ -41,6 +42,7 @@ interface CollapsedSections {
 const defaultCollapsedSections: CollapsedSections = {
   stratumLightning: false,
   refinery: false,
+  dispenser: false,
   hashrateChart: false,
   rounds: false,
   miners: false,
@@ -56,6 +58,7 @@ function parseCollapsedSections(value: string | null): CollapsedSections {
   return {
     stratumLightning: Boolean(parsedState.stratumLightning),
     refinery: Boolean(parsedState.refinery),
+    dispenser: Boolean(parsedState.dispenser),
     hashrateChart: Boolean(parsedState.hashrateChart),
     rounds: Boolean(parsedState.rounds),
     miners: Boolean(parsedState.miners),
@@ -79,6 +82,7 @@ export default function UserDashboard() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [userBlockDiffs, setUserBlockDiffs] = useState<UserBlockDiffEntry[]>([]);
   const [roundsData, setRoundsData] = useState<UserRoundsResponse | null>(null);
+  const [hasRefineryOperatorBadge, setHasRefineryOperatorBadge] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<CollapsedSections>(defaultCollapsedSections);
   const [loadedCollapsePreferencesUserId, setLoadedCollapsePreferencesUserId] = useState<string | null>(null);
 
@@ -333,6 +337,25 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
+  useEffect(() => {
+    if (!isValidAddress) return;
+
+    let mounted = true;
+
+    const fetchRefineryOperatorBadge = async () => {
+      const hasBadge = await getUserRefineryOperatorBadge(userId);
+      if (mounted) setHasRefineryOperatorBadge(hasBadge);
+    };
+
+    fetchRefineryOperatorBadge();
+    const intervalId = setInterval(fetchRefineryOperatorBadge, 60000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
+  }, [userId, isValidAddress]);
+
   const allRounds = useMemo(() => [
     ...(roundsData?.current_round ? [{
       block_height: CURRENT_ROUND_BLOCK,
@@ -543,6 +566,7 @@ export default function UserDashboard() {
       value: (
         <BadgeDisplay
           rounds={roundsData?.history ?? []}
+          hasRefineryOperatorBadge={hasRefineryOperatorBadge}
           loading={!hasInitiallyLoaded}
         />
       ),
@@ -708,7 +732,12 @@ export default function UserDashboard() {
                         onToggle={() => toggleCollapsedSection('stratumLightning')}
                       />
                     </div>
-                    <DispenserClaim userId={userId} className="mt-4" />
+                    <DispenserClaim
+                      userId={userId}
+                      className="mt-4"
+                      collapsed={collapsedSections.dispenser}
+                      onToggle={() => toggleCollapsedSection('dispenser')}
+                    />
                   </div>
               )}
             </div>

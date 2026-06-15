@@ -14,6 +14,7 @@ export default function WorkerDashboard() {
   const [workerData, setWorkerData] = useState<ProcessedWorkerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentTimeSeconds, setCurrentTimeSeconds] = useState(0);
 
   // Extract user address from worker ID (format: address.workername)
   const userAddress = workerId.split('.')[0];
@@ -59,6 +60,14 @@ export default function WorkerDashboard() {
     };
   }, [workerId, userAddress]);
 
+  useEffect(() => {
+    const updateCurrentTime = () => setCurrentTimeSeconds(Date.now() / 1000);
+    updateCurrentTime();
+
+    const intervalId = setInterval(updateCurrentTime, 10000);
+    return () => clearInterval(intervalId);
+  }, []);
+
   // Update the Navigation component with the current worker information
   useEffect(() => {
     const navigationElement = document.querySelector('header');
@@ -96,6 +105,9 @@ export default function WorkerDashboard() {
       </div>
     );
   }
+
+  const lastSubmissionSeconds = Number.parseInt(workerData.lastSubmission, 10);
+  const isActive = currentTimeSeconds > 0 && lastSubmissionSeconds > currentTimeSeconds - 600;
 
   return (
     <main className="flex min-h-screen flex-col items-start py-8">
@@ -150,7 +162,7 @@ export default function WorkerDashboard() {
                   <h3 className="text-sm font-medium text-accent-2">Status</h3>
                 </div>
                 <p className="text-2xl font-semibold">
-                  {parseInt(workerData.lastSubmission) > (Date.now() / 1000 - 600) ? (
+                  {isActive ? (
                     <span className="text-green-500">Active</span>
                   ) : (
                     <span className="text-red-500">Inactive</span>
