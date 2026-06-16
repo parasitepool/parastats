@@ -88,10 +88,12 @@ export default function UserDashboard() {
 
   const {
     address,
+    walletType,
     isLightningAuthenticated,
     isInitialized,
     isConnected,
     connectWithLightning,
+    signMessage,
   } = useWallet();
 
   // Validate Bitcoin address on mount
@@ -371,9 +373,13 @@ export default function UserDashboard() {
 
   const isPrivate = accountData?.metadata?.is_private ?? false;
   const isOwnProfile = isConnected && address === userId;
+  // Manual wallets connect by asserting an address (no Lightning). They get owner
+  // features that are signature-gated server-side (privacy, dispenser) but no
+  // Lightning balance and no Refinery (which relies on Lightning auth).
+  const isManualOwner = isOwnProfile && walletType === 'manual';
   const refineryLoading = !isInitialized || !hasInitiallyLoaded || isLoadingAccountData;
   const refineryActivated = Boolean(isLightningAuthenticated && accountData && accountData.ln_address);
-  const showRefinery = isOwnProfile && (refineryLoading || refineryActivated);
+  const showRefinery = isOwnProfile && walletType !== 'manual' && (refineryLoading || refineryActivated);
   const toggleCollapsedSection = (section: keyof CollapsedSections) => {
     setCollapsedSections(value => ({
       ...value,
@@ -388,32 +394,20 @@ export default function UserDashboard() {
     try {
       const metadata = { is_private: !isPrivate };
 
-      const { request: satConnectRequest, MessageSigningProtocols } = await import('@sats-connect/core');
-
-      const signResponse = await satConnectRequest('signMessage', {
+      const signature = await signMessage({
         address: userId,
         message: JSON.stringify(metadata),
-        protocol: MessageSigningProtocols.BIP322,
       });
-
-      if (signResponse.status !== 'success') {
-        throw new Error('Failed to sign message');
-      }
-
-      let signature: string;
-      if (typeof signResponse.result === 'string') {
-        signature = signResponse.result;
-      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
-        signature = signResponse.result.signature;
-      } else {
-        throw new Error('Unexpected signature format');
-      }
 
       await updateAccountMetadata(userId, metadata, signature);
       window.location.reload();
     } catch (error) {
       console.error('Failed to toggle visibility:', error);
-      alert('Failed to toggle visibility. Please try again.');
+      // Don't nag the user when they intentionally cancelled the signature.
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      if (!message.includes('cancel')) {
+        alert('Failed to toggle visibility. Please try again.');
+      }
     } finally {
       setIsTogglingVisibility(false);
     }
@@ -459,27 +453,12 @@ export default function UserDashboard() {
 
       const usernameAddress = `${combinedData.lightning.walletInfo.username}@sati.pro`;
 
-      // Request signature for the Lightning address using BIP322
-      const { request: satConnectRequest, MessageSigningProtocols } = await import('@sats-connect/core');
-
-      const signResponse = await satConnectRequest('signMessage', {
+      // Request signature for the Lightning address (BIP322). Activation is
+      // Xverse-only, so this resolves through the Xverse signing path.
+      const signature = await signMessage({
         address: result.address,
         message: usernameAddress,
-        protocol: MessageSigningProtocols.BIP322
       });
-
-      if (signResponse.status !== 'success') {
-        throw new Error('Failed to sign message');
-      }
-
-      let signature: string;
-      if (typeof signResponse.result === 'string') {
-        signature = signResponse.result;
-      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
-        signature = signResponse.result.signature;
-      } else {
-        throw new Error('Unexpected signature format');
-      }
 
       // Send update request to set the Lightning address
       const updateResponse = await fetch('/api/account/update', {
@@ -697,6 +676,27 @@ export default function UserDashboard() {
                     />
                   </div>
               ) : isConnected && !isOwnProfile ? null
+              : isManualOwner ? (
+                  // Manual wallet owner - Stratum + Dispenser only (no Lightning balance, no Refinery)
+                  <div>
+                    <div className="bg-secondary border border-border p-3 text-xs text-foreground/60 mb-4">
+                      Connected manually. Actions like claiming or toggling privacy are approved by signing a
+                      message with the wallet that owns this address.
+                    </div>
+                    <StratumInfo
+                      userId={userId}
+                      isLoading={false}
+                      collapsed={collapsedSections.stratumLightning}
+                      onToggle={() => toggleCollapsedSection('stratumLightning')}
+                    />
+                    <DispenserClaim
+                      userId={userId}
+                      className="mt-4"
+                      collapsed={collapsedSections.dispenser}
+                      onToggle={() => toggleCollapsedSection('dispenser')}
+                    />
+                  </div>
+              )
               : !isLightningAuthenticated || !accountData || !accountData.ln_address ? (
                       // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
                   <div className="bg-background p-6 sm:p-8 shadow-md border border-border">

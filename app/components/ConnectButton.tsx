@@ -4,14 +4,21 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '../hooks/useWallet';
 import HelpModal from './modals/HelpModal';
+import ManualConnectModal from './modals/ManualConnectModal';
 
 export default function ConnectButton() {
   const { address, isConnected, disconnect, connectWithLightning } = useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showManualConnect, setShowManualConnect] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+
+  const openManualConnect = () => {
+    setShowHelpModal(false);
+    setShowManualConnect(true);
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -94,42 +101,59 @@ export default function ConnectButton() {
 
   return (
     <>
-      <div className="relative" ref={dropdownRef}>
-        <button
-          onClick={handleButtonClick}
-          disabled={isConnecting}
-          className="cursor-pointer px-4 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isConnecting ? (
-            'Connecting...'
-          ) : isConnected && address ? (
-            shortenAddress(address)
-          ) : (
-            'Connect'
-          )}
-        </button>
+      <div className="flex flex-col items-end gap-1">
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={handleButtonClick}
+            disabled={isConnecting}
+            className="cursor-pointer px-4 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isConnecting ? (
+              'Connecting...'
+            ) : isConnected && address ? (
+              shortenAddress(address)
+            ) : (
+              'Connect'
+            )}
+          </button>
 
-        {isConnected && showDropdown && (
-          <div className="absolute right-0 mt-2 w-48 bg-background border border-gray-300 shadow-lg z-50">
-            <button
-              onClick={handleGoToAccount}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 hover:text-black text-xs sm:text-sm transition-colors"
-            >
-              Account
-            </button>
-            <button
-              onClick={handleDisconnect}
-              className="w-full text-left px-4 py-2 hover:bg-gray-100 hover:text-black text-xs sm:text-sm border-t border-gray-300 transition-colors"
-            >
-              Disconnect
-            </button>
-          </div>
+          {isConnected && showDropdown && (
+            <div className="absolute right-0 mt-2 w-48 bg-background border border-gray-300 shadow-lg z-50">
+              <button
+                onClick={handleGoToAccount}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 hover:text-black text-xs sm:text-sm transition-colors"
+              >
+                Account
+              </button>
+              <button
+                onClick={handleDisconnect}
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 hover:text-black text-xs sm:text-sm border-t border-gray-300 transition-colors"
+              >
+                Disconnect
+              </button>
+            </div>
+          )}
+        </div>
+
+        {!isConnected && !isConnecting && (
+          <button
+            onClick={openManualConnect}
+            className="text-[10px] sm:text-xs text-foreground/50 hover:text-foreground underline underline-offset-2 transition-colors"
+          >
+            Use another wallet
+          </button>
         )}
       </div>
 
-      <HelpModal 
-        isOpen={showHelpModal} 
-        onClose={() => setShowHelpModal(false)} 
+      <HelpModal
+        isOpen={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
+        onManualConnect={openManualConnect}
+      />
+
+      <ManualConnectModal
+        isOpen={showManualConnect}
+        onClose={() => setShowManualConnect(false)}
       />
     </>
   );
