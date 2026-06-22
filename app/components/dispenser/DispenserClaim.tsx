@@ -167,6 +167,12 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
 
             // setTxHex(data.hex);
             setLocalClaimed((prev) => new Set(prev).add(slotIndex));
+
+            // Link assets dispense a redemption URL, redirect to it
+            if (data.claim_url) {
+                window.location.assign(data.claim_url);
+                return;
+            }
         } catch (err) {
             console.error("Claim error:", err);
             setError(err instanceof Error ? err.message : "Failed to claim");
