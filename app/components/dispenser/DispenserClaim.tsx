@@ -198,12 +198,25 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     const renderSlots = (slotsToRender: typeof slots) =>
         slotsToRender.map((slot) => {
             const claiming = claimingSlot === slot.index;
+            const isCodeAsset = !slot.inscriptionId;
 
             return (
                 <div key={slot.index} className="flex flex-col">
                     <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
-                        {slot.inscriptionId && (
-                            <a target="_blank" rel="noopener noreferrer" href={`https://ordinals.com/inscription/${slot.inscriptionId}`}>
+                        {isCodeAsset ? (
+                            <div className="w-full aspect-square flex flex-col items-center justify-center gap-2 bg-background border border-border text-accent-2">
+                                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span className="text-xs font-medium">Redemption code</span>
+                            </div>
+                        ) : (
+                            <a
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                href={`https://ordinals.com/inscription/${slot.inscriptionId}`}
+                                className="block w-full aspect-square"
+                            >
                                 <Image
                                     src={`https://ordinals.com/content/${slot.inscriptionId}`}
                                     alt="inscription"
@@ -211,7 +224,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                     height={512}
                                     loading={slot.index === firstVisibleInscriptionSlotIndex ? "eager" : "lazy"}
                                     unoptimized
-                                    className="w-full min-w-[200px] aspect-square bg-transparent"
+                                    className="w-full h-full object-contain bg-transparent"
                                     style={{ imageRendering: "pixelated" }}
                                 />
                             </a>
@@ -225,7 +238,26 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                 )}
                             </p>
                             <div className="flex items-center gap-2">
-                                {slot.claimed && (
+                                {slot.claimed && isCodeAsset && isOwner && (
+                                    <button
+                                        onClick={() => handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
+                                        disabled={claiming || claimingSlot !== null}
+                                        className="flex items-center gap-1 px-2 py-1 border border-border hover:bg-secondary-hover transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Reopen claim page"
+                                    >
+                                        {claiming ? (
+                                            "Opening..."
+                                        ) : (
+                                            <>
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                </svg>
+                                                Link
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                                {slot.claimed && !isCodeAsset && (
                                     <button
                                         onClick={() => handleCopyLink(slot.inscriptionId, slot.index)}
                                         className="flex items-center gap-1 px-2 py-1 border border-border hover:bg-secondary-hover transition-colors text-xs font-medium flex-shrink-0"
