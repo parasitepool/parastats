@@ -58,7 +58,7 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
           </div>
         </div>
         <div className="text-[10px] text-gray-300 mb-4 italic">
-          Participation in Bitcoin mining, including through Parasite Pool, which is still considered in beta testing, involves risks such as market volatility, hardware failure, and changes in network difficulty. Parasite Pool is in beta and has not yet found a block; there is no assurance of future block discoveries or payouts. Users should exercise caution and consider their financial situation before engaging in mining activities.
+          Participation in Bitcoin mining, including through Parasite Pool, which is still considered in beta testing, involves risks such as market volatility, hardware failure, and changes in network difficulty. Parasite Pool is in beta and has found three blocks as of 06-26-2026; there is no assurance of future block discoveries or payouts. Users should exercise caution and consider their financial situation before engaging in mining activities.
         </div>
         <div className="flex justify-end">
           <button
