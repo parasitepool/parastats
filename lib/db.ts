@@ -156,6 +156,18 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_stratum_pool ON stratum_notifications(pool);
   `);
 
+  // Cumulative total work checkpoints, one row per round (keyed by block_hash).
+  // The collector upserts this every 24h; the pool-stats route adds the live
+  // tail (rows since checkpoint_timestamp) on each request.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS total_work_checkpoints (
+      block_hash TEXT PRIMARY KEY,
+      block_timestamp INTEGER NOT NULL,
+      checkpoint_timestamp INTEGER NOT NULL,
+      cumulative_work REAL NOT NULL
+    )
+  `);
+
   // Create block highest diff table (pool-wide winner per block)
   // block_timestamp is the actual Bitcoin block timestamp from mempool.space
   db.exec(`
