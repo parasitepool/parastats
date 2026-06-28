@@ -5,6 +5,7 @@ import {
   formatDifficulty,
   formatPrice,
   formatExpectedBlockTime,
+  formatWork,
   parseHashrate
 } from "../utils/formatters";
 import StatCard from "./StatCard";
@@ -15,13 +16,14 @@ import {
   type PoolStats as PoolStatsType
 } from "../utils/api";
 import { Hashrate, Adjustment } from "@mempool/mempool.js/lib/interfaces/bitcoin/difficulty";
-import { 
-  ClockIcon, 
-  LightningIcon, 
-  BookmarkIcon, 
-  TrendingUpIcon, 
+import {
+  ClockIcon,
+  LightningIcon,
+  BookmarkIcon,
+  TrendingUpIcon,
   WalletIcon,
-  InfoIcon 
+  InfoIcon,
+  PickaxeIcon,
 } from "./icons";
 
 interface PoolStatsProps {
@@ -35,6 +37,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
   const [difficultyAdjustment, setDifficultyAdjustment] = useState<Adjustment>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [highestDiffTooltipVisible, setHighestDiffTooltipVisible] = useState(false);
+  const [totalWorkTooltipVisible, setTotalWorkTooltipVisible] = useState(false);
   const [localLoading, setLocalLoading] = useState(true);
 
   useEffect(() => {
@@ -102,6 +105,29 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
         </span>
       ) : '-',
       icon: <TrendingUpIcon />,
+    },
+    {
+      // TODO: if a true server-side total work metric is implemented on the pool
+      // aggregator in the future, wire that value in here instead of this estimate.
+      title: "Total Work Since Last Block",
+      value: poolStats?.totalWorkSinceLastBlock ? (
+        <span className="flex gap-1 items-baseline">
+          {formatWork(poolStats.totalWorkSinceLastBlock)}
+          <span
+            className="relative inline-block"
+            onMouseEnter={() => setTotalWorkTooltipVisible(true)}
+            onMouseLeave={() => setTotalWorkTooltipVisible(false)}
+          >
+            <span className="text-sm text-muted-foreground cursor-help">(est.)</span>
+            {totalWorkTooltipVisible && (
+              <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
+                Estimated using 1D avg hashrate × time since last block ÷ 2³²
+              </span>
+            )}
+          </span>
+        </span>
+      ) : '-',
+      icon: <PickaxeIcon />,
     },
     {
       title: "Minimum Needed Diff",
