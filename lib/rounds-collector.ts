@@ -15,6 +15,7 @@ interface RoundParticipant {
   username: string;
   blocks_participated: number;
   top_diff: number;
+  total_work?: number;
 }
 
 // Configuration
@@ -237,12 +238,12 @@ export async function collectCurrentRound(): Promise<void> {
       db.prepare('DELETE FROM round_participants WHERE block_height = 0').run();
 
       const insert = db.prepare(`
-        INSERT INTO round_participants (block_height, username, top_diff, blocks_participated)
-        VALUES (0, ?, ?, ?)
+        INSERT INTO round_participants (block_height, username, top_diff, blocks_participated, total_work)
+        VALUES (0, ?, ?, ?, ?)
       `);
 
       for (const p of participants) {
-        insert.run(p.username, p.top_diff, p.blocks_participated);
+        insert.run(p.username, p.top_diff, p.blocks_participated, p.total_work ?? 0);
       }
     })();
 
@@ -296,12 +297,12 @@ export async function fetchPendingRoundParticipants(): Promise<void> {
           db.prepare('DELETE FROM round_participants WHERE block_height = ?').run(blockHeight);
 
           const insert = db.prepare(`
-            INSERT INTO round_participants (block_height, username, top_diff, blocks_participated)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO round_participants (block_height, username, top_diff, blocks_participated, total_work)
+            VALUES (?, ?, ?, ?, ?)
           `);
 
           for (const p of participants) {
-            insert.run(blockHeight, p.username, p.top_diff, p.blocks_participated);
+            insert.run(blockHeight, p.username, p.top_diff, p.blocks_participated, p.total_work ?? 0);
           }
 
           db.prepare('UPDATE rounds SET participant_status = ?, error_message = NULL WHERE block_height = ?')

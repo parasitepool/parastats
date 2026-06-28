@@ -19,6 +19,7 @@ interface RoundParticipant {
   claimed: boolean;
   top_diff: number;
   blocks_participated: number;
+  total_work: number;
 }
 
 interface ParticipantRow {
@@ -27,10 +28,11 @@ interface ParticipantRow {
   claimed: boolean;
   top_diff: number;
   blocks_participated: number;
+  total_work: number;
   rank: number;
 }
 
-type LeaderboardType = 'difficulty' | 'participation';
+type LeaderboardType = 'work' | 'difficulty' | 'participation';
 
 const addressColumn: BoardColumn<ParticipantRow> = {
   key: 'address',
@@ -58,6 +60,16 @@ const participationColumns: BoardColumn<ParticipantRow>[] = [
   }
 ];
 
+const workColumns: BoardColumn<ParticipantRow>[] = [
+  addressColumn,
+  {
+    key: 'total_work',
+    header: 'Work',
+    align: 'right',
+    render: (value) => formatDifficulty(value as number)
+  }
+];
+
 function toRows(data: RoundParticipant[]): ParticipantRow[] {
   return data.map((p, i) => ({
     id: i + 1,
@@ -65,6 +77,7 @@ function toRows(data: RoundParticipant[]): ParticipantRow[] {
     claimed: p.claimed,
     top_diff: p.top_diff,
     blocks_participated: p.blocks_participated,
+    total_work: p.total_work,
     rank: p.rank,
   }));
 }
@@ -73,10 +86,11 @@ export default function RoundsPage() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRound, setExpandedRound] = useState<number | null>(null);
+  const [workParticipants, setWorkParticipants] = useState<ParticipantRow[]>([]);
   const [diffParticipants, setDiffParticipants] = useState<ParticipantRow[]>([]);
   const [partParticipants, setPartParticipants] = useState<ParticipantRow[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [mobileTab, setMobileTab] = useState<LeaderboardType>('difficulty');
+  const [mobileTab, setMobileTab] = useState<LeaderboardType>('work');
   const latestRequest = useRef(0);
   const expandedStatus = rounds.find(r => r.block_height === expandedRound)?.participant_status;
   const prevStatusRef = useRef(expandedStatus);
@@ -112,26 +126,31 @@ export default function RoundsPage() {
     latestRequest.current = requestId;
     setParticipantsLoading(true);
     try {
-      const [diffRes, partRes] = await Promise.all([
+      const [workRes, diffRes, partRes] = await Promise.all([
+        fetch(`/api/rounds/${blockHeight}?type=work&limit=99`),
         fetch(`/api/rounds/${blockHeight}?type=difficulty&limit=99`),
         fetch(`/api/rounds/${blockHeight}?type=participation&limit=99`),
       ]);
       if (latestRequest.current !== requestId) return;
-      if (diffRes.status === 202 || partRes.status === 202) {
+      if (workRes.status === 202 || diffRes.status === 202 || partRes.status === 202) {
+        setWorkParticipants([]);
         setDiffParticipants([]);
         setPartParticipants([]);
         return;
       }
-      if (!diffRes.ok || !partRes.ok) throw new Error('Failed to fetch participants');
-      const [diffData, partData]: [RoundParticipant[], RoundParticipant[]] = await Promise.all([
+      if (!workRes.ok || !diffRes.ok || !partRes.ok) throw new Error('Failed to fetch participants');
+      const [workData, diffData, partData]: [RoundParticipant[], RoundParticipant[], RoundParticipant[]] = await Promise.all([
+        workRes.json(),
         diffRes.json(),
         partRes.json(),
       ]);
+      setWorkParticipants(toRows(workData));
       setDiffParticipants(toRows(diffData));
       setPartParticipants(toRows(partData));
     } catch (error) {
       if (latestRequest.current !== requestId) return;
       console.error('Error fetching participants:', error);
+      setWorkParticipants([]);
       setDiffParticipants([]);
       setPartParticipants([]);
     } finally {
@@ -159,6 +178,7 @@ export default function RoundsPage() {
   const toggleRound = (blockHeight: number) => {
     if (expandedRound === blockHeight) {
       setExpandedRound(null);
+      setWorkParticipants([]);
       setDiffParticipants([]);
       setPartParticipants([]);
     } else {
@@ -247,38 +267,41 @@ export default function RoundsPage() {
                     <>
                       {/* Mobile: tabs */}
                       <div className="flex space-x-2 mb-4 md:hidden">
-                        <button
-                          onClick={() => setMobileTab('difficulty')}
-                          className={`px-3 py-1 transition-colors cursor-pointer ${
-                            mobileTab === 'difficulty'
-                              ? 'bg-foreground text-background'
-                              : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
-                          }`}
-                        >
-                          Difficulty
-                        </button>
-                        <button
-                          onClick={() => setMobileTab('participation')}
-                          className={`px-3 py-1 transition-colors cursor-pointer ${
-                            mobileTab === 'participation'
-                              ? 'bg-foreground text-background'
-                              : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
-                          }`}
-                        >
-                          Participation
-                        </button>
+                        {([
+                          ['work', 'Work'],
+                          ['difficulty', 'Difficulty'],
+                          ['participation', 'Participation'],
+                        ] as [LeaderboardType, string][]).map(([tab, label]) => (
+                          <button
+                            key={tab}
+                            onClick={() => setMobileTab(tab)}
+                            className={`px-3 py-1 transition-colors cursor-pointer ${
+                              mobileTab === tab
+                                ? 'bg-foreground text-background'
+                                : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
                       </div>
                       {/* Mobile: single table based on active tab */}
                       <div className="md:hidden">
                         <Board
-                          title={mobileTab === 'difficulty' ? 'Top Difficulties' : 'Most Participation'}
-                          data={mobileTab === 'difficulty' ? diffParticipants : partParticipants}
-                          columns={mobileTab === 'difficulty' ? diffColumns : participationColumns}
+                          title={mobileTab === 'work' ? 'Most Work' : mobileTab === 'difficulty' ? 'Top Difficulties' : 'Most Participation'}
+                          data={mobileTab === 'work' ? workParticipants : mobileTab === 'difficulty' ? diffParticipants : partParticipants}
+                          columns={mobileTab === 'work' ? workColumns : mobileTab === 'difficulty' ? diffColumns : participationColumns}
                           isLoading={participantsLoading}
                         />
                       </div>
                       {/* Desktop: side by side */}
-                      <div className="hidden md:grid md:grid-cols-2 gap-4">
+                      <div className="hidden md:grid md:grid-cols-3 gap-4">
+                        <Board
+                          title="Most Work"
+                          data={workParticipants}
+                          columns={workColumns}
+                          isLoading={participantsLoading}
+                        />
                         <Board
                           title="Top Difficulties"
                           data={diffParticipants}

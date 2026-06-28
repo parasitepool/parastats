@@ -15,13 +15,14 @@ import {
   type PoolStats as PoolStatsType
 } from "../utils/api";
 import { Hashrate, Adjustment } from "@mempool/mempool.js/lib/interfaces/bitcoin/difficulty";
-import { 
-  ClockIcon, 
-  LightningIcon, 
-  BookmarkIcon, 
-  TrendingUpIcon, 
+import {
+  ClockIcon,
+  LightningIcon,
+  BookmarkIcon,
+  TrendingUpIcon,
   WalletIcon,
-  InfoIcon 
+  InfoIcon,
+  PickaxeIcon
 } from "./icons";
 
 interface PoolStatsProps {
@@ -35,6 +36,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
   const [difficultyAdjustment, setDifficultyAdjustment] = useState<Adjustment>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [highestDiffTooltipVisible, setHighestDiffTooltipVisible] = useState(false);
+  const [workTooltipVisible, setWorkTooltipVisible] = useState(false);
   const [localLoading, setLocalLoading] = useState(true);
 
   useEffect(() => {
@@ -104,6 +106,27 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
       icon: <TrendingUpIcon />,
     },
     {
+      title: "Work Since Last Block",
+      value: poolStats?.workSinceLastBlock != null ? (
+        <span className="flex items-center gap-1">
+          {formatDifficulty(poolStats.workSinceLastBlock)}
+          <span
+            className="relative inline-block cursor-help"
+            onMouseEnter={() => setWorkTooltipVisible(true)}
+            onMouseLeave={() => setWorkTooltipVisible(false)}
+          >
+            <InfoIcon className="h-4 w-4 text-accent-3 p-0.5" />
+            {workTooltipVisible && (
+              <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs z-10 font-normal normal-case">
+                Counted pool work since the last block — the sum of every miner&apos;s accepted share difficulty this round. Updates every few minutes.
+              </span>
+            )}
+          </span>
+        </span>
+      ) : '-',
+      icon: <PickaxeIcon />,
+    },
+    {
       title: "Minimum Needed Diff",
       value: (
         <div className="flex items-baseline">
@@ -158,16 +181,15 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
 
   return (
     <div className="w-full">
-      <div className="flex flex-wrap -mx-2">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 lg:gap-3">
         {statCards.map((card, index) => (
-          <div key={index} className="w-1/2 md:w-1/3 lg:w-1/6 p-1 lg:p-2">
-            <StatCard
-              title={card.title}
-              value={card.value}
-              icon={card.icon}
-              loading={loading || localLoading}
-            />
-          </div>
+          <StatCard
+            key={index}
+            title={card.title}
+            value={card.value}
+            icon={card.icon}
+            loading={loading || localLoading}
+          />
         ))}
       </div>
     </div>

@@ -5,9 +5,11 @@ export interface UserRoundHistoryEntry {
   block_height: number;
   rank: number;
   blocks_rank: number;
+  work_rank: number;
   total_participants: number;
   top_diff: number;
   blocks_participated: number;
+  total_work: number;
   is_winner: boolean;
 }
 
@@ -15,9 +17,11 @@ export interface UserRoundsResponse {
   current_round: {
     rank: number;
     blocks_rank: number;
+    work_rank: number;
     total_participants: number;
     top_diff: number;
     blocks_participated: number;
+    total_work: number;
   } | null;
   rounds_won: number;
   total_rounds_participated: number;
@@ -49,8 +53,8 @@ export async function GET(
 
     // Current round (block_height = 0 sentinel)
     const currentUser = db.prepare(
-      `SELECT top_diff, blocks_participated FROM round_participants WHERE block_height = 0 AND username = ?`
-    ).get(address) as { top_diff: number; blocks_participated: number } | undefined;
+      `SELECT top_diff, blocks_participated, total_work FROM round_participants WHERE block_height = 0 AND username = ?`
+    ).get(address) as { top_diff: number; blocks_participated: number; total_work: number } | undefined;
 
     let current_round: UserRoundsResponse['current_round'] = null;
 
@@ -59,16 +63,19 @@ export async function GET(
         SELECT
           COUNT(CASE WHEN top_diff > ? THEN 1 END) + 1 AS rank,
           COUNT(CASE WHEN blocks_participated > ? THEN 1 END) + 1 AS blocks_rank,
+          COUNT(CASE WHEN total_work > ? THEN 1 END) + 1 AS work_rank,
           COUNT(*) AS total
         FROM round_participants WHERE block_height = 0
-      `).get(currentUser.top_diff, currentUser.blocks_participated) as { rank: number; blocks_rank: number; total: number };
+      `).get(currentUser.top_diff, currentUser.blocks_participated, currentUser.total_work) as { rank: number; blocks_rank: number; work_rank: number; total: number };
 
       current_round = {
         rank: rankInfo.rank,
         blocks_rank: rankInfo.blocks_rank,
+        work_rank: rankInfo.work_rank,
         total_participants: rankInfo.total,
         top_diff: currentUser.top_diff,
         blocks_participated: currentUser.blocks_participated,
+        total_work: currentUser.total_work,
       };
     }
 
@@ -93,8 +100,10 @@ export async function GET(
           rp.username,
           rp.top_diff,
           rp.blocks_participated,
+          rp.total_work,
           RANK() OVER (PARTITION BY rp.block_height ORDER BY rp.top_diff DESC) AS rank,
           RANK() OVER (PARTITION BY rp.block_height ORDER BY rp.blocks_participated DESC) AS blocks_rank,
+          RANK() OVER (PARTITION BY rp.block_height ORDER BY rp.total_work DESC) AS work_rank,
           COUNT(*) OVER (PARTITION BY rp.block_height) AS total_participants
         FROM round_participants rp
         INNER JOIN user_blocks ub ON ub.block_height = rp.block_height
@@ -104,8 +113,10 @@ export async function GET(
         ranked.block_height,
         ranked.top_diff,
         ranked.blocks_participated,
+        ranked.total_work,
         ranked.rank,
         ranked.blocks_rank,
+        ranked.work_rank,
         ranked.total_participants,
         CASE WHEN r.winner_username = ? THEN 1 ELSE 0 END AS is_winner
       FROM ranked
@@ -117,8 +128,10 @@ export async function GET(
       block_height: number;
       top_diff: number;
       blocks_participated: number;
+      total_work: number;
       rank: number;
       blocks_rank: number;
+      work_rank: number;
       total_participants: number;
       is_winner: number;
     }[];
@@ -131,9 +144,11 @@ export async function GET(
         block_height: row.block_height,
         rank: row.rank,
         blocks_rank: row.blocks_rank,
+        work_rank: row.work_rank,
         total_participants: row.total_participants,
         top_diff: row.top_diff,
         blocks_participated: row.blocks_participated,
+        total_work: row.total_work,
         is_winner: row.is_winner === 1,
       })),
     };

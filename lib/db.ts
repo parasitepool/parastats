@@ -211,15 +211,21 @@ function initializeTables() {
       username TEXT NOT NULL,
       top_diff REAL NOT NULL DEFAULT 0,
       blocks_participated INTEGER NOT NULL DEFAULT 0,
+      total_work REAL NOT NULL DEFAULT 0,
       PRIMARY KEY (block_height, username)
     )
   `);
+
+  // total_work = cumulative accepted share difficulty (work) per user per round.
+  addColumnIfNotExists(db, `ALTER TABLE round_participants ADD COLUMN total_work REAL NOT NULL DEFAULT 0`);
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_round_participants_diff
       ON round_participants(block_height, top_diff DESC);
     CREATE INDEX IF NOT EXISTS idx_round_participants_blocks
       ON round_participants(block_height, blocks_participated DESC);
+    CREATE INDEX IF NOT EXISTS idx_round_participants_work
+      ON round_participants(block_height, total_work DESC);
     CREATE INDEX IF NOT EXISTS idx_round_participants_username
       ON round_participants(username, block_height DESC);
   `);

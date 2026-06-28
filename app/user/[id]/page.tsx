@@ -361,9 +361,11 @@ export default function UserDashboard() {
       block_height: CURRENT_ROUND_BLOCK,
       rank: roundsData.current_round.rank,
       blocks_rank: roundsData.current_round.blocks_rank,
+      work_rank: roundsData.current_round.work_rank,
       total_participants: roundsData.current_round.total_participants,
       top_diff: roundsData.current_round.top_diff,
       blocks_participated: roundsData.current_round.blocks_participated,
+      total_work: roundsData.current_round.total_work,
       is_winner: false,
     }] : []),
     ...(roundsData?.history ?? []),
@@ -864,6 +866,16 @@ export default function UserDashboard() {
                                   ),
                             },
                             {
+                              key: 'work_rank',
+                              header: 'Work Rank',
+                              render: (_, item) => `${item.work_rank} / ${item.total_participants}`,
+                            },
+                            {
+                              key: 'total_work',
+                              header: 'Work',
+                              render: (value) => formatDifficulty(value as number),
+                            },
+                            {
                               key: 'rank',
                               header: 'Diff Rank',
                               render: (_, item) => `${item.rank} / ${item.total_participants}`,
@@ -909,6 +921,14 @@ export default function UserDashboard() {
                               )}
                             </div>
                             <div className="grid grid-cols-2 gap-2 text-sm">
+                              <div>
+                                <p className="text-foreground/60">Work Rank</p>
+                                <p className="font-medium">{round.work_rank} / {round.total_participants}</p>
+                              </div>
+                              <div>
+                                <p className="text-foreground/60">Work</p>
+                                <p className="font-medium">{formatDifficulty(round.total_work)}</p>
+                              </div>
                               <div>
                                 <p className="text-foreground/60">Diff Rank</p>
                                 <p className="font-medium">{round.rank} / {round.total_participants}</p>
