@@ -82,13 +82,23 @@ function toRows(data: RoundParticipant[]): ParticipantRow[] {
   }));
 }
 
+const LEADERBOARDS: { type: LeaderboardType; label: string; title: string; columns: BoardColumn<ParticipantRow>[] }[] = [
+  { type: 'work', label: 'Work', title: 'Most Work', columns: workColumns },
+  { type: 'difficulty', label: 'Difficulty', title: 'Top Difficulties', columns: diffColumns },
+  { type: 'participation', label: 'Participation', title: 'Most Participation', columns: participationColumns },
+];
+
+const emptyParticipants: Record<LeaderboardType, ParticipantRow[]> = {
+  work: [],
+  difficulty: [],
+  participation: [],
+};
+
 export default function RoundsPage() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRound, setExpandedRound] = useState<number | null>(null);
-  const [workParticipants, setWorkParticipants] = useState<ParticipantRow[]>([]);
-  const [diffParticipants, setDiffParticipants] = useState<ParticipantRow[]>([]);
-  const [partParticipants, setPartParticipants] = useState<ParticipantRow[]>([]);
+  const [participants, setParticipants] = useState<Record<LeaderboardType, ParticipantRow[]>>(emptyParticipants);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [mobileTab, setMobileTab] = useState<LeaderboardType>('work');
   const latestRequest = useRef(0);
@@ -126,33 +136,23 @@ export default function RoundsPage() {
     latestRequest.current = requestId;
     setParticipantsLoading(true);
     try {
-      const [workRes, diffRes, partRes] = await Promise.all([
-        fetch(`/api/rounds/${blockHeight}?type=work&limit=99`),
-        fetch(`/api/rounds/${blockHeight}?type=difficulty&limit=99`),
-        fetch(`/api/rounds/${blockHeight}?type=participation&limit=99`),
-      ]);
+      const responses = await Promise.all(
+        LEADERBOARDS.map(lb => fetch(`/api/rounds/${blockHeight}?type=${lb.type}&limit=99`))
+      );
       if (latestRequest.current !== requestId) return;
-      if (workRes.status === 202 || diffRes.status === 202 || partRes.status === 202) {
-        setWorkParticipants([]);
-        setDiffParticipants([]);
-        setPartParticipants([]);
+      if (responses.some(r => r.status === 202)) {
+        setParticipants(emptyParticipants);
         return;
       }
-      if (!workRes.ok || !diffRes.ok || !partRes.ok) throw new Error('Failed to fetch participants');
-      const [workData, diffData, partData]: [RoundParticipant[], RoundParticipant[], RoundParticipant[]] = await Promise.all([
-        workRes.json(),
-        diffRes.json(),
-        partRes.json(),
-      ]);
-      setWorkParticipants(toRows(workData));
-      setDiffParticipants(toRows(diffData));
-      setPartParticipants(toRows(partData));
+      if (responses.some(r => !r.ok)) throw new Error('Failed to fetch participants');
+      const data: RoundParticipant[][] = await Promise.all(responses.map(r => r.json()));
+      setParticipants(
+        Object.fromEntries(LEADERBOARDS.map((lb, i) => [lb.type, toRows(data[i])])) as Record<LeaderboardType, ParticipantRow[]>
+      );
     } catch (error) {
       if (latestRequest.current !== requestId) return;
       console.error('Error fetching participants:', error);
-      setWorkParticipants([]);
-      setDiffParticipants([]);
-      setPartParticipants([]);
+      setParticipants(emptyParticipants);
     } finally {
       if (latestRequest.current === requestId) {
         setParticipantsLoading(false);
@@ -178,9 +178,7 @@ export default function RoundsPage() {
   const toggleRound = (blockHeight: number) => {
     if (expandedRound === blockHeight) {
       setExpandedRound(null);
-      setWorkParticipants([]);
-      setDiffParticipants([]);
-      setPartParticipants([]);
+      setParticipants(emptyParticipants);
     } else {
       setExpandedRound(blockHeight);
       fetchParticipants(blockHeight);
@@ -267,53 +265,43 @@ export default function RoundsPage() {
                     <>
                       {/* Mobile: tabs */}
                       <div className="flex space-x-2 mb-4 md:hidden">
-                        {([
-                          ['work', 'Work'],
-                          ['difficulty', 'Difficulty'],
-                          ['participation', 'Participation'],
-                        ] as [LeaderboardType, string][]).map(([tab, label]) => (
+                        {LEADERBOARDS.map(lb => (
                           <button
-                            key={tab}
-                            onClick={() => setMobileTab(tab)}
+                            key={lb.type}
+                            onClick={() => setMobileTab(lb.type)}
                             className={`px-3 py-1 transition-colors cursor-pointer ${
-                              mobileTab === tab
+                              mobileTab === lb.type
                                 ? 'bg-foreground text-background'
                                 : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
                             }`}
                           >
-                            {label}
+                            {lb.label}
                           </button>
                         ))}
                       </div>
                       {/* Mobile: single table based on active tab */}
                       <div className="md:hidden">
-                        <Board
-                          title={mobileTab === 'work' ? 'Most Work' : mobileTab === 'difficulty' ? 'Top Difficulties' : 'Most Participation'}
-                          data={mobileTab === 'work' ? workParticipants : mobileTab === 'difficulty' ? diffParticipants : partParticipants}
-                          columns={mobileTab === 'work' ? workColumns : mobileTab === 'difficulty' ? diffColumns : participationColumns}
-                          isLoading={participantsLoading}
-                        />
+                        {LEADERBOARDS.filter(lb => lb.type === mobileTab).map(lb => (
+                          <Board
+                            key={lb.type}
+                            title={lb.title}
+                            data={participants[lb.type]}
+                            columns={lb.columns}
+                            isLoading={participantsLoading}
+                          />
+                        ))}
                       </div>
                       {/* Desktop: side by side */}
                       <div className="hidden md:grid md:grid-cols-3 gap-4">
-                        <Board
-                          title="Most Work"
-                          data={workParticipants}
-                          columns={workColumns}
-                          isLoading={participantsLoading}
-                        />
-                        <Board
-                          title="Top Difficulties"
-                          data={diffParticipants}
-                          columns={diffColumns}
-                          isLoading={participantsLoading}
-                        />
-                        <Board
-                          title="Most Participation"
-                          data={partParticipants}
-                          columns={participationColumns}
-                          isLoading={participantsLoading}
-                        />
+                        {LEADERBOARDS.map(lb => (
+                          <Board
+                            key={lb.type}
+                            title={lb.title}
+                            data={participants[lb.type]}
+                            columns={lb.columns}
+                            isLoading={participantsLoading}
+                          />
+                        ))}
                       </div>
                     </>
                   )}

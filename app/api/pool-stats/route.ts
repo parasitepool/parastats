@@ -5,12 +5,8 @@ import { fetch } from '@/lib/http-client';
 import { fetchWithCache } from '@/lib/aggregator-cache';
 import { getDb } from '@/lib/db';
 
-/**
- * Pool-wide counted work since the last block = sum of every participant's
- * accepted share difficulty in the current round (block_height = 0 sentinel),
- * synced from the backend by the rounds collector. Returns null when no
- * current-round data has been collected yet, rather than a misleading 0.
- */
+// Sum of the current round's per-user work (block_height 0). null, not 0, when
+// the collector has no current-round data yet.
 function getWorkSinceLastBlock(): number | null {
   try {
     const row = getDb()

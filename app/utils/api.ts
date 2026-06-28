@@ -17,8 +17,7 @@ export type PoolStats = {
   hashrate: number;
   users: number;
   workers: number;
-  // Counted cumulative accepted work (sum of share difficulty) since the last block.
-  // null when no current-round data has been collected yet.
+  // Counted work since the last block; null until the collector has data.
   workSinceLastBlock: number | null;
 }
 
