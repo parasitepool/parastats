@@ -3,6 +3,7 @@ import { type PoolStats } from '../../utils/api';
 import { formatDifficulty, parseHashrate } from '../../utils/formatters';
 import { fetch } from '@/lib/http-client';
 import { fetchWithCache } from '@/lib/aggregator-cache';
+import { getDb } from '@/lib/db';
 
 interface AggregatorPoolData {
   statsData: Record<string, number>;
@@ -54,9 +55,38 @@ export async function GET() {
           lastBlockHash = blocks[0].id;
 
           if (blocks[0].timestamp) {
-            const timeSinceLastBlock = Math.floor(Date.now() / 1000) - blocks[0].timestamp;
-            const avgHashrate = parseHashrate(hashrateData.hashrate1d);
-            totalWorkSinceLastBlock = (avgHashrate * timeSinceLastBlock) / Math.pow(2, 32);
+            const blockTimestamp = blocks[0].timestamp;
+            const now = Math.floor(Date.now() / 1000);
+            const db = getDb();
+
+            const checkpoint = db.prepare(
+              'SELECT checkpoint_timestamp, cumulative_work FROM total_work_checkpoints WHERE block_hash = ?'
+            ).get(lastBlockHash) as { checkpoint_timestamp: number; cumulative_work: number } | undefined;
+
+            const fromTimestamp = checkpoint ? checkpoint.checkpoint_timestamp : blockTimestamp;
+
+            // Sum pool_stats rows from the last checkpoint (or block start) to now.
+            // Uses actual row gaps so collection outages don't inflate the total.
+            const rows = db.prepare(`
+              SELECT hashrate15m, timestamp
+              FROM pool_stats
+              WHERE timestamp > ? AND timestamp <= ?
+              ORDER BY timestamp ASC
+            `).all(fromTimestamp, now) as Array<{ hashrate15m: string; timestamp: number }>;
+
+            let liveHashes = 0;
+            let prevTime = fromTimestamp;
+            for (const row of rows) {
+              liveHashes += parseHashrate(row.hashrate15m) * (row.timestamp - prevTime);
+              prevTime = row.timestamp;
+            }
+
+            if (rows.length > 0 || checkpoint) {
+              totalWorkSinceLastBlock = (checkpoint?.cumulative_work ?? 0) + liveHashes / Math.pow(2, 32);
+            } else {
+              // No DB rows yet (collector not running) — fall back to 1D avg estimate
+              totalWorkSinceLastBlock = (parseHashrate(hashrateData.hashrate1d) * (now - blockTimestamp)) / Math.pow(2, 32);
+            }
           }
         }
       }
