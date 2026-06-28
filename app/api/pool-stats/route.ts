@@ -44,6 +44,7 @@ export async function GET() {
 
     let lastBlockTime: string | null = null;
     let lastBlockHash: string | null = null;
+    let totalWorkSinceLastBlock: number | undefined;
     try {
       const blocksRes = await fetch('https://mempool.space/api/v1/mining/pool/parasite/blocks');
       if (blocksRes.ok) {
@@ -51,6 +52,12 @@ export async function GET() {
         if (blocks.length > 0) {
           lastBlockTime = String(blocks[0].height);
           lastBlockHash = blocks[0].id;
+
+          if (blocks[0].timestamp) {
+            const timeSinceLastBlock = Math.floor(Date.now() / 1000) - blocks[0].timestamp;
+            const avgHashrate = parseHashrate(hashrateData.hashrate1d);
+            totalWorkSinceLastBlock = (avgHashrate * timeSinceLastBlock) / Math.pow(2, 32);
+          }
         }
       }
     } catch (e) {
@@ -64,7 +71,8 @@ export async function GET() {
       highestDifficulty: formatDifficulty(diffData.bestshare),
       hashrate: parseHashrate(hashrateData.hashrate5m),
       users: statsData.Users,
-      workers: statsData.Workers
+      workers: statsData.Workers,
+      totalWorkSinceLastBlock,
     };
     
     return NextResponse.json(poolStats);
