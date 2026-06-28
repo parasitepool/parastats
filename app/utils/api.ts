@@ -17,6 +17,7 @@ export type PoolStats = {
   hashrate: number;
   users: number;
   workers: number;
+  totalWorkSinceLastBlock?: number;
 }
 
 // Helper function to create a delay

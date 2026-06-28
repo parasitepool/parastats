@@ -176,6 +176,15 @@ export function formatHashDays(value: number | string | undefined): string {
 }
 
 /**
+ * Formats a total work value (in shares) with compact suffixes.
+ * e.g. 4.544e13 -> "45.44T shares"
+ */
+export function formatWork(shares: number): string {
+  if (!shares || shares === 0) return '0 shares';
+  return `${formatCompactNumber(shares)} shares`;
+}
+
+/**
  * Converts a hashrate string with unit suffix back to its numerical value
  * e.g. '1.23KH/s' -> 1230, '1.23MH/s' -> 1230000
  */
