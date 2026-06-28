@@ -82,9 +82,13 @@ export async function GET() {
             }
 
             if (rows.length > 0 || checkpoint) {
+              // Checkpoint carries work up to checkpoint_timestamp; rows cover the
+              // tail (or the full round when no checkpoint exists yet). Either way
+              // we're summing real per-minute hashrate samples from the DB.
               totalWorkSinceLastBlock = (checkpoint?.cumulative_work ?? 0) + liveHashes / Math.pow(2, 32);
             } else {
-              // No DB rows yet (collector not running) — fall back to 1D avg estimate
+              // pool_stats is empty (collector has never run) — use 1D avg as a
+              // last-resort estimate until real samples start accumulating.
               totalWorkSinceLastBlock = (parseHashrate(hashrateData.hashrate1d) * (now - blockTimestamp)) / Math.pow(2, 32);
             }
           }
