@@ -60,6 +60,7 @@ function shutdown() {
     statsCollectorJob.poolJob.stop();
     statsCollectorJob.userJob.stop();
     statsCollectorJob.accountJob.stop();
+    statsCollectorJob.workCheckpointJob.stop();
   }
 
   if (purgeJob) {

@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { getDb } from './db';
 import { fetch, HttpError, isRetryableError } from './http-client';
 import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
+import { parseHashrate } from '@/app/utils/formatters';
 
 interface StatsData {
   runtime: number;
@@ -602,18 +603,25 @@ export function startPoolStatsCollector() {
   const accountJob = cron.schedule('*/10 * * * *', async () => {
     await syncAccountTotalBlocks();
   });
-  
+
+  // Checkpoint total work every hour; the function itself skips if < 24h elapsed
+  const workCheckpointJob = cron.schedule('0 * * * *', async () => {
+    await checkpointTotalWork();
+  });
+
   console.log('Stats collectors started');
-  
+
   // Run initial collections immediately
   collectPoolStats();
   collectAllUserStats();
   syncAccountTotalBlocks();
-  
+  checkpointTotalWork();
+
   return {
     poolJob,
     userJob,
-    accountJob
+    accountJob,
+    workCheckpointJob,
   };
 }
 
@@ -715,6 +723,83 @@ export async function syncAccountTotalBlocks() {
     console.error('Error syncing account total_blocks:', error);
   } finally {
     isAccountJobRunning = false;
+  }
+}
+
+interface TotalWorkCheckpoint {
+  block_hash: string;
+  block_timestamp: number;
+  checkpoint_timestamp: number;
+  cumulative_work: number;
+}
+
+const CHECKPOINT_INTERVAL_S = 24 * 60 * 60;
+
+/**
+ * Sum pool_stats hashrate contributions between two timestamps.
+ * Uses actual gaps between rows so collection outages don't inflate the total.
+ */
+function computeWorkSum(fromTimestamp: number, toTimestamp: number): number {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT hashrate15m, timestamp
+    FROM pool_stats
+    WHERE timestamp > ? AND timestamp <= ?
+    ORDER BY timestamp ASC
+  `).all(fromTimestamp, toTimestamp) as Array<{ hashrate15m: string; timestamp: number }>;
+
+  let totalHashes = 0;
+  let prevTime = fromTimestamp;
+  for (const row of rows) {
+    totalHashes += parseHashrate(row.hashrate15m) * (row.timestamp - prevTime);
+    prevTime = row.timestamp;
+  }
+  return totalHashes / Math.pow(2, 32);
+}
+
+/**
+ * Checkpoint the cumulative total work for the current round.
+ * Runs hourly but only writes a new checkpoint every 24 hours.
+ * Keyed by block_hash so it resets automatically when a new block is found.
+ */
+export async function checkpointTotalWork(): Promise<void> {
+  try {
+    const blocksRes = await fetchWithTimeout(
+      'https://mempool.space/api/v1/mining/pool/parasite/blocks',
+      {},
+      15000,
+    );
+    if (!blocksRes.ok) return;
+    const blocks = await blocksRes.json() as Array<{ id: string; timestamp: number }>;
+    if (blocks.length === 0 || !blocks[0].timestamp) return;
+
+    const blockHash = blocks[0].id;
+    const blockTimestamp = blocks[0].timestamp;
+    const now = Math.floor(Date.now() / 1000);
+
+    const db = getDb();
+    const existing = db.prepare(
+      'SELECT * FROM total_work_checkpoints WHERE block_hash = ?'
+    ).get(blockHash) as TotalWorkCheckpoint | undefined;
+
+    if (existing && now - existing.checkpoint_timestamp < CHECKPOINT_INTERVAL_S) return;
+
+    const fromTimestamp = existing ? existing.checkpoint_timestamp : blockTimestamp;
+    const additionalWork = computeWorkSum(fromTimestamp, now);
+    const cumulativeWork = (existing?.cumulative_work ?? 0) + additionalWork;
+
+    db.prepare(`
+      INSERT INTO total_work_checkpoints
+        (block_hash, block_timestamp, checkpoint_timestamp, cumulative_work)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(block_hash) DO UPDATE SET
+        checkpoint_timestamp = excluded.checkpoint_timestamp,
+        cumulative_work      = excluded.cumulative_work
+    `).run(blockHash, blockTimestamp, now, cumulativeWork);
+
+    console.log(`Total work checkpoint: ${cumulativeWork.toFixed(2)} shares for block ${blockHash}`);
+  } catch (error) {
+    console.error('Error checkpointing total work:', error);
   }
 }
 
