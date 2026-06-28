@@ -21,8 +21,7 @@ import {
   BookmarkIcon,
   TrendingUpIcon,
   WalletIcon,
-  InfoIcon,
-  PickaxeIcon
+  InfoIcon
 } from "./icons";
 
 interface PoolStatsProps {
@@ -35,7 +34,6 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
   const [bitcoinPrice, setBitcoinPrice] = useState<number | null>(null);
   const [difficultyAdjustment, setDifficultyAdjustment] = useState<Adjustment>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
-  const [highestDiffTooltipVisible, setHighestDiffTooltipVisible] = useState(false);
   const [workTooltipVisible, setWorkTooltipVisible] = useState(false);
   const [localLoading, setLocalLoading] = useState(true);
 
@@ -83,48 +81,39 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
 
   const statCards = [
     {
-      title: "Highest Diff Since Last Block",
-      value: poolStats?.highestDifficulty && hashrate?.currentDifficulty ? (
-        <span className='flex gap-1'>
-          {poolStats.highestDifficulty}
-          <span 
-            className="relative inline-block"
-            onMouseEnter={() => setHighestDiffTooltipVisible(true)}
-            onMouseLeave={() => setHighestDiffTooltipVisible(false)}
-          >
-            <span className="text-sm text-muted-foreground cursor-help">
-              ({Number(((parseHashrate(poolStats.highestDifficulty) / hashrate.currentDifficulty) * 100).toFixed(2))}%)
+      title: "Since Last Block",
+      value: (
+        <div className="text-lg leading-tight space-y-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-accent-2 w-11 shrink-0">Diff</span>
+            {poolStats?.highestDifficulty && hashrate?.currentDifficulty ? (
+              <span className="flex items-baseline gap-1">
+                {poolStats.highestDifficulty}
+                <span className="text-xs text-muted-foreground">
+                  ({Number(((parseHashrate(poolStats.highestDifficulty) / hashrate.currentDifficulty) * 100).toFixed(1))}%)
+                </span>
+              </span>
+            ) : '-'}
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xs text-accent-2 w-11 shrink-0">Work</span>
+            <span>{poolStats?.workSinceLastBlock != null ? formatDifficulty(poolStats.workSinceLastBlock) : '-'}</span>
+            <span
+              className="relative inline-block cursor-help self-center"
+              onMouseEnter={() => setWorkTooltipVisible(true)}
+              onMouseLeave={() => setWorkTooltipVisible(false)}
+            >
+              <InfoIcon className="h-4 w-4 text-accent-3 p-0.5" />
+              {workTooltipVisible && (
+                <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-60 p-2 bg-background border border-border rounded shadow-lg text-xs z-10 font-normal normal-case">
+                  Diff = highest share difficulty since the last block (and its % of network difficulty). Work = counted sum of every miner&apos;s accepted share difficulty this round.
+                </span>
+              )}
             </span>
-            {highestDiffTooltipVisible && (
-              <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-48 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
-                Percentage of the current network difficulty
-              </span>
-            )}
-          </span>
-        </span>
-      ) : '-',
+          </div>
+        </div>
+      ),
       icon: <TrendingUpIcon />,
-    },
-    {
-      title: "Work Since Last Block",
-      value: poolStats?.workSinceLastBlock != null ? (
-        <span className="flex items-center gap-1">
-          {formatDifficulty(poolStats.workSinceLastBlock)}
-          <span
-            className="relative inline-block cursor-help"
-            onMouseEnter={() => setWorkTooltipVisible(true)}
-            onMouseLeave={() => setWorkTooltipVisible(false)}
-          >
-            <InfoIcon className="h-4 w-4 text-accent-3 p-0.5" />
-            {workTooltipVisible && (
-              <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs z-10 font-normal normal-case">
-                Counted pool work since the last block — the sum of every miner&apos;s accepted share difficulty this round. Updates every few minutes.
-              </span>
-            )}
-          </span>
-        </span>
-      ) : '-',
-      icon: <PickaxeIcon />,
     },
     {
       title: "Minimum Needed Diff",
@@ -181,15 +170,16 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
 
   return (
     <div className="w-full">
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 lg:gap-3">
+      <div className="flex flex-wrap -mx-2">
         {statCards.map((card, index) => (
-          <StatCard
-            key={index}
-            title={card.title}
-            value={card.value}
-            icon={card.icon}
-            loading={loading || localLoading}
-          />
+          <div key={index} className="w-1/2 md:w-1/3 lg:w-1/6 p-1 lg:p-2">
+            <StatCard
+              title={card.title}
+              value={card.value}
+              icon={card.icon}
+              loading={loading || localLoading}
+            />
+          </div>
         ))}
       </div>
     </div>
