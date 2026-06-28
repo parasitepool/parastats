@@ -217,7 +217,18 @@ function initializeTables() {
   `);
 
   // total_work = cumulative accepted share difficulty (work) per user per round.
+  const hadTotalWork = (db.prepare(`PRAGMA table_info(round_participants)`).all() as { name: string }[])
+    .some(column => column.name === 'total_work');
   addColumnIfNotExists(db, `ALTER TABLE round_participants ADD COLUMN total_work REAL NOT NULL DEFAULT 0`);
+
+  // One-time backfill: rounds cached as 'complete' before this column existed have
+  // total_work = 0 for every participant, which the UI would otherwise treat as
+  // real work. Re-mark them for participant refetch so the collector repopulates
+  // real work from the backend. Pool rounds are infrequent, so this is a small,
+  // one-time set of refetches (and re-runs idempotently if it ever repeats).
+  if (!hadTotalWork) {
+    db.prepare(`UPDATE rounds SET participant_status = 'pending' WHERE participant_status = 'complete'`).run();
+  }
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_round_participants_diff

@@ -377,6 +377,12 @@ export function triggerRoundsSync(): void {
   syncRounds()
     .then(newRounds => {
       if (newRounds > 0) {
+        // A new block was found, so the current round just reset. Refresh the
+        // block_height=0 rows now instead of waiting for the 10-minute cron —
+        // otherwise "work since last block" keeps reporting the previous round.
+        collectCurrentRound().catch(err =>
+          console.error('Error collecting current round after new round:', err)
+        );
         // New round detected — fetch participants in background
         fetchPendingRoundParticipants().catch(err =>
           console.error('Error fetching pending round participants:', err)
