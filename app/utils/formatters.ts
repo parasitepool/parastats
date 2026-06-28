@@ -180,8 +180,8 @@ export function formatHashDays(value: number | string | undefined): string {
  * e.g. 4.544e13 -> "45.44T shares"
  */
 export function formatWork(shares: number): string {
-  if (!shares || shares === 0) return '0 shares';
-  return `${formatCompactNumber(shares)} shares`;
+  if (!shares || shares === 0) return '0';
+  return formatCompactNumber(shares);
 }
 
 /**

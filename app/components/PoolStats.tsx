@@ -121,7 +121,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
             <span className="text-sm text-muted-foreground cursor-help">(est.)</span>
             {totalWorkTooltipVisible && (
               <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
-                Estimated using 1D avg hashrate × time since last block ÷ 2³²
+                Estimated total shares submitted since last block (1D avg hashrate × time ÷ 2³²)
               </span>
             )}
           </span>
