@@ -589,9 +589,10 @@ export async function collectPoolStats() {
  * Start the stats collection cron jobs
  */
 export function startPoolStatsCollector() {
-  // Run pool stats collection every minute
+  // Run pool stats collection every minute; piggyback checkpoint (cheap DB-first guard)
   const poolJob = cron.schedule('* * * * *', async () => {
     await collectPoolStats();
+    await checkpointTotalWork();
   });
 
   // Run user stats collection every 1 minute
@@ -602,11 +603,6 @@ export function startPoolStatsCollector() {
   // Run account data sync every 10 minutes (for total_blocks loyalty ranking)
   const accountJob = cron.schedule('*/10 * * * *', async () => {
     await syncAccountTotalBlocks();
-  });
-
-  // Checkpoint total work every hour; the function itself skips if < 24h elapsed
-  const workCheckpointJob = cron.schedule('0 * * * *', async () => {
-    await checkpointTotalWork();
   });
 
   console.log('Stats collectors started');
@@ -621,7 +617,6 @@ export function startPoolStatsCollector() {
     poolJob,
     userJob,
     accountJob,
-    workCheckpointJob,
   };
 }
 
@@ -764,6 +759,19 @@ function computeWorkSum(fromTimestamp: number, toTimestamp: number): number {
  */
 export async function checkpointTotalWork(): Promise<void> {
   try {
+    const db = getDb();
+    const now = Math.floor(Date.now() / 1000);
+
+    // Cheap DB check first — skip the external call if the most recent checkpoint
+    // is still within the 24h window. This keeps the per-minute cron overhead
+    // to a single indexed SQLite query on the vast majority of invocations.
+    const latest = db.prepare(
+      'SELECT checkpoint_timestamp FROM total_work_checkpoints ORDER BY checkpoint_timestamp DESC LIMIT 1'
+    ).get() as { checkpoint_timestamp: number } | undefined;
+
+    if (latest && now - latest.checkpoint_timestamp < CHECKPOINT_INTERVAL_S) return;
+
+    // 24h has elapsed (or no checkpoint exists) — fetch current block and write
     const blocksRes = await fetchWithTimeout(
       'https://mempool.space/api/v1/mining/pool/parasite/blocks',
       {},
@@ -775,14 +783,10 @@ export async function checkpointTotalWork(): Promise<void> {
 
     const blockHash = blocks[0].id;
     const blockTimestamp = blocks[0].timestamp;
-    const now = Math.floor(Date.now() / 1000);
 
-    const db = getDb();
     const existing = db.prepare(
       'SELECT * FROM total_work_checkpoints WHERE block_hash = ?'
     ).get(blockHash) as TotalWorkCheckpoint | undefined;
-
-    if (existing && now - existing.checkpoint_timestamp < CHECKPOINT_INTERVAL_S) return;
 
     const fromTimestamp = existing ? existing.checkpoint_timestamp : blockTimestamp;
     const additionalWork = computeWorkSum(fromTimestamp, now);
