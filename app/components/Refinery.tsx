@@ -6,23 +6,31 @@ import { getCollapsibleContainerClassName, shouldToggleCollapse } from './collap
 import SortableTable from './SortableTable';
 import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/formatters';
 import CreateOrderModal from './modals/CreateOrderModal';
+import OrderDetailModal from './modals/OrderDetailModal';
 import { RefineryIcon, InfoIcon } from '@/app/components/icons';
-import type { OrderSummary, RouterStatus } from '@/app/api/router/types';
+import type { OrderSummary, Review, RouterStatus } from '@/app/api/router/types';
 
 interface OrderRow {
   id: number;
   status: string;
+  review: Review;
   requested: number | null;
   hashrate: number;
   best_share: number | null;
   progress: number;
 }
 
-const statusColor: Record<string, string> = {
+export const statusColor: Record<string, string> = {
   active: 'text-green-500',
   pending: 'text-[#f7931a]',
   in_mempool: 'text-yellow-500',
 };
+
+export function ReviewBadge({ review }: { review: Review }) {
+  if (review === 'flagged') return <span className="text-red-500 text-sm ml-1" title="Flagged for review">⚑</span>;
+  if (review === 'cleared') return <span className="text-foreground/40 text-sm ml-1" title="Cleared">✓</span>;
+  return null;
+}
 
 function OrderProgressBar({ progress, requested }: { progress: number; requested: number | null }) {
   return (
@@ -48,8 +56,11 @@ const columns = [
   {
     key: 'status' as keyof OrderRow,
     header: 'Status',
-    render: (value: OrderRow[keyof OrderRow]) => (
-      <span className={statusColor[String(value)] ?? ''}>{String(value)}</span>
+    render: (value: OrderRow[keyof OrderRow], row: OrderRow) => (
+      <span className="inline-flex items-center">
+        <span className={statusColor[String(value)] ?? ''}>{String(value)}</span>
+        <ReviewBadge review={row.review} />
+      </span>
     ),
   },
   {
@@ -88,6 +99,8 @@ export default function Refinery({ address, isLoading = false, collapsed = false
   const [status, setStatus] = useState<RouterStatus | null>(null);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [mobilePage, setMobilePage] = useState(0);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -141,13 +154,14 @@ export default function Refinery({ address, isLoading = false, collapsed = false
     };
   }, [address, isLoading]);
 
-  const capacity = status?.capacity_work ?? 0;
-  const available = status?.available_work ?? 0;
+  const capacity = status?.total_capacity_hash_days ?? 0;
+  const used = status?.used_capacity_hash_days ?? 0;
 
   const rows = useMemo<OrderRow[]>(() =>
     orders.map(o => ({
       id: o.id,
       status: o.status,
+      review: o.review,
       requested: o.requested_hash_days,
       hashrate: o.hashrate,
       best_share: o.best_share,
@@ -212,8 +226,8 @@ export default function Refinery({ address, isLoading = false, collapsed = false
               <p className="text-lg font-semibold">{formatHashDays(capacity)}</p>
             </div>
             <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
-              <p className="text-sm text-foreground/60">Available</p>
-              <p className="text-lg font-semibold">{formatHashDays(available)}</p>
+              <p className="text-sm text-foreground/60">Used</p>
+              <p className="text-lg font-semibold">{formatHashDays(used)}</p>
             </div>
             <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
               <p className="text-sm text-foreground/60">Hashprice</p>
@@ -235,17 +249,22 @@ export default function Refinery({ address, isLoading = false, collapsed = false
               columns={columns}
               defaultSortColumn="id"
               defaultSortDirection="desc"
+              pageSize={10}
+              onRowClick={(row) => setSelectedOrderId(row.id)}
             />
           </div>
 
           <div className="md:hidden space-y-4">
-            {rows.map(order => (
-              <div key={order.id} className="bg-background border border-border p-4 shadow-sm">
+            {rows.slice(mobilePage * 10, (mobilePage + 1) * 10).map(order => (
+              <div key={order.id} className="bg-background border border-border p-4 shadow-sm cursor-pointer hover:bg-foreground/5" onClick={() => setSelectedOrderId(order.id)}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-accent-3 font-bold text-lg">
                     Order {order.id}
                   </span>
-                  <span className={`font-medium ${statusColor[order.status] ?? ''}`}>{order.status}</span>
+                  <span className="inline-flex items-center">
+                    <span className={`font-medium ${statusColor[order.status] ?? ''}`}>{order.status}</span>
+                    <ReviewBadge review={order.review} />
+                  </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
@@ -267,11 +286,35 @@ export default function Refinery({ address, isLoading = false, collapsed = false
                 </div>
               </div>
             ))}
+            {rows.length > 10 && (
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-sm text-foreground/60">
+                  {mobilePage * 10 + 1}–{Math.min((mobilePage + 1) * 10, rows.length)} of {rows.length}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    className="px-3 py-1 text-sm border border-border hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                    disabled={mobilePage === 0}
+                    onClick={() => setMobilePage(mobilePage - 1)}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    className="px-3 py-1 text-sm border border-border hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
+                    disabled={(mobilePage + 1) * 10 >= rows.length}
+                    onClick={() => setMobilePage(mobilePage + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
 
       <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} onCreated={fetchOrders} address={address} hashPrice={status.hash_price} halt={status.halt} />
+      <OrderDetailModal orderId={selectedOrderId} onClose={() => setSelectedOrderId(null)} />
     </div>
   );
 }

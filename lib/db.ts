@@ -238,6 +238,8 @@ function initializeTables() {
       ON block_participants(username, block_height DESC)
   `);
 
+  addColumnIfNotExists(db, `ALTER TABLE monitored_users ADD COLUMN has_refinery_badge BOOLEAN NOT NULL DEFAULT 0`);
+
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_status TEXT NOT NULL DEFAULT 'pending'`);
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_fetched_at INTEGER`);
 }
