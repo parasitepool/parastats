@@ -7,6 +7,8 @@ export type OrderStatus =
   | 'disconnected'
   | 'expired';
 
+export type Review = 'clean' | 'flagged' | 'cleared';
+
 export interface MiningStats {
   hashrate_1m: number;
   hashrate_5m: number;
@@ -25,7 +27,7 @@ export interface MiningStats {
   rejected_shares: number;
   accepted_work: number;
   rejected_work: number;
-  hash_days: number;
+  delivered_hash_days: number;
 }
 
 export interface UpstreamTarget {
@@ -43,16 +45,28 @@ export interface DownstreamInfo {
   stats: MiningStats;
 }
 
+export interface UpstreamSummary {
+  user_count: number;
+  worker_count: number;
+  idle_count: number;
+  disconnected_count: number;
+  stats: MiningStats;
+}
+
 export interface RouterStatus {
   uptime_secs: number;
+  block_count: number;
+  recent_blocks: string[];
   hash_price: number;
-  capacity_work: number;
-  available_work: number;
-  active_order_count: number;
+  total_capacity_hash_days: number;
+  used_capacity_hash_days: number;
+  bucket_order_count: number;
+  sink_order_count: number;
+  starving_order_count: number;
   wallet_synced: boolean;
   halt: boolean;
   boost: boolean;
-  upstream: MiningStats;
+  upstream: UpstreamSummary;
   downstream: DownstreamInfo;
 }
 
@@ -70,6 +84,7 @@ export interface SessionDetail {
 export interface OrderSummary {
   id: number;
   status: OrderStatus;
+  review: Review;
   endpoint: string;
   username: string;
   requested_hash_days: number | null;
@@ -81,13 +96,15 @@ export interface OrderSummary {
 export interface OrderDetail {
   id: number;
   status: OrderStatus;
+  review: Review;
   upstream_target: UpstreamTarget;
   requested_hash_days: number | null;
   hash_price: number | null;
   payment_address: string | null;
   payment_amount: number | null;
+  txids: string[];
   created_at: number;
-  created_at_height: number;
+  created_at_height: number | null;
   upstream: MiningStats;
   downstream: MiningStats;
   sessions: SessionDetail[];
