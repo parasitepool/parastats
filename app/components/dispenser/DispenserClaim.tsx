@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, type MouseEvent } from "react";
 import Image from "next/image";
 import { useWallet } from "@/app/hooks/useWallet";
+import { isValidBitcoinAddress } from "@/app/utils/validators";
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
 
 interface Eligibility {
@@ -31,6 +32,24 @@ interface DispenserClaimProps {
     onToggle?: () => void;
 }
 
+function buildClaimMessage(
+    username: string,
+    tier: string,
+    tierSlotIndex: number,
+    destinationAddress: string,
+): string {
+    return `${username}|${tier}|${tierSlotIndex}|${destinationAddress}`;
+}
+
+// Surface real failures but stay quiet when the user simply cancels signing.
+function getClaimErrorMessage(err: unknown): string | null {
+    const message = err instanceof Error ? err.message : "Failed to claim";
+    if (message.toLowerCase().includes("cancel")) {
+        return null;
+    }
+    return message;
+}
+
 function buildSlots(data: Eligibility): Slot[] {
     const slots: Slot[] = [];
     for (const [tier, inscriptionIds] of Object.entries(data.assigned_inscription_ids ?? {})) {
@@ -51,7 +70,7 @@ function buildSlots(data: Eligibility): Slot[] {
 }
 
 export default function DispenserClaim({ userId, className = "", collapsed = false, onToggle }: DispenserClaimProps) {
-    const { address, isInitialized } = useWallet();
+    const { address, walletType, isInitialized, signMessage } = useWallet();
     const [eligibility, setEligibility] = useState<Eligibility | null>(null);
     const [loading, setLoading] = useState(true);
     const [claimingSlot, setClaimingSlot] = useState<number | null>(null);
@@ -59,8 +78,13 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     const [error, setError] = useState<string | null>(null);
     // const [txHex, setTxHex] = useState<string | null>(null);
     const [copiedSlot, setCopiedSlot] = useState<number | null>(null);
+    // Manual wallets can't auto-supply an Ordinals address, so they enter a
+    // destination address before signing the claim.
+    const [manualSlot, setManualSlot] = useState<Slot | null>(null);
+    const [manualDestination, setManualDestination] = useState("");
 
     const isOwner = address === userId;
+    const isManual = walletType === "manual";
 
     const handleCopyLink = async (inscriptionId: string, slotIndex: number) => {
         const url = `${window.location.origin}/dispenser/share/${inscriptionId}`;
@@ -96,6 +120,33 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         }
     }, [isInitialized, fetchEligibility]);
 
+    const submitClaim = useCallback(async (
+        tier: string,
+        tierSlotIndex: number,
+        destinationAddress: string,
+        signature: string,
+    ) => {
+        const response = await fetch("/api/dispenser/claim", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: userId,
+                tier,
+                slot: tierSlotIndex,
+                destination_address: destinationAddress,
+                signature,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Failed to submit claim");
+        }
+
+        return data;
+    }, [userId]);
+
     const handleClaim = async (tier: string, slotIndex: number, tierSlotIndex: number) => {
         if (!address) return;
 
@@ -104,7 +155,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         // setTxHex(null);
 
         try {
-            const { request, MessageSigningProtocols, AddressPurpose } = await import("@sats-connect/core");
+            const { request, AddressPurpose } = await import("@sats-connect/core");
 
             const accountsResponse = await request("getAccounts", {
                 purposes: [AddressPurpose.Ordinals],
@@ -124,46 +175,11 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             }
 
             const destinationAddress = ordinalsAccount.address;
-            const message = `${userId}|${tier}|${tierSlotIndex}|${destinationAddress}`;
+            const message = buildClaimMessage(userId, tier, tierSlotIndex, destinationAddress);
 
-            const signResponse = await request("signMessage", {
-                address: address,
-                message: message,
-                protocol: MessageSigningProtocols.BIP322,
-            });
+            const signature = await signMessage({ address, message });
 
-            if (signResponse.status !== "success") {
-                throw new Error("Failed to sign message");
-            }
-
-            let signature: string;
-            if (
-                signResponse.result &&
-                typeof signResponse.result === "object" &&
-                "signature" in signResponse.result
-            ) {
-                signature = signResponse.result.signature;
-            } else {
-                throw new Error("Unexpected signature format");
-            }
-
-            const response = await fetch("/api/dispenser/claim", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    username: userId,
-                    tier,
-                    slot: tierSlotIndex,
-                    destination_address: destinationAddress,
-                    signature,
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to submit claim");
-            }
+            await submitClaim(tier, tierSlotIndex, destinationAddress, signature);
 
             // setTxHex(data.hex);
             setLocalClaimed((prev) => new Set(prev).add(slotIndex));
@@ -175,11 +191,66 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             }
         } catch (err) {
             console.error("Claim error:", err);
-            setError(err instanceof Error ? err.message : "Failed to claim");
+            setError(getClaimErrorMessage(err));
         } finally {
             setClaimingSlot(null);
         }
     };
+
+    const openManualClaim = (slot: Slot) => {
+        setManualSlot(slot);
+        setManualDestination("");
+        setError(null);
+    };
+
+    const closeManualClaim = useCallback(() => {
+        if (claimingSlot !== null) return;
+        setManualSlot(null);
+        setManualDestination("");
+    }, [claimingSlot]);
+
+    const handleManualClaim = async () => {
+        if (!manualSlot) return;
+
+        const destinationAddress = manualDestination.trim();
+        if (!isValidBitcoinAddress(destinationAddress)) {
+            setError("Enter a valid destination Bitcoin address");
+            return;
+        }
+
+        const slot = manualSlot;
+        setClaimingSlot(slot.index);
+        setError(null);
+        // Close the destination prompt so the signing modal is visible.
+        setManualSlot(null);
+
+        try {
+            const message = buildClaimMessage(userId, slot.tier, slot.tierSlotIndex, destinationAddress);
+
+            const signature = await signMessage({ address: userId, message });
+
+            await submitClaim(slot.tier, slot.tierSlotIndex, destinationAddress, signature);
+
+            setLocalClaimed((prev) => new Set(prev).add(slot.index));
+            setManualDestination("");
+        } catch (err) {
+            console.error("Manual claim error:", err);
+            setError(getClaimErrorMessage(err));
+        } finally {
+            setClaimingSlot(null);
+        }
+    };
+
+    useEffect(() => {
+        if (!manualSlot) return;
+
+        const handleEscKey = (event: KeyboardEvent) => {
+            if (event.key === "Escape") closeManualClaim();
+        };
+
+        window.addEventListener("keydown", handleEscKey);
+        return () => window.removeEventListener("keydown", handleEscKey);
+    }, [manualSlot, closeManualClaim]);
 
     // Don't render anything while loading or if not eligible
     if (loading || !eligibility) return null;
@@ -282,7 +353,9 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                 )}
                                 {isOwner && !slot.claimed && (
                                     <button
-                                        onClick={() => handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
+                                        onClick={() => isManual
+                                            ? openManualClaim(slot)
+                                            : handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
                                         disabled={claiming || claimingSlot !== null}
                                         className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
@@ -354,9 +427,79 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 </div>
             )**/}
 
-            {!collapsed && error && (
+            {!collapsed && error && !manualSlot && (
                 <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
                     {error}
+                </div>
+            )}
+
+            {manualSlot && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) closeManualClaim();
+                    }}
+                >
+                    <div
+                        className="bg-background border border-foreground p-4 sm:p-6 max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex justify-between items-start gap-4 mb-4">
+                            <h2 className="text-xl sm:text-2xl font-bold text-accent-3">Claim Inscription</h2>
+                            <button
+                                onClick={closeManualClaim}
+                                className="text-gray-400 hover:text-gray-500 focus:outline-none"
+                                title="Close"
+                            >
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="bg-secondary border border-border p-3 text-sm text-foreground/80">
+                                Enter the Ordinals address where the inscription should be sent. You&apos;ll then
+                                sign a message with your mining address to authorize the claim.
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-accent-2 mb-2" htmlFor="manual-dispenser-destination">
+                                    Destination Ordinals address
+                                </label>
+                                <input
+                                    id="manual-dispenser-destination"
+                                    value={manualDestination}
+                                    onChange={(event) => setManualDestination(event.target.value)}
+                                    placeholder="bc1p..."
+                                    autoFocus
+                                    className="w-full bg-secondary text-foreground px-3 py-2 border border-border focus:outline-none focus:border-accent-3 font-mono text-sm"
+                                />
+                            </div>
+
+                            {error && (
+                                <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
+                                    {error}
+                                </div>
+                            )}
+
+                            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+                                <button
+                                    onClick={closeManualClaim}
+                                    className="px-4 py-2 border border-border hover:bg-secondary-hover text-sm font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleManualClaim}
+                                    disabled={!manualDestination.trim()}
+                                    className="px-4 py-2 bg-foreground text-background hover:bg-foreground/80 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Continue
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

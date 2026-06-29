@@ -11,7 +11,7 @@ interface LightningModalProps {
 }
 
 export default function LightningModal({ isOpen, onClose, onUpdate }: LightningModalProps) {
-  const { address, lightningToken } = useWallet();
+  const { address, lightningToken, signMessage } = useWallet();
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -107,28 +107,11 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
     setError(null);
 
     try {
-      // Request signature for the Lightning address using BIP322
-      // We'll use the wallet's signMessage functionality
-      const { request, MessageSigningProtocols } = await import('@sats-connect/core');
-
-      const signResponse = await request('signMessage', {
-        address: address,
+      // Request signature for the Lightning address (BIP322)
+      const signature = await signMessage({
+        address,
         message: newLnAddress,
-        protocol: MessageSigningProtocols.BIP322
       });
-
-      if (signResponse.status !== 'success') {
-        throw new Error('Failed to sign message');
-      }
-
-      let signature: string;
-      if (typeof signResponse.result === 'string') {
-        signature = signResponse.result;
-      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
-        signature = signResponse.result.signature;
-      } else {
-        throw new Error('Unexpected signature format');
-      }
 
       // Send update request
       const response = await fetch('/api/account/update', {

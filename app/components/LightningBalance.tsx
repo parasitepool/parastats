@@ -35,6 +35,7 @@ export default function LightningBalance({
     address,
     addressPublicKey,
     connectWithLightning,
+    signMessage,
   } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
@@ -130,27 +131,11 @@ export default function LightningBalance({
     setError(null);
 
     try {
-      // Request signature for the Lightning address using BIP322
-      const { request, MessageSigningProtocols } = await import('@sats-connect/core');
-
-      const signResponse = await request('signMessage', {
-        address: address,
+      // Request signature for the Lightning address (BIP322)
+      const signature = await signMessage({
+        address,
         message: usernameAddress,
-        protocol: MessageSigningProtocols.BIP322
       });
-
-      if (signResponse.status !== 'success') {
-        throw new Error('Failed to sign message');
-      }
-
-      let signature: string;
-      if (typeof signResponse.result === 'string') {
-        signature = signResponse.result;
-      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
-        signature = signResponse.result.signature;
-      } else {
-        throw new Error('Unexpected signature format');
-      }
 
       // Send update request
       const response = await fetch('/api/account/update', {
