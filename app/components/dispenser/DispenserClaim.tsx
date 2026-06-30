@@ -50,6 +50,42 @@ function buildSlots(data: Eligibility): Slot[] {
     return slots;
 }
 
+// Code/redemption assets carry no on-chain inscription image. We currently
+// have a single code-redemption type, so all code slots share one fixed
+// graphic from the public folder (public/dispenser/<asset>.webp), falling back
+// to a generic placeholder if the file is missing. If more code-redemption
+// assets are added, plumb the asset name through the eligibility response and
+// derive this path per slot instead.
+const CODE_ASSET_IMAGE = "/dispenser/homeminers.webp";
+
+function CodeAssetImage() {
+    const [failed, setFailed] = useState(false);
+
+    if (failed) {
+        return (
+            <div className="w-full aspect-square flex flex-col items-center justify-center gap-2 bg-background border border-border text-accent-2">
+                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-xs font-medium">Redemption code</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-full aspect-square">
+            <Image
+                src={CODE_ASSET_IMAGE}
+                alt="redemption asset"
+                width={512}
+                height={512}
+                onError={() => setFailed(true)}
+                className="w-full h-full object-contain bg-transparent"
+            />
+        </div>
+    );
+}
+
 export default function DispenserClaim({ userId, className = "", collapsed = false, onToggle }: DispenserClaimProps) {
     const { address, isInitialized } = useWallet();
     const [eligibility, setEligibility] = useState<Eligibility | null>(null);
@@ -203,13 +239,11 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             return (
                 <div key={slot.index} className="flex flex-col">
                     <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
+                        {/* Fixed square media box keeps every card the same height
+                            (regardless of inscription dimensions) so the status
+                            row below stays aligned across the grid. */}
                         {isCodeAsset ? (
-                            <div className="w-full aspect-square flex flex-col items-center justify-center gap-2 bg-background border border-border text-accent-2">
-                                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                <span className="text-xs font-medium">Redemption code</span>
-                            </div>
+                            <CodeAssetImage />
                         ) : (
                             <a
                                 target="_blank"
