@@ -223,8 +223,6 @@ function initializeTables() {
       ON round_participants(block_height, blocks_participated DESC);
     CREATE INDEX IF NOT EXISTS idx_round_participants_username
       ON round_participants(username, block_height DESC);
-    CREATE INDEX IF NOT EXISTS idx_round_participants_work
-      ON round_participants(block_height, total_work DESC);
   `);
 
   // Create block participants table (users who submitted shares at the exact block height)
@@ -254,6 +252,13 @@ function initializeTables() {
   if (!hadTotalWork) {
     db.prepare(`UPDATE rounds SET participant_status = 'pending' WHERE participant_status = 'complete'`).run();
   }
+
+  // Created after the total_work column is guaranteed to exist (the column is
+  // only added to pre-existing round_participants tables by the migration above).
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_round_participants_work
+      ON round_participants(block_height, total_work DESC);
+  `);
 }
 
 // Close the database connection when the app is shutting down
