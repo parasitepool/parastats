@@ -356,6 +356,50 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
+  // Memoize so the chart only rebuilds when the data actually changes, not on every poll
+  const hashrateChartData = useMemo(() => (
+    historicalData ? {
+      timestamps: historicalData.map(d => {
+        const date = new Date(d.timestamp);
+        return date.toLocaleString("en-US", {
+          year: undefined,
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+      }),
+      rawTimestamps: historicalData.map(d => new Date(d.timestamp).getTime()),
+      series: [
+        {
+          data: historicalData.map(d => d.hashrate),
+          title: "Hashrate",
+        },
+      ],
+    } : undefined
+  ), [historicalData]);
+
+  const hashrateChartBestDiffs = useMemo(() => (
+    userBlockDiffs.length > 0 ? userBlockDiffs
+      .filter(diff => diff.block_timestamp !== null)
+      .map(diff => {
+        const timestampMs = diff.block_timestamp! * 1000;
+        return {
+          timestamp: new Date(timestampMs).toLocaleString("en-US", {
+            year: undefined,
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          }),
+          rawTimestamp: timestampMs,
+          difficulty: diff.difficulty,
+        };
+      }) : undefined
+  ), [userBlockDiffs]);
+
   const allRounds = useMemo(() => [
     ...(roundsData?.current_round ? [{
       block_height: CURRENT_ROUND_BLOCK,
@@ -762,43 +806,8 @@ export default function UserDashboard() {
                 icon={<TrendingUpIcon />}
                 collapsed={collapsedSections.hashrateChart}
                 onToggle={() => toggleCollapsedSection('hashrateChart')}
-                data={historicalData ? {
-                  timestamps: historicalData.map(d => {
-                    const date = new Date(d.timestamp);
-                    return date.toLocaleString("en-US", {
-                      year: undefined,
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: false,
-                    });
-                  }),
-                  rawTimestamps: historicalData.map(d => new Date(d.timestamp).getTime()),
-                  series: [
-                    {
-                      data: historicalData.map(d => d.hashrate),
-                      title: "Hashrate"
-                    }
-                  ]
-                } : undefined}
-                bestDiffs={userBlockDiffs.length > 0 ? userBlockDiffs
-                    .filter(diff => diff.block_timestamp !== null)
-                    .map(diff => {
-                      const timestampMs = diff.block_timestamp! * 1000;
-                      return {
-                        timestamp: new Date(timestampMs).toLocaleString("en-US", {
-                          year: undefined,
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: false,
-                        }),
-                        rawTimestamp: timestampMs,
-                        difficulty: diff.difficulty,
-                      };
-                    }) : undefined}
+                data={hashrateChartData}
+                bestDiffs={hashrateChartBestDiffs}
                 loading={!historicalData}
             />
           </div>
