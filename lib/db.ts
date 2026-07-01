@@ -211,6 +211,7 @@ function initializeTables() {
       username TEXT NOT NULL,
       top_diff REAL NOT NULL DEFAULT 0,
       blocks_participated INTEGER NOT NULL DEFAULT 0,
+      total_work REAL NOT NULL DEFAULT 0,
       PRIMARY KEY (block_height, username)
     )
   `);
@@ -222,6 +223,8 @@ function initializeTables() {
       ON round_participants(block_height, blocks_participated DESC);
     CREATE INDEX IF NOT EXISTS idx_round_participants_username
       ON round_participants(username, block_height DESC);
+    CREATE INDEX IF NOT EXISTS idx_round_participants_work
+      ON round_participants(block_height, total_work DESC);
   `);
 
   // Create block participants table (users who submitted shares at the exact block height)
@@ -242,6 +245,15 @@ function initializeTables() {
 
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_status TEXT NOT NULL DEFAULT 'pending'`);
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_fetched_at INTEGER`);
+
+  // Add total_work to existing round_participants caches. When newly added,
+  // re-mark completed rounds as pending so the collector refetches real work.
+  const hadTotalWork = (db.prepare(`PRAGMA table_info(round_participants)`).all() as { name: string }[])
+    .some((column) => column.name === 'total_work');
+  addColumnIfNotExists(db, `ALTER TABLE round_participants ADD COLUMN total_work REAL NOT NULL DEFAULT 0`);
+  if (!hadTotalWork) {
+    db.prepare(`UPDATE rounds SET participant_status = 'pending' WHERE participant_status = 'complete'`).run();
+  }
 }
 
 // Close the database connection when the app is shutting down

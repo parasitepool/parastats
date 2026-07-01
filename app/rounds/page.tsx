@@ -19,6 +19,7 @@ interface RoundParticipant {
   claimed: boolean;
   top_diff: number;
   blocks_participated: number;
+  total_work: number;
 }
 
 interface ParticipantRow {
@@ -27,16 +28,27 @@ interface ParticipantRow {
   claimed: boolean;
   top_diff: number;
   blocks_participated: number;
+  total_work: number;
   rank: number;
 }
 
-type LeaderboardType = 'difficulty' | 'participation';
+type LeaderboardType = 'work' | 'difficulty' | 'participation';
 
 const addressColumn: BoardColumn<ParticipantRow> = {
   key: 'address',
   header: 'Address',
   render: (value) => <span>{formatAddress(value as string)}</span>
 };
+
+const workColumns: BoardColumn<ParticipantRow>[] = [
+  addressColumn,
+  {
+    key: 'total_work',
+    header: 'Work',
+    align: 'right',
+    render: (value) => formatDifficulty(value as number)
+  }
+];
 
 const diffColumns: BoardColumn<ParticipantRow>[] = [
   addressColumn,
@@ -58,6 +70,18 @@ const participationColumns: BoardColumn<ParticipantRow>[] = [
   }
 ];
 
+const LEADERBOARDS: { type: LeaderboardType; label: string; title: string; columns: BoardColumn<ParticipantRow>[] }[] = [
+  { type: 'work', label: 'Work', title: 'Most Work', columns: workColumns },
+  { type: 'difficulty', label: 'Difficulty', title: 'Top Difficulties', columns: diffColumns },
+  { type: 'participation', label: 'Participation', title: 'Most Participation', columns: participationColumns },
+];
+
+const emptyParticipants: Record<LeaderboardType, ParticipantRow[]> = {
+  work: [],
+  difficulty: [],
+  participation: [],
+};
+
 function toRows(data: RoundParticipant[]): ParticipantRow[] {
   return data.map((p, i) => ({
     id: i + 1,
@@ -65,6 +89,7 @@ function toRows(data: RoundParticipant[]): ParticipantRow[] {
     claimed: p.claimed,
     top_diff: p.top_diff,
     blocks_participated: p.blocks_participated,
+    total_work: p.total_work,
     rank: p.rank,
   }));
 }
@@ -73,10 +98,9 @@ export default function RoundsPage() {
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedRound, setExpandedRound] = useState<number | null>(null);
-  const [diffParticipants, setDiffParticipants] = useState<ParticipantRow[]>([]);
-  const [partParticipants, setPartParticipants] = useState<ParticipantRow[]>([]);
+  const [participants, setParticipants] = useState<Record<LeaderboardType, ParticipantRow[]>>(emptyParticipants);
   const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [mobileTab, setMobileTab] = useState<LeaderboardType>('difficulty');
+  const [mobileTab, setMobileTab] = useState<LeaderboardType>('work');
   const latestRequest = useRef(0);
   const expandedStatus = rounds.find(r => r.block_height === expandedRound)?.participant_status;
   const prevStatusRef = useRef(expandedStatus);
@@ -112,28 +136,23 @@ export default function RoundsPage() {
     latestRequest.current = requestId;
     setParticipantsLoading(true);
     try {
-      const [diffRes, partRes] = await Promise.all([
-        fetch(`/api/rounds/${blockHeight}?type=difficulty&limit=99`),
-        fetch(`/api/rounds/${blockHeight}?type=participation&limit=99`),
-      ]);
+      const responses = await Promise.all(
+        LEADERBOARDS.map(lb => fetch(`/api/rounds/${blockHeight}?type=${lb.type}&limit=99`))
+      );
       if (latestRequest.current !== requestId) return;
-      if (diffRes.status === 202 || partRes.status === 202) {
-        setDiffParticipants([]);
-        setPartParticipants([]);
+      if (responses.some(res => res.status === 202)) {
+        setParticipants(emptyParticipants);
         return;
       }
-      if (!diffRes.ok || !partRes.ok) throw new Error('Failed to fetch participants');
-      const [diffData, partData]: [RoundParticipant[], RoundParticipant[]] = await Promise.all([
-        diffRes.json(),
-        partRes.json(),
-      ]);
-      setDiffParticipants(toRows(diffData));
-      setPartParticipants(toRows(partData));
+      if (responses.some(res => !res.ok)) throw new Error('Failed to fetch participants');
+      const data: RoundParticipant[][] = await Promise.all(responses.map(res => res.json()));
+      const next = { ...emptyParticipants };
+      LEADERBOARDS.forEach((lb, i) => { next[lb.type] = toRows(data[i]); });
+      setParticipants(next);
     } catch (error) {
       if (latestRequest.current !== requestId) return;
       console.error('Error fetching participants:', error);
-      setDiffParticipants([]);
-      setPartParticipants([]);
+      setParticipants(emptyParticipants);
     } finally {
       if (latestRequest.current === requestId) {
         setParticipantsLoading(false);
@@ -159,8 +178,7 @@ export default function RoundsPage() {
   const toggleRound = (blockHeight: number) => {
     if (expandedRound === blockHeight) {
       setExpandedRound(null);
-      setDiffParticipants([]);
-      setPartParticipants([]);
+      setParticipants(emptyParticipants);
     } else {
       setExpandedRound(blockHeight);
       fetchParticipants(blockHeight);
@@ -247,50 +265,43 @@ export default function RoundsPage() {
                     <>
                       {/* Mobile: tabs */}
                       <div className="flex space-x-2 mb-4 md:hidden">
-                        <button
-                          onClick={() => setMobileTab('difficulty')}
-                          className={`px-3 py-1 transition-colors cursor-pointer ${
-                            mobileTab === 'difficulty'
-                              ? 'bg-foreground text-background'
-                              : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
-                          }`}
-                        >
-                          Difficulty
-                        </button>
-                        <button
-                          onClick={() => setMobileTab('participation')}
-                          className={`px-3 py-1 transition-colors cursor-pointer ${
-                            mobileTab === 'participation'
-                              ? 'bg-foreground text-background'
-                              : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
-                          }`}
-                        >
-                          Participation
-                        </button>
+                        {LEADERBOARDS.map(lb => (
+                          <button
+                            key={lb.type}
+                            onClick={() => setMobileTab(lb.type)}
+                            className={`px-3 py-1 transition-colors cursor-pointer ${
+                              mobileTab === lb.type
+                                ? 'bg-foreground text-background'
+                                : 'bg-secondary text-foreground/80 hover:bg-primary-hover hover:text-foreground'
+                            }`}
+                          >
+                            {lb.label}
+                          </button>
+                        ))}
                       </div>
                       {/* Mobile: single table based on active tab */}
                       <div className="md:hidden">
-                        <Board
-                          title={mobileTab === 'difficulty' ? 'Top Difficulties' : 'Most Participation'}
-                          data={mobileTab === 'difficulty' ? diffParticipants : partParticipants}
-                          columns={mobileTab === 'difficulty' ? diffColumns : participationColumns}
-                          isLoading={participantsLoading}
-                        />
+                        {LEADERBOARDS.filter(lb => lb.type === mobileTab).map(lb => (
+                          <Board
+                            key={lb.type}
+                            title={lb.title}
+                            data={participants[lb.type]}
+                            columns={lb.columns}
+                            isLoading={participantsLoading}
+                          />
+                        ))}
                       </div>
                       {/* Desktop: side by side */}
-                      <div className="hidden md:grid md:grid-cols-2 gap-4">
-                        <Board
-                          title="Top Difficulties"
-                          data={diffParticipants}
-                          columns={diffColumns}
-                          isLoading={participantsLoading}
-                        />
-                        <Board
-                          title="Most Participation"
-                          data={partParticipants}
-                          columns={participationColumns}
-                          isLoading={participantsLoading}
-                        />
+                      <div className="hidden md:grid md:grid-cols-3 gap-4">
+                        {LEADERBOARDS.map(lb => (
+                          <Board
+                            key={lb.type}
+                            title={lb.title}
+                            data={participants[lb.type]}
+                            columns={lb.columns}
+                            isLoading={participantsLoading}
+                          />
+                        ))}
                       </div>
                     </>
                   )}
