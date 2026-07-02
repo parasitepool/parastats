@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, type MouseEvent } from "react";
 import Image from "next/image";
 import { useWallet } from "@/app/hooks/useWallet";
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
+import DispenserRewards from "@/app/components/dispenser/DispenserRewards";
 
 interface Eligibility {
     username: string;
@@ -95,6 +96,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     const [error, setError] = useState<string | null>(null);
     // const [txHex, setTxHex] = useState<string | null>(null);
     const [copiedSlot, setCopiedSlot] = useState<number | null>(null);
+    const [showRewards, setShowRewards] = useState(false);
 
     const isOwner = address === userId;
 
@@ -217,16 +219,15 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         }
     };
 
-    // Don't render anything while loading or if not eligible
-    if (loading || !eligibility) return null;
+    // The panel is always shown so users can browse available rewards
+    const slots = eligibility
+        ? buildSlots(eligibility).map((slot) => ({
+            ...slot,
+            claimed: slot.claimed || localClaimed.has(slot.index),
+        }))
+        : [];
 
-    const slots = buildSlots(eligibility).map((slot) => ({
-        ...slot,
-        claimed: slot.claimed || localClaimed.has(slot.index),
-    }));
-
-    if (slots.length === 0) return null;
-
+    const hasRewards = slots.length > 0;
     const miningSlots = slots.filter((s) => s.tier !== "override");
     const whitelistSlots = slots.filter((s) => s.tier === "override");
     const firstVisibleInscriptionSlotIndex = [...miningSlots, ...whitelistSlots].find((slot) => slot.inscriptionId)?.index;
@@ -344,8 +345,9 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     };
 
     return (
+        <>
         <div className={containerClassName} onClick={handleClick}>
-            <div className={`flex items-center ${collapsed ? '' : 'mb-4 sm:mb-6'}`}>
+            <div className={`flex items-center justify-between ${collapsed ? '' : 'mb-4 sm:mb-6'}`}>
                 <div className="flex items-center">
                     <div className="mr-2 text-accent-3">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -359,7 +361,21 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                     </div>
                     <h2 className="text-xl sm:text-2xl font-bold">Dispenser</h2>
                 </div>
+                {!collapsed && (
+                    <button
+                        onClick={() => setShowRewards(true)}
+                        className="px-3 py-1.5 border border-border hover:bg-secondary-hover transition-colors text-xs sm:text-sm font-medium flex-shrink-0"
+                    >
+                        View rewards
+                    </button>
+                )}
             </div>
+
+            {!collapsed && !loading && !hasRewards && (
+                <p className="text-sm text-accent-2">
+                    No rewards yet. Keep mining, then check back — or view the available rewards above.
+                </p>
+            )}
 
             {!collapsed && miningSlots.length > 0 && (
                 <div className="mb-6">
@@ -394,5 +410,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 </div>
             )}
         </div>
+        <DispenserRewards isOpen={showRewards} onClose={() => setShowRewards(false)} />
+        </>
     );
 }
