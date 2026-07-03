@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useWallet, SignCancelledError } from "@/app/hooks/useWallet";
 import { isValidBitcoinAddress } from "@/app/utils/validators";
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
+import DispenserRewards from "@/app/components/dispenser/DispenserRewards";
 
 interface Eligibility {
     username: string;
@@ -68,6 +69,42 @@ function buildSlots(data: Eligibility): Slot[] {
     return slots;
 }
 
+// Code/redemption assets carry no on-chain inscription image. We currently
+// have a single code-redemption type, so all code slots share one fixed
+// graphic from the public folder (public/dispenser/<asset>.webp), falling back
+// to a generic placeholder if the file is missing. If more code-redemption
+// assets are added, plumb the asset name through the eligibility response and
+// derive this path per slot instead.
+const CODE_ASSET_IMAGE = "/dispenser/homeminers.webp";
+
+function CodeAssetImage() {
+    const [failed, setFailed] = useState(false);
+
+    if (failed) {
+        return (
+            <div className="w-full aspect-square flex flex-col items-center justify-center gap-2 bg-background border border-border text-accent-2">
+                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="text-xs font-medium">Redemption code</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-full aspect-square">
+            <Image
+                src={CODE_ASSET_IMAGE}
+                alt="redemption asset"
+                width={512}
+                height={512}
+                onError={() => setFailed(true)}
+                className="w-full h-full object-contain bg-transparent"
+            />
+        </div>
+    );
+}
+
 export default function DispenserClaim({ userId, className = "", collapsed = false, onToggle }: DispenserClaimProps) {
     const { address, walletType, isInitialized, signMessage } = useWallet();
     const [eligibility, setEligibility] = useState<Eligibility | null>(null);
@@ -81,6 +118,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     // destination address before signing the claim.
     const [manualSlot, setManualSlot] = useState<Slot | null>(null);
     const [manualDestination, setManualDestination] = useState("");
+    const [showRewards, setShowRewards] = useState(false);
 
     const isOwner = address === userId;
     const isManual = walletType === "manual";
@@ -256,16 +294,15 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         return () => window.removeEventListener("keydown", handleEscKey);
     }, [manualSlot, closeManualClaim]);
 
-    // Don't render anything while loading or if not eligible
-    if (loading || !eligibility) return null;
+    // The panel is always shown so users can browse available rewards
+    const slots = eligibility
+        ? buildSlots(eligibility).map((slot) => ({
+            ...slot,
+            claimed: slot.claimed || localClaimed.has(slot.index),
+        }))
+        : [];
 
-    const slots = buildSlots(eligibility).map((slot) => ({
-        ...slot,
-        claimed: slot.claimed || localClaimed.has(slot.index),
-    }));
-
-    if (slots.length === 0) return null;
-
+    const hasRewards = slots.length > 0;
     const miningSlots = slots.filter((s) => s.tier !== "override");
     const whitelistSlots = slots.filter((s) => s.tier === "override");
     const firstVisibleInscriptionSlotIndex = [...miningSlots, ...whitelistSlots].find((slot) => slot.inscriptionId)?.index;
@@ -278,13 +315,11 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             return (
                 <div key={slot.index} className="flex flex-col">
                     <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex flex-col items-center gap-3">
+                        {/* Fixed square media box keeps every card the same height
+                            (regardless of inscription dimensions) so the status
+                            row below stays aligned across the grid. */}
                         {isCodeAsset ? (
-                            <div className="w-full aspect-square flex flex-col items-center justify-center gap-2 bg-background border border-border text-accent-2">
-                                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                <span className="text-xs font-medium">Redemption code</span>
-                            </div>
+                            <CodeAssetImage />
                         ) : (
                             <a
                                 target="_blank"
@@ -387,8 +422,9 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     };
 
     return (
+        <>
         <div className={containerClassName} onClick={handleClick}>
-            <div className={`flex items-center ${collapsed ? '' : 'mb-4 sm:mb-6'}`}>
+            <div className={`flex items-center justify-between ${collapsed ? '' : 'mb-4 sm:mb-6'}`}>
                 <div className="flex items-center">
                     <div className="mr-2 text-accent-3">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -402,7 +438,21 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                     </div>
                     <h2 className="text-xl sm:text-2xl font-bold">Dispenser</h2>
                 </div>
+                {!collapsed && (
+                    <button
+                        onClick={() => setShowRewards(true)}
+                        className="px-3 py-1.5 border border-border hover:bg-secondary-hover transition-colors text-xs sm:text-sm font-medium flex-shrink-0"
+                    >
+                        View rewards
+                    </button>
+                )}
             </div>
+
+            {!collapsed && !loading && !hasRewards && (
+                <p className="text-sm text-accent-2">
+                    No rewards yet. Keep mining, then check back — or view the available rewards above.
+                </p>
+            )}
 
             {!collapsed && miningSlots.length > 0 && (
                 <div className="mb-6">
@@ -507,5 +557,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 </div>
             )}
         </div>
+        <DispenserRewards isOpen={showRewards} onClose={() => setShowRewards(false)} />
+        </>
     );
 }

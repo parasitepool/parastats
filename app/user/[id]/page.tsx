@@ -358,14 +358,60 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
+  // Memoize so the chart only rebuilds when the data actually changes, not on every poll
+  const hashrateChartData = useMemo(() => (
+    historicalData ? {
+      timestamps: historicalData.map(d => {
+        const date = new Date(d.timestamp);
+        return date.toLocaleString("en-US", {
+          year: undefined,
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+      }),
+      rawTimestamps: historicalData.map(d => new Date(d.timestamp).getTime()),
+      series: [
+        {
+          data: historicalData.map(d => d.hashrate),
+          title: "Hashrate",
+        },
+      ],
+    } : undefined
+  ), [historicalData]);
+
+  const hashrateChartBestDiffs = useMemo(() => (
+    userBlockDiffs.length > 0 ? userBlockDiffs
+      .filter(diff => diff.block_timestamp !== null)
+      .map(diff => {
+        const timestampMs = diff.block_timestamp! * 1000;
+        return {
+          timestamp: new Date(timestampMs).toLocaleString("en-US", {
+            year: undefined,
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          }),
+          rawTimestamp: timestampMs,
+          difficulty: diff.difficulty,
+        };
+      }) : undefined
+  ), [userBlockDiffs]);
+
   const allRounds = useMemo(() => [
     ...(roundsData?.current_round ? [{
       block_height: CURRENT_ROUND_BLOCK,
       rank: roundsData.current_round.rank,
       blocks_rank: roundsData.current_round.blocks_rank,
+      work_rank: roundsData.current_round.work_rank,
       total_participants: roundsData.current_round.total_participants,
       top_diff: roundsData.current_round.top_diff,
       blocks_participated: roundsData.current_round.blocks_participated,
+      total_work: roundsData.current_round.total_work,
       is_winner: false,
     }] : []),
     ...(roundsData?.history ?? []),
@@ -759,43 +805,8 @@ export default function UserDashboard() {
                 icon={<TrendingUpIcon />}
                 collapsed={collapsedSections.hashrateChart}
                 onToggle={() => toggleCollapsedSection('hashrateChart')}
-                data={historicalData ? {
-                  timestamps: historicalData.map(d => {
-                    const date = new Date(d.timestamp);
-                    return date.toLocaleString("en-US", {
-                      year: undefined,
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: false,
-                    });
-                  }),
-                  rawTimestamps: historicalData.map(d => new Date(d.timestamp).getTime()),
-                  series: [
-                    {
-                      data: historicalData.map(d => d.hashrate),
-                      title: "Hashrate"
-                    }
-                  ]
-                } : undefined}
-                bestDiffs={userBlockDiffs.length > 0 ? userBlockDiffs
-                    .filter(diff => diff.block_timestamp !== null)
-                    .map(diff => {
-                      const timestampMs = diff.block_timestamp! * 1000;
-                      return {
-                        timestamp: new Date(timestampMs).toLocaleString("en-US", {
-                          year: undefined,
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: false,
-                        }),
-                        rawTimestamp: timestampMs,
-                        difficulty: diff.difficulty,
-                      };
-                    }) : undefined}
+                data={hashrateChartData}
+                bestDiffs={hashrateChartBestDiffs}
                 loading={!historicalData}
             />
           </div>
@@ -873,6 +884,16 @@ export default function UserDashboard() {
                               render: (value) => formatDifficulty(value as number),
                             },
                             {
+                              key: 'work_rank',
+                              header: 'Work Rank',
+                              render: (_, item) => `${item.work_rank} / ${item.total_participants}`,
+                            },
+                            {
+                              key: 'total_work',
+                              header: 'Work',
+                              render: (value) => formatDifficulty(value as number),
+                            },
+                            {
                               key: 'blocks_rank',
                               header: 'Blocks Rank',
                               render: (_, item) => `${item.blocks_rank} / ${item.total_participants}`,
@@ -915,6 +936,14 @@ export default function UserDashboard() {
                               <div>
                                 <p className="text-foreground/60">Top Diff</p>
                                 <p className="font-medium">{formatDifficulty(round.top_diff)}</p>
+                              </div>
+                              <div>
+                                <p className="text-foreground/60">Work Rank</p>
+                                <p className="font-medium">{round.work_rank} / {round.total_participants}</p>
+                              </div>
+                              <div>
+                                <p className="text-foreground/60">Work</p>
+                                <p className="font-medium">{formatDifficulty(round.total_work)}</p>
                               </div>
                               <div>
                                 <p className="text-foreground/60">Blocks Rank</p>
