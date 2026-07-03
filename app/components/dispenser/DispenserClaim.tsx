@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, type MouseEvent } from "react";
 import Image from "next/image";
-import { useWallet } from "@/app/hooks/useWallet";
+import { useWallet, SignCancelledError } from "@/app/hooks/useWallet";
 import { isValidBitcoinAddress } from "@/app/utils/validators";
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
 
@@ -43,11 +43,10 @@ function buildClaimMessage(
 
 // Surface real failures but stay quiet when the user simply cancels signing.
 function getClaimErrorMessage(err: unknown): string | null {
-    const message = err instanceof Error ? err.message : "Failed to claim";
-    if (message.toLowerCase().includes("cancel")) {
+    if (err instanceof SignCancelledError) {
         return null;
     }
-    return message;
+    return err instanceof Error ? err.message : "Failed to claim";
 }
 
 function buildSlots(data: Eligibility): Slot[] {
@@ -179,7 +178,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
 
             const signature = await signMessage({ address, message });
 
-            await submitClaim(tier, tierSlotIndex, destinationAddress, signature);
+            const data = await submitClaim(tier, tierSlotIndex, destinationAddress, signature);
 
             // setTxHex(data.hex);
             setLocalClaimed((prev) => new Set(prev).add(slotIndex));
@@ -204,10 +203,9 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     };
 
     const closeManualClaim = useCallback(() => {
-        if (claimingSlot !== null) return;
         setManualSlot(null);
         setManualDestination("");
-    }, [claimingSlot]);
+    }, []);
 
     const handleManualClaim = async () => {
         if (!manualSlot) return;
@@ -229,10 +227,16 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
 
             const signature = await signMessage({ address: userId, message });
 
-            await submitClaim(slot.tier, slot.tierSlotIndex, destinationAddress, signature);
+            const data = await submitClaim(slot.tier, slot.tierSlotIndex, destinationAddress, signature);
 
             setLocalClaimed((prev) => new Set(prev).add(slot.index));
             setManualDestination("");
+
+            // Link assets dispense a redemption URL, redirect to it
+            if (data.claim_url) {
+                window.location.assign(data.claim_url);
+                return;
+            }
         } catch (err) {
             console.error("Manual claim error:", err);
             setError(getClaimErrorMessage(err));

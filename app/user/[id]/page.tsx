@@ -15,7 +15,7 @@ import { parseHashrate } from '@/app/utils/formatters';
 import LightningBalance from '@/app/components/LightningBalance';
 import StratumInfo from '@/app/components/StratumInfo';
 import AnimatedCounter from '@/app/components/AnimatedCounter';
-import { useWallet } from '@/app/hooks/useWallet';
+import { useWallet, SignCancelledError } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
 import { BookmarkIcon, TrendingUpIcon } from '@/app/components/icons';
@@ -404,8 +404,7 @@ export default function UserDashboard() {
     } catch (error) {
       console.error('Failed to toggle visibility:', error);
       // Don't nag the user when they intentionally cancelled the signature.
-      const message = error instanceof Error ? error.message.toLowerCase() : '';
-      if (!message.includes('cancel')) {
+      if (!(error instanceof SignCancelledError)) {
         alert('Failed to toggle visibility. Please try again.');
       }
     } finally {

@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
-import { AddressPurpose, MessageSigningProtocols, request } from '@sats-connect/core';
+import { AddressPurpose, MessageSigningProtocols, RpcErrorCode, request } from '@sats-connect/core';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import ManualSignModal, { ManualSignRequest } from '@/app/components/modals/ManualSignModal';
 
@@ -43,6 +43,15 @@ const LIGHTNING_TOKEN_KEY = 'lightning_auth_token';
 const LIGHTNING_TOKEN_TIMESTAMP_KEY = 'lightning_auth_timestamp';
 
 const TOKEN_VALIDITY_HOURS = 24;
+
+// Thrown when the user explicitly dismisses the manual signing modal, so
+// callers can stay quiet on cancellation without swallowing real failures.
+export class SignCancelledError extends Error {
+  constructor() {
+    super('User cancelled signing');
+    this.name = 'SignCancelledError';
+  }
+}
 
 // Parse the signature out of a sats-connect signMessage response, which may be
 // either a raw string or an object with a `signature` field depending on version.
@@ -181,8 +190,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const signer = signingAddress ?? address;
 
     if (walletType === 'manual') {
+      if (protocol !== MessageSigningProtocols.BIP322) {
+        throw new Error('Manual wallets only support BIP322 signing');
+      }
       return new Promise<string>((resolve, reject) => {
-        setPendingSign({ message, address: signer ?? null, resolve, reject });
+        setPendingSign(prev => {
+          // A new request supersedes any pending one; settle the old promise
+          // so its caller doesn't hang forever.
+          prev?.reject(new SignCancelledError());
+          return { message, address: signer ?? null, resolve, reject };
+        });
       });
     }
 
@@ -193,7 +210,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     });
 
     if (response.status !== 'success') {
-      throw new Error('User cancelled signing or signing failed');
+      if (response.error?.code === RpcErrorCode.USER_REJECTION) {
+        throw new SignCancelledError();
+      }
+      throw new Error(response.error?.message || 'Failed to sign message');
     }
 
     return parseSignatureResult(response.result);
@@ -429,7 +449,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           setPendingSign(null);
         }}
         onCancel={() => {
-          pendingSign?.reject(new Error('User cancelled signing'));
+          pendingSign?.reject(new SignCancelledError());
           setPendingSign(null);
         }}
       />
