@@ -3,11 +3,27 @@ import { type PoolStats } from '../../utils/api';
 import { formatDifficulty, parseHashrate } from '../../utils/formatters';
 import { fetch } from '@/lib/http-client';
 import { fetchWithCache } from '@/lib/aggregator-cache';
+import { getDb } from '@/lib/db';
 
 interface AggregatorPoolData {
   statsData: Record<string, number>;
   hashrateData: Record<string, string>;
   diffData: Record<string, number>;
+}
+
+// Counted work (sum of accepted share difficulty) for the current round, from
+// the locally-cached per-participant totals.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function getWorkSinceLastBlock(): number | null {
+  try {
+    const row = getDb()
+      .prepare('SELECT SUM(total_work) AS work FROM round_participants WHERE block_height = 0')
+      .get() as { work: number | null } | undefined;
+    return row?.work ?? null;
+  } catch (error) {
+    console.error('Error computing work since last block:', error);
+    return null;
+  }
 }
 
 export async function GET() {
@@ -64,7 +80,8 @@ export async function GET() {
       highestDifficulty: formatDifficulty(diffData.bestshare),
       hashrate: parseHashrate(hashrateData.hashrate5m),
       users: statsData.Users,
-      workers: statsData.Workers
+      workers: statsData.Workers,
+      workSinceLastBlock: 0, // TODO: getWorkSinceLastBlock(),
     };
     
     return NextResponse.json(poolStats);

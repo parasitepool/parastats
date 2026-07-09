@@ -7,6 +7,7 @@ export interface RoundParticipantRow {
   username: string;
   top_diff: number;
   blocks_participated: number;
+  total_work: number;
 }
 
 export interface RoundRow {
@@ -32,10 +33,12 @@ export function queryRoundParticipants(
 ) {
   const orderBy = type === 'participation'
     ? 'blocks_participated DESC'
-    : 'top_diff DESC';
+    : type === 'work'
+      ? 'total_work DESC'
+      : 'top_diff DESC';
 
   const rows = db.prepare(`
-    SELECT rp.username, rp.top_diff, rp.blocks_participated
+    SELECT rp.username, rp.top_diff, rp.blocks_participated, rp.total_work
     FROM round_participants rp
     LEFT JOIN monitored_users m ON rp.username = m.address
     WHERE rp.block_height = ? AND (m.is_public = 1 OR m.address IS NULL)
@@ -49,5 +52,6 @@ export function queryRoundParticipants(
     claimed: claimedSet.has(row.username),
     top_diff: row.top_diff,
     blocks_participated: row.blocks_participated,
+    total_work: row.total_work,
   }));
 }

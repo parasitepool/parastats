@@ -1,28 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  formatDifficulty,
-  formatPrice,
-  formatExpectedBlockTime,
-  parseHashrate
-} from "../utils/formatters";
+import {useEffect, useState} from "react";
+import {formatDifficulty, formatExpectedBlockTime, formatPrice, parseHashrate} from "../utils/formatters";
 import StatCard from "./StatCard";
-import { 
-  getHashrate, 
-  getDifficultyAdjustment, 
-  getBitcoinPrice,
-  type PoolStats as PoolStatsType
-} from "../utils/api";
-import { Hashrate, Adjustment } from "@mempool/mempool.js/lib/interfaces/bitcoin/difficulty";
-import { 
-  ClockIcon, 
-  LightningIcon, 
-  BookmarkIcon, 
-  TrendingUpIcon, 
-  WalletIcon,
-  InfoIcon 
-} from "./icons";
+import {getBitcoinPrice, getDifficultyAdjustment, getHashrate, type PoolStats as PoolStatsType} from "../utils/api";
+import {Adjustment, Hashrate} from "@mempool/mempool.js/lib/interfaces/bitcoin/difficulty";
+import {BookmarkIcon, ClockIcon, InfoIcon, LightningIcon, TrendingUpIcon, WalletIcon} from "./icons";
 
 interface PoolStatsProps {
   poolStats?: PoolStatsType;
@@ -72,9 +55,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
 
     const currentDiff = hashrate.currentDifficulty;
     const changePercent = difficultyAdjustment.difficultyChange / 100;
-    const expectedDiff = currentDiff * (1 + changePercent);
-
-    return expectedDiff;
+    return currentDiff * (1 + changePercent);
   };
 
   const expectedDifficulty = calculateExpectedDifficulty();
@@ -85,7 +66,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
       value: poolStats?.highestDifficulty && hashrate?.currentDifficulty ? (
         <span className='flex gap-1'>
           {poolStats.highestDifficulty}
-          <span 
+          <span
             className="relative inline-block"
             onMouseEnter={() => setHighestDiffTooltipVisible(true)}
             onMouseLeave={() => setHighestDiffTooltipVisible(false)}

@@ -16,11 +16,10 @@ interface CreateOrderModalProps {
 }
 
 const MIN_PHD = 1;
-const MAX_PHD = 69;
-const LOG_MAX = Math.log(MAX_PHD);
-const NOTCHES = [1, 9, 19, 29, 39, 49, 59, 69];
-const phdToSlider = (phd: number) => Math.log(phd) / LOG_MAX * 100;
-const sliderToPhd = (pos: number) => Math.round(Math.exp((pos / 100) * LOG_MAX));
+const MAX_PHD = 99;
+const NOTCHES = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
+const phdToSlider = (phd: number) => ((phd - MIN_PHD) / (MAX_PHD - MIN_PHD)) * 100;
+const sliderToPhd = (pos: number) => Math.round(MIN_PHD + (pos / 100) * (MAX_PHD - MIN_PHD));
 
 export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice, halt }: CreateOrderModalProps) {
   const { address: walletAddress, isConnected } = useWallet();
@@ -205,12 +204,15 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
                       /> PHd
                     </span>
                   ) : (
-                    <span
-                      onClick={() => { setEditValue(String(selectedPhd)); setEditing(true); }}
-                      className="cursor-text hover:underline"
-                    >
-                      {selectedPhd} PHd
-                    </span>
+                    <>
+                      <span
+                        onClick={() => { setEditValue(String(selectedPhd)); setEditing(true); }}
+                        className="cursor-text border-b border-dashed border-foreground/40 hover:border-foreground"
+                      >
+                        {selectedPhd} PHd
+                      </span>
+                      <div className="text-xs text-foreground/30 mt-0.5">click to type</div>
+                    </>
                   )}
                 </div>
                 <div className="relative h-7">
@@ -234,7 +236,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
                 </div>
                 <div className="relative mx-[8px]">
                   <span className="absolute text-xs text-accent-2 -translate-x-1/2" style={{ left: `${phdToSlider(1)}%` }}>1</span>
-                  <span className="absolute text-xs text-accent-2 -translate-x-1/2" style={{ left: `${phdToSlider(69)}%` }}>69</span>
+                  <span className="absolute text-xs text-accent-2 -translate-x-1/2" style={{ left: `${phdToSlider(99)}%` }}>99</span>
                   <span>&nbsp;</span>
                 </div>
               </div>

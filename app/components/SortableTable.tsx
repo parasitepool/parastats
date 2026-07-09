@@ -17,6 +17,7 @@ interface SortableTableProps<T> {
   onRowClick?: (item: T) => void;
   rowClassName?: (item: T) => string;
   className?: string;
+  pageSize?: number;
 }
 
 export default function SortableTable<T>({
@@ -26,10 +27,12 @@ export default function SortableTable<T>({
   defaultSortDirection = 'asc',
   onRowClick,
   rowClassName,
-  className = ''
+  className = '',
+  pageSize,
 }: SortableTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<keyof T | undefined>(defaultSortColumn);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
+  const [currentPage, setCurrentPage] = useState(0);
 
   const handleSort = (column: keyof T) => {
     if (sortColumn === column) {
@@ -53,6 +56,12 @@ export default function SortableTable<T>({
     const comparison = String(aValue).localeCompare(String(bValue), undefined, { numeric: true });
     return sortDirection === 'asc' ? comparison : -comparison;
   }), [data, sortColumn, sortDirection]);
+
+  const totalPages = pageSize ? Math.ceil(sortedData.length / pageSize) : 1;
+  const clampedPage = Math.min(currentPage, Math.max(0, totalPages - 1));
+  const displayData = pageSize ? sortedData.slice(clampedPage * pageSize, (clampedPage + 1) * pageSize) : sortedData;
+
+  if (clampedPage !== currentPage) setCurrentPage(clampedPage);
 
   return (
     <div className={`overflow-x-auto w-full ${className}`}>
@@ -79,7 +88,7 @@ export default function SortableTable<T>({
           </tr>
         </thead>
         <tbody className="bg-background divide-y divide-border">
-          {sortedData.map((item, index) => (
+          {displayData.map((item, index) => (
             <tr
               key={index}
               className={`hover:bg-foreground/5 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName ? rowClassName(item) : ''}`}
@@ -96,6 +105,29 @@ export default function SortableTable<T>({
           ))}
         </tbody>
       </table>
+      {pageSize && totalPages > 1 && (
+        <div className="flex items-center justify-between px-6 py-3 border-t border-border">
+          <span className="text-sm text-foreground/60">
+            {clampedPage * pageSize + 1}–{Math.min((clampedPage + 1) * pageSize, sortedData.length)} of {sortedData.length}
+          </span>
+          <div className="flex gap-2">
+            <button
+              className="px-3 py-1 text-sm border border-border hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
+              disabled={clampedPage === 0}
+              onClick={() => setCurrentPage(clampedPage - 1)}
+            >
+              Prev
+            </button>
+            <button
+              className="px-3 py-1 text-sm border border-border hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
+              disabled={clampedPage >= totalPages - 1}
+              onClick={() => setCurrentPage(clampedPage + 1)}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
