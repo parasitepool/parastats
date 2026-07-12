@@ -67,14 +67,8 @@ export async function GET(
       case '1h':
         hashrateColumn = 'hashrate1hr';
         break;
-      case '1d':
-        hashrateColumn = 'hashrate1d';
-        break;
-      case '7d':
-        hashrateColumn = 'hashrate7d';
-        break;
       default:
-        hashrateColumn = 'hashrate5m'; // Default to 5m
+        hashrateColumn = 'hashrate5m'; // Default to 5m (covers 15m/30m)
     }
     
     // Calculate the time range based on the period
