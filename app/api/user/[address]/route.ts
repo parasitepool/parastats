@@ -117,6 +117,9 @@ function processWorkerData(workers: WorkerData[]): ProcessedWorkerData[] {
 }
 
 function calculateUptime(authorisedTimestamp: number): string {
+  // 0 means the user was never authorised; measuring from the epoch would report decades.
+  if (!Number.isFinite(authorisedTimestamp) || authorisedTimestamp <= 0) return 'N/A';
+
   const now = Math.floor(Date.now() / 1000); // Current time in Unix timestamp
   const uptimeSeconds = now - authorisedTimestamp;
 

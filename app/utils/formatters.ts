@@ -63,6 +63,10 @@ export function formatAddress(address: string): string {
 }
 
 export function formatRelativeTime(timestamp: number): string {
+  // 0 is the pool's "never submitted" sentinel; callers may also pass NaN from a
+  // missing lastshare. Both would otherwise render as a date near the epoch.
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return 'Never';
+
   const now = new Date();
   const date = new Date(timestamp * 1000); // Convert Unix timestamp to milliseconds
 

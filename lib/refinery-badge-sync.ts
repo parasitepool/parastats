@@ -1,7 +1,8 @@
 import { getDb } from './db';
+import { parsePositiveInt } from './env';
 import type { OrderSummary } from '../app/api/router/types';
 
-const BATCH_SIZE = parseInt(process.env.REFINERY_BADGE_BATCH_SIZE || '50');
+const BATCH_SIZE = parsePositiveInt(process.env.REFINERY_BADGE_BATCH_SIZE, 50);
 
 export async function syncRefineryBadges() {
   const routerBase = process.env.ROUTER_API_URL;
