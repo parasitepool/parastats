@@ -243,6 +243,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     const closeManualClaim = useCallback(() => {
         setManualSlot(null);
         setManualDestination("");
+        setError(null);
     }, []);
 
     const handleManualClaim = async () => {
@@ -350,7 +351,9 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                             <div className="flex items-center gap-2">
                                 {slot.claimed && isCodeAsset && isOwner && (
                                     <button
-                                        onClick={() => handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
+                                        onClick={() => isManual
+                                            ? openManualClaim(slot)
+                                            : handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
                                         disabled={claiming || claimingSlot !== null}
                                         className="flex items-center gap-1 px-2 py-1 border border-border hover:bg-secondary-hover transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                                         title="Reopen claim page"
@@ -491,7 +494,10 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 <div
                     className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
                     onClick={(event) => {
-                        if (event.target === event.currentTarget) closeManualClaim();
+                        if (event.target === event.currentTarget) {
+                            event.stopPropagation();
+                            closeManualClaim();
+                        }
                     }}
                 >
                     <div
