@@ -145,15 +145,17 @@ export function formatExpectedBlockTime(poolHashrate: number | string | undefine
 }
 
 /**
- * Formats a large number with compact suffixes (K, M, B, T)
- * e.g. 1234 -> 1.23K, 1234567890 -> 1.23B
+ * Formats a large number with compact SI suffixes (K, M, G, T)
+ * e.g. 1234 -> 1.23K, 1234567890 -> 1.23G
+ * Uses the same SI unit family as formatDifficulty so accumulated work/share
+ * values stay consistent with difficulty and hashrate displays.
  * Supports bigint for very large numbers
  */
 export function formatCompactNumber(value: bigint | number): string {
   const num = typeof value === 'bigint' ? Number(value) : value;
   if (num === 0) return '0';
 
-  const suffixes = ['', 'K', 'M', 'B', 'T', 'Q'];
+  const suffixes = ['', 'K', 'M', 'G', 'T', 'P'];
   const absNum = Math.abs(num);
 
   if (absNum < 1000) {
