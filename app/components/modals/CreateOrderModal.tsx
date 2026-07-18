@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { request, RpcErrorCode } from '@sats-connect/core';
+import QRCode from 'react-qr-code';
 import { useWallet } from '@/app/hooks/useWallet';
 import { InfoIcon, CopyIcon, CheckIcon } from '@/app/components/icons';
 import type { OrderResponse } from '@/app/api/router/types';
@@ -285,6 +286,18 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
 
         {view === 'payment' && orderData && (
           <div className="space-y-4">
+            <div className="flex flex-col items-center gap-2">
+              <div className="bg-white p-3 rounded-md">
+                <QRCode
+                  value={orderData.payment_address}
+                  size={160}
+                  bgColor="#ffffff"
+                  fgColor="#000000"
+                  level="M"
+                />
+              </div>
+              <p className="text-[10px] text-foreground/40">Scan to get the deposit address</p>
+            </div>
             <div>
               <h3 className="text-sm font-medium text-accent-2 mb-2">Payment Address</h3>
               <div className="bg-secondary p-3 border border-border flex items-center justify-between gap-2">
