@@ -151,7 +151,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl"
+        className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-start mb-4">
@@ -287,7 +287,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
         {view === 'payment' && orderData && (
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-2">
-              <div className="bg-white p-3 rounded-md">
+              <div className="bg-white p-6 rounded-md">
                 <QRCode
                   value={orderData.payment_address}
                   size={160}
