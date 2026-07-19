@@ -13,7 +13,6 @@ interface AggregatorPoolData {
 
 // Counted work (sum of accepted share difficulty) for the current round, from
 // the locally-cached per-participant totals.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getWorkSinceLastBlock(): number | null {
   try {
     const row = getDb()
@@ -81,7 +80,7 @@ export async function GET() {
       hashrate: parseHashrate(hashrateData.hashrate5m),
       users: statsData.Users,
       workers: statsData.Workers,
-      workSinceLastBlock: 0, // TODO: getWorkSinceLastBlock(),
+      workSinceLastBlock: getWorkSinceLastBlock(),
     };
     
     return NextResponse.json(poolStats);
