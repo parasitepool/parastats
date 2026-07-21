@@ -79,12 +79,15 @@ function parseEnvInt(envValue: string | undefined, defaultValue: number): number
 
 // Configuration from environment variables with sensible defaults
 const CONFIG = {
+  // Enable HTTP/2. Set HTTP2_ENABLED=false to fall back to HTTP/1.1 without a deploy
+  H2_ENABLED: process.env.HTTP2_ENABLED !== 'false',
   // Maximum number of concurrent connections per origin
   MAX_CONNECTIONS: parseEnvInt(process.env.HTTP2_MAX_CONNECTIONS, 30),
-  // Time to live for connections in milliseconds (graceful shutdown after this time)
-  // Set to 0 to disable forced client destruction (prevents ClientDestroyedError)
-  // The keepAliveTimeout handles idle connection cleanup instead
-  CLIENT_TTL: parseEnvInt(process.env.HTTP2_CLIENT_TTL, 0),
+  // Time to live for connections in milliseconds (clients are gracefully rotated
+  // after this age). A finite TTL bounds how long a wedged HTTP/2 session can
+  // poison the pool; ClientDestroyedError during rotation is handled by the
+  // retry paths in fetch/fetchJson/fetchText.
+  CLIENT_TTL: parseEnvInt(process.env.HTTP2_CLIENT_TTL, 300000),
   // Connection timeout in milliseconds (time to establish initial connection)
   CONNECT_TIMEOUT: parseEnvInt(process.env.HTTP2_CONNECT_TIMEOUT, 1500),
   // Headers timeout in milliseconds (time to receive response headers)
@@ -97,6 +100,9 @@ const CONFIG = {
   REQUEST_TIMEOUT: parseEnvInt(process.env.HTTP2_REQUEST_TIMEOUT, 18000),
   // Number of retries for connection-level errors (ClientDestroyedError, etc)
   CONNECTION_RETRIES: parseEnvInt(process.env.HTTP2_CONNECTION_RETRIES, 2),
+  // Consecutive connection-level failures (timeouts, headers timeouts, network
+  // errors) before the agent is assumed wedged and recreated
+  POISON_THRESHOLD: parseEnvInt(process.env.HTTP2_POISON_THRESHOLD, 3),
 } as const;
 
 /**
@@ -119,9 +125,8 @@ function createAgent(): Dispatcher {
         // Maximum number of concurrent connections in the pool
         connections: CONFIG.MAX_CONNECTIONS,
         // Enable HTTP/2 support (will upgrade if server supports it)
-        allowH2: true,
-        // Disable forced client destruction (set to 0)
-        // This prevents ClientDestroyedError when TTL expires during requests
+        allowH2: CONFIG.H2_ENABLED,
+        // Rotate clients after CLIENT_TTL ms so a wedged session can't live forever
         clientTtl: CONFIG.CLIENT_TTL,
         // Connection timeout (time to establish initial connection)
         connect: {
@@ -153,9 +158,11 @@ function getAgent(): Dispatcher {
 }
 
 /**
- * Force recreation of the agent (called after ClientDestroyedError)
+ * Force recreation of the agent (called after ClientDestroyedError or when
+ * consecutive connection failures indicate a wedged pool)
  */
-function recreateAgent(): Dispatcher {
+function recreateAgent(reason: string): Dispatcher {
+  console.warn(`[http-client] recreating HTTP agent: ${reason}`);
   // Close the old agent if it exists (ignore errors)
   if (globalForHttp2.__http2Agent) {
     try {
@@ -247,23 +254,14 @@ export function isClientDestroyedError(error: unknown): boolean {
 }
 
 /**
- * Check if an error is retryable (network errors, timeouts, 5xx, 429, client destroyed)
+ * Check if an error is a network/connection-level error (fetch failed, socket
+ * errors, undici error codes such as UND_ERR_HEADERS_TIMEOUT)
  */
-export function isRetryableError(error: unknown): boolean {
-  // Timeout errors are retryable
-  if (isTimeoutError(error)) return true;
-  
-  // Client destroyed errors are retryable (HTTP/2 session was closed)
-  if (isClientDestroyedError(error)) return true;
-  
-  // HTTP errors - delegate to the error's own logic
-  if (error instanceof HttpError) return error.isRetryable;
-  
-  // Network/connection errors are retryable
+function isNetworkError(error: unknown): boolean {
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
-    if (msg.includes('fetch failed') || 
-        msg.includes('network') || 
+    if (msg.includes('fetch failed') ||
+        msg.includes('network') ||
         msg.includes('econnrefused') ||
         msg.includes('econnreset') ||
         msg.includes('etimedout') ||
@@ -272,7 +270,7 @@ export function isRetryableError(error: unknown): boolean {
         msg.includes('aborted')) {
       return true;
     }
-    
+
     // Check undici error codes
     const code = (error as Error & { code?: string }).code;
     if (code && (
@@ -284,8 +282,36 @@ export function isRetryableError(error: unknown): boolean {
       return true;
     }
   }
-  
+
   return false;
+}
+
+/**
+ * Check if an error is retryable (network errors, timeouts, 5xx, 429, client destroyed)
+ */
+export function isRetryableError(error: unknown): boolean {
+  // Timeout errors are retryable
+  if (isTimeoutError(error)) return true;
+
+  // Client destroyed errors are retryable (HTTP/2 session was closed)
+  if (isClientDestroyedError(error)) return true;
+
+  // HTTP errors - delegate to the error's own logic
+  if (error instanceof HttpError) return error.isRetryable;
+
+  // Network/connection errors are retryable
+  return isNetworkError(error);
+}
+
+/**
+ * Check if an error suggests the pooled connection itself is broken rather
+ * than the request. A run of these indicates a wedged HTTP/2 session that
+ * keeps black-holing requests, so the agent must be recreated to recover.
+ * Excludes HttpError: a server that answers (even with 5xx) isn't a wedged pool.
+ */
+function isConnectionPoisonError(error: unknown): boolean {
+  if (error instanceof HttpError) return false;
+  return isTimeoutError(error) || isNetworkError(error);
 }
 
 /**
@@ -369,10 +395,18 @@ function doFetch(
 }
 
 /**
+ * Consecutive connection-poison failures across all requests. Reset on any
+ * success; when it reaches POISON_THRESHOLD the agent is recreated so a
+ * wedged HTTP/2 session can't black-hole requests until a process restart.
+ */
+let consecutivePoisonFailures = 0;
+
+/**
  * HTTP/2-enabled fetch with automatic retry for connection errors
- * 
- * When ClientDestroyedError or other connection errors occur, the agent
- * is recreated and the request is retried automatically.
+ *
+ * When ClientDestroyedError occurs, or repeated timeouts/network errors
+ * indicate a wedged pool, the agent is recreated and the request is retried
+ * automatically.
  */
 export async function fetch(
   input: string | URL | Request,
@@ -380,31 +414,45 @@ export async function fetch(
 ): Promise<Response> {
   let lastError: unknown;
   const maxRetries = CONFIG.CONNECTION_RETRIES;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const agent = getAgent();
-      return await doFetch(input, init, agent);
+      const response = await doFetch(input, init, agent);
+      consecutivePoisonFailures = 0;
+      return response;
     } catch (error) {
       lastError = error;
-      
-      // Only retry on connection-level errors, not on timeouts or HTTP errors
+
+      // Only retry on connection-level errors, not on HTTP errors
       if (isClientDestroyedError(error)) {
         // Recreate the agent for the next attempt
-        recreateAgent();
-        
+        recreateAgent('client destroyed');
+
         if (attempt < maxRetries) {
           // Small delay before retry to let things settle
           await new Promise(resolve => setTimeout(resolve, 50));
           continue;
         }
+      } else if (isConnectionPoisonError(error)) {
+        consecutivePoisonFailures++;
+
+        if (consecutivePoisonFailures >= CONFIG.POISON_THRESHOLD) {
+          recreateAgent(`${consecutivePoisonFailures} consecutive connection failures`);
+          consecutivePoisonFailures = 0;
+
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            continue;
+          }
+        }
       }
-      
+
       // For non-connection errors or final attempt, throw immediately
       throw error;
     }
   }
-  
+
   // Should never reach here, but TypeScript needs this
   throw lastError;
 }
@@ -438,7 +486,7 @@ export async function fetchJson<T>(
       return await response.json() as T;
     } catch (error) {
       if (isClientDestroyedError(error) && attempt < CONFIG.CONNECTION_RETRIES) {
-        recreateAgent();
+        recreateAgent('client destroyed while reading body');
         await new Promise(resolve => setTimeout(resolve, 50));
         continue;
       }
@@ -476,7 +524,7 @@ export async function fetchText(
       return await response.text();
     } catch (error) {
       if (isClientDestroyedError(error) && attempt < CONFIG.CONNECTION_RETRIES) {
-        recreateAgent();
+        recreateAgent('client destroyed while reading body');
         await new Promise(resolve => setTimeout(resolve, 50));
         continue;
       }
