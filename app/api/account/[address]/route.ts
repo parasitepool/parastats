@@ -3,6 +3,7 @@ import { isValidBitcoinAddress } from '@/app/utils/validators';
 import type { CombinedAccountResponse, AccountData, WalletInfo, BalanceResponse } from '@/app/api/account/types';
 import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
 import { fetchWithCache } from '@/lib/aggregator-cache';
+import { HttpError } from '@/lib/http-client';
 
 export async function GET(
   request: Request,
@@ -42,17 +43,22 @@ export async function GET(
     }
 
     try {
+      const url = `${apiUrl}/account/${address}`;
       const { data } = await fetchWithCache<AccountData | null>(
-        `${apiUrl}/account/${address}`,
+        url,
         async () => {
-          const response = await fetchWithTimeout(`${apiUrl}/account/${address}`, {
+          const response = await fetchWithTimeout(url, {
             headers,
           });
           if (response.ok) {
             return await response.json() as AccountData;
           }
-          // 404 etc. — not an error, just no account
-          return null;
+          // 404 — not an error, just no account
+          if (response.status === 404) {
+            return null;
+          }
+          // Other failures (5xx etc.) must not be cached as "no account"
+          throw new HttpError(response.status, response.statusText, url);
         },
       );
       accountData = data;
