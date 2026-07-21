@@ -51,7 +51,7 @@ importers:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
       react-qr-code:
-        specifier: ^2.2.0
+        specifier: 2.2.0
         version: 2.2.0(react@19.2.7)
       reflect-metadata:
         specifier: 0.2.2
