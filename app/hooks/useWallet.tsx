@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { AddressPurpose, MessageSigningProtocols, RpcErrorCode, request } from '@sats-connect/core';
-import { isValidBitcoinAddress } from '@/app/utils/validators';
+import { isValidBitcoinAddress, normalizeBitcoinAddress } from '@/app/utils/validators';
 import ManualSignModal, { ManualSignRequest } from '@/app/components/modals/ManualSignModal';
 
 export type WalletType = 'xverse' | 'manual';
@@ -397,7 +397,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [addAddressToMonitoring, performLightningAuth]);
 
   const connectManual = useCallback(async (manualAddress: string): Promise<string | null> => {
-    const trimmedAddress = manualAddress.trim();
+    const trimmedAddress = normalizeBitcoinAddress(manualAddress);
 
     if (!isValidBitcoinAddress(trimmedAddress)) {
       return null;

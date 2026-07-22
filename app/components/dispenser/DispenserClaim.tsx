@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, type MouseEvent } from "react";
 import Image from "next/image";
 import { useWallet, SignCancelledError } from "@/app/hooks/useWallet";
-import { isValidBitcoinAddress } from "@/app/utils/validators";
+import { isValidBitcoinAddress, normalizeBitcoinAddress } from "@/app/utils/validators";
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
 import DispenserRewards from "@/app/components/dispenser/DispenserRewards";
 
@@ -251,7 +251,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     const handleManualClaim = async () => {
         if (!manualSlot) return;
 
-        const destinationAddress = manualDestination.trim();
+        const destinationAddress = normalizeBitcoinAddress(manualDestination);
         if (!isValidBitcoinAddress(destinationAddress)) {
             setError("Enter a valid destination Bitcoin address");
             return;

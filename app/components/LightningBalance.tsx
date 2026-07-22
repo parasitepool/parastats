@@ -122,10 +122,9 @@ export default function LightningBalance({
     setError(null);
     try {
       const result = await connectWithLightning();
+      // A null result means the user cancelled the wallet popup; stay quiet.
       if (result) {
         router.push(`/user/${result.address}`);
-      } else {
-        setError('Failed to connect wallet');
       }
     } catch (err) {
       console.error('Connection error:', err);
