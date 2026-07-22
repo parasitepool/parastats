@@ -8,7 +8,7 @@ import {
 import { startStratumCollector, stopStratumCollector } from "../lib/stratum-collector";
 import { startHighestDiffCollector, stopHighestDiffCollector } from "../lib/highest-diff-collector";
 import { startRoundsCollector, stopRoundsCollector } from "../lib/rounds-collector";
-import { closeDb } from "../lib/db";
+import { checkpointWal, closeDb } from "../lib/db";
 import { syncRefineryBadges } from "../lib/refinery-badge-sync";
 import cron from "node-cron";
 
@@ -40,10 +40,16 @@ startRoundsCollector();
 console.log("🔄 Rounds collector started");
 
 // Set up a job to purge old data daily at midnight
-let purgeJob = cron.schedule("0 0 * * *", () => {
-  purgeOldData(90); // Keep 90 days of data
+let purgeJob = cron.schedule("0 0 * * *", async () => {
+  await purgeOldData();
   console.log("🧹 Purged old pool stats data");
 });
+
+checkpointWal();
+let checkpointJob = cron.schedule("*/5 * * * *", () => {
+  checkpointWal();
+});
+console.log("🗜️ WAL checkpoint job started");
 
 // Handle graceful shutdown
 process.on("SIGTERM", shutdown);
@@ -65,6 +71,10 @@ function shutdown() {
 
   if (purgeJob) {
     purgeJob.stop();
+  }
+
+  if (checkpointJob) {
+    checkpointJob.stop();
   }
 
   // Stop stratum collector

@@ -40,6 +40,21 @@ interface MonitoredUser {
   address: string;
 }
 
+interface UserStatsSuccess {
+  status: 'success';
+  userId: number;
+  data: UserData;
+  now: number;
+}
+
+interface UserStatsFailure {
+  status: 'failure';
+  userId: number;
+  address: string;
+}
+
+type UserStatsResult = UserStatsSuccess | UserStatsFailure;
+
 let isCollectorRunning = false;
 let isUserCollectorRunning = false;
 let isAccountJobRunning = false;
@@ -52,6 +67,10 @@ const CONFIG = {
   AUTO_DISCOVER_USERS: process.env.AUTO_DISCOVER_USERS !== 'false', // Enable automatic user discovery (default: true)
   AUTO_DISCOVER_BATCH_LIMIT: parsePositiveInt(process.env.AUTO_DISCOVER_BATCH_LIMIT, 100), // Max new users to add per cycle
   SQL_BATCH_SIZE: 500, // Max parameters per SQL statement (SQLite limit is 999)
+  PURGE_CHUNK_SIZE: 10000,
+  PURGE_CHUNK_DELAY_MS: 100,
+  POOL_STATS_RETENTION_DAYS: parsePositiveInt(process.env.POOL_STATS_RETENTION_DAYS, 90),
+  USER_STATS_RETENTION_DAYS: parsePositiveInt(process.env.USER_STATS_RETENTION_DAYS, 30),
 } as const;
 
 /**
@@ -112,11 +131,115 @@ async function withRetry<T>(
  * Process users in batches to avoid overwhelming the system
  */
 async function processBatchedUserStats(users: MonitoredUser[]): Promise<number> {
+  const db = getDb();
+
+  const historyStmt = db.prepare(`
+    INSERT INTO user_stats_history (
+      user_id,
+      hashrate1m,
+      hashrate5m,
+      hashrate1hr,
+      hashrate1d,
+      hashrate7d,
+      workers,
+      bestshare,
+      bestever,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  // Update monitored_users with latest bestever and earliest authorised_at
+  // bestever: only increase (higher is better)
+  // authorised_at: only decrease to earlier timestamp (earlier = more loyal), but never to 0
+  // Also reset failed_attempts since we succeeded
+  const successStmt = db.prepare(`
+    UPDATE monitored_users
+    SET
+      bestever = CASE WHEN bestever < ? THEN ? ELSE bestever END,
+      authorised_at = CASE
+        WHEN ? > 0 AND (authorised_at = 0 OR authorised_at > ?)
+        THEN ?
+        ELSE authorised_at
+      END,
+      failed_attempts = 0,
+      updated_at = ?
+    WHERE id = ?
+  `);
+
+  const applyBatch = db.transaction((successes: UserStatsSuccess[], failureIds: number[], now: number) => {
+    const deactivatedIds: number[] = [];
+    for (let i = 0; i < failureIds.length; i += CONFIG.SQL_BATCH_SIZE) {
+      const chunk = failureIds.slice(i, i + CONFIG.SQL_BATCH_SIZE);
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = db.prepare(
+        `SELECT id FROM monitored_users WHERE id IN (${placeholders}) AND failed_attempts + 1 >= ?`
+      ).all(...chunk, CONFIG.MAX_FAILED_ATTEMPTS) as { id: number }[];
+      deactivatedIds.push(...rows.map((row) => row.id));
+    }
+
+    for (const success of successes) {
+      historyStmt.run(
+        success.userId,
+        success.data.hashrate1m,
+        success.data.hashrate5m,
+        success.data.hashrate1hr,
+        success.data.hashrate1d,
+        success.data.hashrate7d,
+        success.data.workers,
+        success.data.bestshare,
+        success.data.bestever,
+        success.now
+      );
+
+      successStmt.run(
+        success.data.bestever,
+        success.data.bestever,
+        success.data.authorised,     // Check if API value is valid (> 0)
+        success.data.authorised,     // Compare against existing value
+        success.data.authorised,     // Set to this value if conditions met
+        success.now,
+        success.userId
+      );
+    }
+
+    if (failureIds.length > 0) {
+      updateUsersInChunks(
+        db,
+        failureIds,
+        `UPDATE monitored_users
+         SET
+           is_active = CASE WHEN failed_attempts + 1 >= ? THEN 0 ELSE 1 END,
+           failed_attempts = CASE WHEN failed_attempts + 1 >= ? THEN 0 ELSE failed_attempts + 1 END,
+           updated_at = ?
+         WHERE id IN (\${placeholders})`,
+        [CONFIG.MAX_FAILED_ATTEMPTS, CONFIG.MAX_FAILED_ATTEMPTS, now]
+      );
+    }
+
+    return deactivatedIds;
+  });
+
   for (let i = 0; i < users.length; i += CONFIG.BATCH_SIZE) {
     const batch = users.slice(i, i + CONFIG.BATCH_SIZE);
-    await Promise.allSettled(
-      batch.map(user => collectUserStats(user.id, user.address))
+    const results = await Promise.all(
+      batch.map(user => fetchUserStats(user.id, user.address))
     );
+
+    const successes = results.filter((result) => result.status === 'success');
+    const failures = results.filter((result) => result.status === 'failure');
+    const now = Math.floor(Date.now() / 1000);
+
+    const deactivatedIds = applyBatch.immediate(
+      successes,
+      failures.map((failure) => failure.userId),
+      now
+    );
+
+    const failureAddresses = new Map(failures.map((failure) => [failure.userId, failure.address]));
+    for (const id of deactivatedIds) {
+      console.log(`Deactivating user ${failureAddresses.get(id)} after ${CONFIG.MAX_FAILED_ATTEMPTS} failed attempts`);
+    }
+
     console.log(`Processed batch ${Math.floor(i / CONFIG.BATCH_SIZE) + 1}/${Math.ceil(users.length / CONFIG.BATCH_SIZE)} (${batch.length} users)`);
   }
   return users.length;
@@ -149,9 +272,9 @@ function updateUsersInChunks(
 }
 
 /**
- * Fetch user stats and store them in the database
+ * Fetch user stats from the API
  */
-async function collectUserStats(userId: number, address: string): Promise<void> {
+async function fetchUserStats(userId: number, address: string): Promise<UserStatsResult> {
   try {
     // Include response.json() inside retry wrapper to handle connection errors during body reading
     const userData = await withRetry(async () => {
@@ -193,71 +316,8 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
         throw error;
       }
     }, 5, 300, `GET /users/${address}`);
-    const now = Math.floor(Date.now() / 1000);
 
-    // Insert data into the database
-    const db = getDb();
-    
-    // Begin transaction
-    db.transaction(() => {
-      // Insert historical data
-      const historyStmt = db.prepare(`
-        INSERT INTO user_stats_history (
-          user_id,
-          hashrate1m,
-          hashrate5m,
-          hashrate1hr,
-          hashrate1d,
-          hashrate7d,
-          workers,
-          bestshare,
-          bestever,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
-      historyStmt.run(
-        userId,
-        userData.hashrate1m,
-        userData.hashrate5m,
-        userData.hashrate1hr,
-        userData.hashrate1d,
-        userData.hashrate7d,
-        userData.workers,
-        userData.bestshare,
-        userData.bestever,
-        now
-      );
-
-      // Update monitored_users with latest bestever and earliest authorised_at
-      // bestever: only increase (higher is better)
-      // authorised_at: only decrease to earlier timestamp (earlier = more loyal), but never to 0
-      // Also reset failed_attempts since we succeeded
-      const updateStmt = db.prepare(`
-        UPDATE monitored_users
-        SET
-          bestever = CASE WHEN bestever < ? THEN ? ELSE bestever END,
-          authorised_at = CASE
-            WHEN ? > 0 AND (authorised_at = 0 OR authorised_at > ?)
-            THEN ?
-            ELSE authorised_at
-          END,
-          failed_attempts = 0,
-          updated_at = ?
-        WHERE id = ?
-      `);
-
-      updateStmt.run(
-        userData.bestever,
-        userData.bestever,
-        userData.authorised,     // Check if API value is valid (> 0)
-        userData.authorised,     // Compare against existing value
-        userData.authorised,     // Set to this value if conditions met
-        now,
-        userId
-      );
-    })();
-
+    return { status: 'success', userId, data: userData, now: Math.floor(Date.now() / 1000) };
   } catch (error) {
     // Log 404s as simple one-liners (user not found is common, not critical)
     if (error instanceof HttpError && error.status === 404) {
@@ -265,37 +325,8 @@ async function collectUserStats(userId: number, address: string): Promise<void> 
     } else {
       console.error(`Error collecting stats for user ${address}:`, error);
     }
-    
-    // Increment failed attempts and deactivate if threshold reached
-    const db = getDb();
-    db.transaction(() => {
-      // First get the current failed attempts count
-      const user = db.prepare('SELECT failed_attempts FROM monitored_users WHERE id = ?').get(userId) as { failed_attempts: number };
-      const newFailedAttempts = (user?.failed_attempts ?? 0) + 1;
-      const now = Math.floor(Date.now() / 1000);
 
-      // Then update based on the new count
-      const updateStmt = db.prepare(`
-        UPDATE monitored_users 
-        SET 
-          failed_attempts = ?,
-          is_active = ?,
-          updated_at = ?
-        WHERE id = ?
-      `);
-
-      // If we hit max failures, deactivate and reset counter, otherwise just increment
-      updateStmt.run(
-        newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS ? 0 : newFailedAttempts,
-        newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS ? 0 : 1,
-        now,
-        userId
-      );
-
-      if (newFailedAttempts >= CONFIG.MAX_FAILED_ATTEMPTS) {
-        console.log(`Deactivating user ${address} after ${CONFIG.MAX_FAILED_ATTEMPTS} failed attempts`);
-      }
-    })();
+    return { status: 'failure', userId, address };
   }
 }
 
@@ -719,19 +750,36 @@ export async function syncAccountTotalBlocks() {
   }
 }
 
-/**
- * Purge old data (keep only last 30 days by default)
- */
-export function purgeOldData(daysToKeep = 30) {
+async function purgeInChunks(
+  db: ReturnType<typeof getDb>,
+  sql: string,
+  cutoffTimestamp: number
+): Promise<number> {
+  const stmt = db.prepare(sql);
+  let total = 0;
+
+  for (;;) {
+    const result = stmt.run(cutoffTimestamp, CONFIG.PURGE_CHUNK_SIZE);
+    total += result.changes;
+    if (result.changes < CONFIG.PURGE_CHUNK_SIZE) {
+      return total;
+    }
+    await delay(CONFIG.PURGE_CHUNK_DELAY_MS);
+  }
+}
+
+export async function purgeOldData() {
   try {
     const db = getDb();
-    const cutoffTimestamp = Math.floor(Date.now() / 1000) - (daysToKeep * 24 * 60 * 60);
-    
-    const poolResult = db.prepare('DELETE FROM pool_stats WHERE timestamp < ?').run(cutoffTimestamp);
-    console.log(`Purged ${poolResult.changes} old pool stats records`);
+    const now = Math.floor(Date.now() / 1000);
+    const poolCutoff = now - CONFIG.POOL_STATS_RETENTION_DAYS * 24 * 60 * 60;
+    const userCutoff = now - CONFIG.USER_STATS_RETENTION_DAYS * 24 * 60 * 60;
 
-    const userResult = db.prepare('DELETE FROM user_stats_history WHERE created_at < ?').run(cutoffTimestamp);
-    console.log(`Purged ${userResult.changes} old user stats records`);
+    const poolPurged = await purgeInChunks(db, 'DELETE FROM pool_stats WHERE timestamp < ? LIMIT ?', poolCutoff);
+    console.log(`Purged ${poolPurged} pool stats records older than ${CONFIG.POOL_STATS_RETENTION_DAYS} days`);
+
+    const userPurged = await purgeInChunks(db, 'DELETE FROM user_stats_history WHERE created_at < ? LIMIT ?', userCutoff);
+    console.log(`Purged ${userPurged} user stats records older than ${CONFIG.USER_STATS_RETENTION_DAYS} days`);
   } catch (error) {
     console.error("Error purging old stats:", error);
   }
