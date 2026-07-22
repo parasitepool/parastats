@@ -401,6 +401,15 @@ function doFetch(
  */
 let consecutivePoisonFailures = 0;
 
+function describeError(error: unknown): string {
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    const causeInfo = cause instanceof Error ? ` (${cause.message})` : '';
+    return `${error.name}: ${error.message}${causeInfo}`;
+  }
+  return String(error);
+}
+
 /**
  * HTTP/2-enabled fetch with automatic retry for connection errors
  *
@@ -414,6 +423,11 @@ export async function fetch(
 ): Promise<Response> {
   let lastError: unknown;
   const maxRetries = CONFIG.CONNECTION_RETRIES;
+  const urlString = typeof input === 'string'
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : input.url;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -427,7 +441,7 @@ export async function fetch(
       // Only retry on connection-level errors, not on HTTP errors
       if (isClientDestroyedError(error)) {
         // Recreate the agent for the next attempt
-        recreateAgent('client destroyed');
+        recreateAgent(`client destroyed for ${urlString}`);
 
         if (attempt < maxRetries) {
           // Small delay before retry to let things settle
@@ -438,7 +452,9 @@ export async function fetch(
         consecutivePoisonFailures++;
 
         if (consecutivePoisonFailures >= CONFIG.POISON_THRESHOLD) {
-          recreateAgent(`${consecutivePoisonFailures} consecutive connection failures`);
+          recreateAgent(
+            `${consecutivePoisonFailures} consecutive connection failures (last: ${describeError(error)}; url: ${urlString})`
+          );
           consecutivePoisonFailures = 0;
 
           if (attempt < maxRetries) {
@@ -486,7 +502,7 @@ export async function fetchJson<T>(
       return await response.json() as T;
     } catch (error) {
       if (isClientDestroyedError(error) && attempt < CONFIG.CONNECTION_RETRIES) {
-        recreateAgent('client destroyed while reading body');
+        recreateAgent(`client destroyed while reading body for ${urlString}`);
         await new Promise(resolve => setTimeout(resolve, 50));
         continue;
       }
@@ -524,7 +540,7 @@ export async function fetchText(
       return await response.text();
     } catch (error) {
       if (isClientDestroyedError(error) && attempt < CONFIG.CONNECTION_RETRIES) {
-        recreateAgent('client destroyed while reading body');
+        recreateAgent(`client destroyed while reading body for ${urlString}`);
         await new Promise(resolve => setTimeout(resolve, 50));
         continue;
       }

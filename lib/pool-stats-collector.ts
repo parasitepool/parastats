@@ -69,6 +69,8 @@ const CONFIG = {
   SQL_BATCH_SIZE: 500, // Max parameters per SQL statement (SQLite limit is 999)
   PURGE_CHUNK_SIZE: 10000,
   PURGE_CHUNK_DELAY_MS: 100,
+  POOL_STATS_RETENTION_DAYS: parsePositiveInt(process.env.POOL_STATS_RETENTION_DAYS, 90),
+  USER_STATS_RETENTION_DAYS: parsePositiveInt(process.env.USER_STATS_RETENTION_DAYS, 30),
 } as const;
 
 /**
@@ -766,19 +768,18 @@ async function purgeInChunks(
   }
 }
 
-/**
- * Purge old data (keep only last 30 days by default)
- */
-export async function purgeOldData(daysToKeep = 30) {
+export async function purgeOldData() {
   try {
     const db = getDb();
-    const cutoffTimestamp = Math.floor(Date.now() / 1000) - (daysToKeep * 24 * 60 * 60);
+    const now = Math.floor(Date.now() / 1000);
+    const poolCutoff = now - CONFIG.POOL_STATS_RETENTION_DAYS * 24 * 60 * 60;
+    const userCutoff = now - CONFIG.USER_STATS_RETENTION_DAYS * 24 * 60 * 60;
 
-    const poolPurged = await purgeInChunks(db, 'DELETE FROM pool_stats WHERE timestamp < ? LIMIT ?', cutoffTimestamp);
-    console.log(`Purged ${poolPurged} old pool stats records`);
+    const poolPurged = await purgeInChunks(db, 'DELETE FROM pool_stats WHERE timestamp < ? LIMIT ?', poolCutoff);
+    console.log(`Purged ${poolPurged} pool stats records older than ${CONFIG.POOL_STATS_RETENTION_DAYS} days`);
 
-    const userPurged = await purgeInChunks(db, 'DELETE FROM user_stats_history WHERE created_at < ? LIMIT ?', cutoffTimestamp);
-    console.log(`Purged ${userPurged} old user stats records`);
+    const userPurged = await purgeInChunks(db, 'DELETE FROM user_stats_history WHERE created_at < ? LIMIT ?', userCutoff);
+    console.log(`Purged ${userPurged} user stats records older than ${CONFIG.USER_STATS_RETENTION_DAYS} days`);
   } catch (error) {
     console.error("Error purging old stats:", error);
   }

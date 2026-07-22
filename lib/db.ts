@@ -19,6 +19,7 @@ export function getDb(): Database.Database {
     
     // Enable foreign keys
     db.pragma('journal_mode = WAL');
+    db.pragma('synchronous = NORMAL');
     db.pragma('foreign_keys = ON');
     
     // Create tables if they don't exist
@@ -259,6 +260,25 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_round_participants_work
       ON round_participants(block_height, total_work DESC);
   `);
+}
+
+export function checkpointWal() {
+  try {
+    const [result] = getDb().pragma('wal_checkpoint(TRUNCATE)') as {
+      busy: number;
+      log: number;
+      checkpointed: number;
+    }[];
+    if (result.busy === 1) {
+      console.warn(
+        `WAL checkpoint could not complete (reader holding the WAL): ${result.checkpointed}/${result.log} frames checkpointed`
+      );
+    }
+    return result;
+  } catch (error) {
+    console.warn('WAL checkpoint failed:', error);
+    return null;
+  }
 }
 
 // Close the database connection when the app is shutting down
