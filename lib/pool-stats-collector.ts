@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { getDb } from './db';
+import { parsePositiveInt } from './env';
 import { fetch, HttpError, isRetryableError } from './http-client';
 import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
 
@@ -45,11 +46,11 @@ let isAccountJobRunning = false;
 
 // Configuration constants
 const CONFIG = {
-  MAX_FAILED_ATTEMPTS: parseInt(process.env.MAX_FAILED_ATTEMPTS || '10'),
-  BATCH_SIZE: parseInt(process.env.USER_BATCH_SIZE || '500'), // Process users in batches (concurrent API requests)
-  FAILED_USER_BACKOFF_MINUTES: parseInt(process.env.FAILED_USER_BACKOFF_MINUTES || '2'), // Don't retry failed users for 2 minutes
+  MAX_FAILED_ATTEMPTS: parsePositiveInt(process.env.MAX_FAILED_ATTEMPTS, 10),
+  BATCH_SIZE: parsePositiveInt(process.env.USER_BATCH_SIZE, 500), // Process users in batches (concurrent API requests)
+  FAILED_USER_BACKOFF_MINUTES: parsePositiveInt(process.env.FAILED_USER_BACKOFF_MINUTES, 2), // Don't retry failed users for 2 minutes
   AUTO_DISCOVER_USERS: process.env.AUTO_DISCOVER_USERS !== 'false', // Enable automatic user discovery (default: true)
-  AUTO_DISCOVER_BATCH_LIMIT: parseInt(process.env.AUTO_DISCOVER_BATCH_LIMIT || '100'), // Max new users to add per cycle
+  AUTO_DISCOVER_BATCH_LIMIT: parsePositiveInt(process.env.AUTO_DISCOVER_BATCH_LIMIT, 100), // Max new users to add per cycle
   SQL_BATCH_SIZE: 500, // Max parameters per SQL statement (SQLite limit is 999)
 } as const;
 

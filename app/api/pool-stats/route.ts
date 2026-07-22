@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { type PoolStats } from '../../utils/api';
 import { formatDifficulty, parseHashrate } from '../../utils/formatters';
-import { fetch } from '@/lib/http-client';
+import { fetch, HttpError } from '@/lib/http-client';
 import { fetchWithCache } from '@/lib/aggregator-cache';
 import { getDb } from '@/lib/db';
 
@@ -13,7 +13,6 @@ interface AggregatorPoolData {
 
 // Counted work (sum of accepted share difficulty) for the current round, from
 // the locally-cached per-participant totals.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getWorkSinceLastBlock(): number | null {
   try {
     const row = getDb()
@@ -39,12 +38,16 @@ export async function GET() {
       headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
     }
 
+    const url = `${apiUrl}/aggregator/pool/pool.status`;
     const { data: poolData } = await fetchWithCache<AggregatorPoolData>(
-      `${apiUrl}/aggregator/pool/pool.status`,
+      url,
       async () => {
-        const response = await fetch(`${apiUrl}/aggregator/pool/pool.status`, {
+        const response = await fetch(url, {
           headers,
         });
+        if (!response.ok) {
+          throw new HttpError(response.status, response.statusText, url);
+        }
         const text = await response.text();
         const jsonLines = text.trim().split('\n').map(line => JSON.parse(line));
         const [statsData, hashrateData, diffData] = jsonLines;
@@ -81,7 +84,7 @@ export async function GET() {
       hashrate: parseHashrate(hashrateData.hashrate5m),
       users: statsData.Users,
       workers: statsData.Workers,
-      workSinceLastBlock: 0, // TODO: getWorkSinceLastBlock(),
+      workSinceLastBlock: getWorkSinceLastBlock(),
     };
     
     return NextResponse.json(poolStats);
