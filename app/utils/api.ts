@@ -169,22 +169,19 @@ export async function updateAccountMetadata(
   metadata: Record<string, unknown>,
   signature: string
 ): Promise<unknown> {
-  try {
-    return await withRetry(async () => {
-      const response = await fetch('/api/account/metadata', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ btc_address, metadata, signature }),
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return await response.json();
-    });
-  } catch (error) {
-    console.error(`Error updating account metadata for ${btc_address}:`, error);
-    throw error;
+  const response = await fetch('/api/account/metadata', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ btc_address, metadata, signature }),
+  });
+
+  const data: { error?: string } | null = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || `Failed to update account metadata (${response.status})`);
   }
+
+  return data;
 }
 
 /**

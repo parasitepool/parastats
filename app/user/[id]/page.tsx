@@ -25,6 +25,7 @@ import Refinery from '@/app/components/Refinery';
 import ErrorBoundary from '@/app/components/ErrorBoundary';
 import UserMiners from '@/app/components/UserMiners';
 import CardHeader from '@/app/components/CardHeader';
+import WalletConnectModal from '@/app/components/modals/WalletConnectModal';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from '@/app/components/collapsible';
 
 const CURRENT_ROUND_BLOCK = Number.MAX_SAFE_INTEGER;
@@ -76,6 +77,7 @@ export default function UserDashboard() {
   const [hashrate, setHashrate] = useState<Hashrate>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
@@ -419,13 +421,10 @@ export default function UserDashboard() {
 
   const isPrivate = accountData?.metadata?.is_private ?? false;
   const isOwnProfile = isConnected && address === userId;
-  // Manual wallets connect by asserting an address (no Lightning). They get owner
-  // features that are signature-gated server-side (privacy, dispenser) but no
-  // Lightning balance and no Refinery (which relies on Lightning auth).
   const isManualOwner = isOwnProfile && walletType === 'manual';
   const refineryLoading = !isInitialized || !hasInitiallyLoaded || isLoadingAccountData;
   const refineryActivated = Boolean(isLightningAuthenticated && accountData && accountData.ln_address);
-  const showRefinery = isOwnProfile && walletType !== 'manual' && (refineryLoading || refineryActivated);
+  const showRefinery = isOwnProfile && (refineryLoading || refineryActivated || isManualOwner);
   const toggleCollapsedSection = (section: keyof CollapsedSections) => {
     setCollapsedSections(value => ({
       ...value,
@@ -440,40 +439,57 @@ export default function UserDashboard() {
     try {
       const metadata = { is_private: !isPrivate };
 
-      const signature = await signMessage({
+      await signMessage({
         address: userId,
         message: JSON.stringify(metadata),
+        submit: (signature: string) => updateAccountMetadata(userId, metadata, signature),
       });
 
-      await updateAccountMetadata(userId, metadata, signature);
       window.location.reload();
     } catch (error) {
       console.error('Failed to toggle visibility:', error);
       // Don't nag the user when they intentionally cancelled the signature.
       if (!(error instanceof SignCancelledError)) {
-        alert('Failed to toggle visibility. Please try again.');
+        alert(error instanceof Error ? error.message : 'Failed to toggle visibility. Please try again.');
       }
     } finally {
       setIsTogglingVisibility(false);
     }
   };
 
-  // Handle account activation
-  const handleActivateAccount = async () => {
+  const handleConnectXverse = async () => {
     setIsConnecting(true);
     setError(null);
     try {
-      // If not authenticated, just connect the wallet
-      if (!isLightningAuthenticated) {
-        const result = await connectWithLightning();
-        if (result) {
-          router.push(`/user/${result.address}`);
-        } else {
-          setError('Failed to connect wallet');
-        }
-        return;
+      const result = await connectWithLightning();
+      if (result) {
+        router.push(`/user/${result.address}`);
+      } else {
+        setError('Failed to connect wallet');
       }
+    } catch (err) {
+      console.error('Connect error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
+  // Handle account activation
+  const handleActivateAccount = async () => {
+    if (!isConnected) {
+      setShowConnectModal(true);
+      return;
+    }
+
+    if (!isLightningAuthenticated) {
+      await handleConnectXverse();
+      return;
+    }
+
+    setIsConnecting(true);
+    setError(null);
+    try {
       // Already authenticated - do the full activation flow to set Lightning address
       const result = await connectWithLightning();
       if (!result || !result.address || !result.token) {
@@ -532,6 +548,7 @@ export default function UserDashboard() {
       // Refresh the page to show updated data
       window.location.reload();
     } catch (err) {
+      if (err instanceof SignCancelledError) return;
       console.error('Activation error:', err);
       setError(err instanceof Error ? err.message : 'Failed to activate account');
     } finally {
@@ -721,28 +738,7 @@ export default function UserDashboard() {
                     />
                   </div>
               ) : isConnected && !isOwnProfile ? null
-              : isManualOwner ? (
-                  // Manual wallet owner - Stratum + Dispenser only (no Lightning balance, no Refinery)
-                  <div>
-                    <div className="bg-secondary border border-border p-3 text-xs text-foreground/60 mb-4">
-                      Connected manually. Actions like claiming or toggling privacy are approved by signing a
-                      message with the wallet that owns this address.
-                    </div>
-                    <StratumInfo
-                      userId={userId}
-                      isLoading={false}
-                      collapsed={collapsedSections.stratumLightning}
-                      onToggle={() => toggleCollapsedSection('stratumLightning')}
-                    />
-                    <DispenserClaim
-                      userId={userId}
-                      className="mt-4"
-                      collapsed={collapsedSections.dispenser}
-                      onToggle={() => toggleCollapsedSection('dispenser')}
-                    />
-                  </div>
-              )
-              : !isLightningAuthenticated || !accountData || !accountData.ln_address ? (
+              : !isManualOwner && (!isLightningAuthenticated || !accountData || !accountData.ln_address) ? (
                       // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
                   <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
                     <div className="flex flex-col items-center justify-center py-8">
@@ -798,6 +794,12 @@ export default function UserDashboard() {
               />
             </ErrorBoundary>
           )}
+
+          <WalletConnectModal
+            isOpen={showConnectModal}
+            onClose={() => setShowConnectModal(false)}
+            onXverse={handleConnectXverse}
+          />
 
           <div className="w-full">
             <HashrateChart

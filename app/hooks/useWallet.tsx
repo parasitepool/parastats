@@ -13,8 +13,18 @@ interface SignMessageParams {
   address?: string;
 }
 
+// Without `submit`, resolves with the signature. With `submit`, the callback
+// consumes the signature (e.g. POSTs it to the backend) and its result is
+// returned; for manual wallets it runs while the signing modal is still open,
+// so failures (like an invalid signature) are shown there and can be retried.
+interface SignMessage {
+  (params: SignMessageParams): Promise<string>;
+  <T>(params: SignMessageParams & { submit: (signature: string) => Promise<T> }): Promise<T>;
+}
+
 interface PendingSign extends ManualSignRequest {
-  resolve: (signature: string) => void;
+  submit?: (signature: string) => Promise<unknown>;
+  resolve: (value: unknown) => void;
   reject: (reason?: unknown) => void;
 }
 
@@ -29,7 +39,7 @@ interface WalletContextType {
   connect: () => Promise<string | null>;
   connectWithLightning: () => Promise<{ address: string; token: string } | null>;
   connectManual: (manualAddress: string) => Promise<string | null>;
-  signMessage: (params: SignMessageParams) => Promise<string>;
+  signMessage: SignMessage;
   disconnect: () => void;
   refreshLightningAuth: () => Promise<string | null>;
 }
@@ -186,19 +196,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     message,
     protocol = MessageSigningProtocols.BIP322,
     address: signingAddress,
-  }: SignMessageParams): Promise<string> => {
+    submit,
+  }: SignMessageParams & { submit?: (signature: string) => Promise<unknown> }): Promise<unknown> => {
     const signer = signingAddress ?? address;
 
     if (walletType === 'manual') {
       if (protocol !== MessageSigningProtocols.BIP322) {
         throw new Error('Manual wallets only support BIP322 signing');
       }
-      return new Promise<string>((resolve, reject) => {
+      return new Promise<unknown>((resolve, reject) => {
         setPendingSign(prev => {
           // A new request supersedes any pending one; settle the old promise
           // so its caller doesn't hang forever.
           prev?.reject(new SignCancelledError());
-          return { message, address: signer ?? null, resolve, reject };
+          return { message, address: signer ?? null, submit, resolve, reject };
         });
       });
     }
@@ -216,8 +227,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       throw new Error(response.error?.message || 'Failed to sign message');
     }
 
-    return parseSignatureResult(response.result);
-  }, [walletType, address]);
+    const signature = parseSignatureResult(response.result);
+
+    if (submit) {
+      return await submit(signature);
+    }
+
+    return signature;
+  }, [walletType, address]) as SignMessage;
 
   const requestNonce = useCallback(async (userAddress: string): Promise<string> => {
     const response = await fetch('/api/lightning/auth/nonce', {
@@ -444,8 +461,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       {children}
       <ManualSignModal
         request={pendingSign}
-        onSubmit={(signature) => {
-          pendingSign?.resolve(signature);
+        onSubmit={async (signature) => {
+          if (!pendingSign) return;
+          const result = pendingSign.submit ? await pendingSign.submit(signature) : signature;
+          pendingSign.resolve(result);
           setPendingSign(null);
         }}
         onCancel={() => {

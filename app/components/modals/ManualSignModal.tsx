@@ -9,53 +9,78 @@ export interface ManualSignRequest {
 
 interface ManualSignModalProps {
   request: ManualSignRequest | null;
-  onSubmit: (signature: string) => void;
+  onSubmit: (signature: string) => Promise<void>;
   onCancel: () => void;
 }
 
 export default function ManualSignModal({ request, onSubmit, onCancel }: ManualSignModalProps) {
   const [signature, setSignature] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Reset fields whenever a new signing request opens
   useEffect(() => {
     setSignature('');
-    setCopied(false);
+    setCopiedField(null);
+    setSubmitting(false);
+    setError(null);
   }, [request]);
 
   useEffect(() => {
     if (!request) return;
 
     const handleEscKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancel();
+      if (event.key === 'Escape' && !submitting) onCancel();
     };
 
     window.addEventListener('keydown', handleEscKey);
     return () => window.removeEventListener('keydown', handleEscKey);
-  }, [request, onCancel]);
+  }, [request, submitting, onCancel]);
 
   if (!request) return null;
 
   const trimmedSignature = signature.trim();
 
-  const handleCopyMessage = async () => {
+  const copyToClipboard = async (value: string, field: string) => {
     try {
-      await navigator.clipboard.writeText(request.message);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }
   };
 
-  const handleSubmit = () => {
-    if (!trimmedSignature) return;
-    onSubmit(trimmedSignature);
+  const handleSubmit = async () => {
+    if (!trimmedSignature || submitting) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await onSubmit(trimmedSignature);
+    } catch (err) {
+      console.error('Submit signature error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to submit signature');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleBackdropClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) onCancel();
+    if (event.target === event.currentTarget && !submitting) onCancel();
   };
+
+  const copyButton = (value: string, field: string) => (
+    <button
+      onClick={() => copyToClipboard(value, field)}
+      disabled={!value}
+      className="px-2 py-1 border border-border hover:bg-secondary-hover transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {copiedField === field ? 'Copied' : 'Copy'}
+    </button>
+  );
 
   return (
     <div
@@ -67,20 +92,11 @@ export default function ManualSignModal({ request, onSubmit, onCancel }: ManualS
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex justify-between items-start gap-4 mb-4">
-          <div>
-            <h2 className="text-xl sm:text-2xl font-bold text-accent-3">Sign Message</h2>
-            {request.address && (
-              <div className="mt-2 flex flex-col gap-1">
-                <span className="text-xs uppercase text-foreground/50">Sign with address</span>
-                <span className="inline-block max-w-full border border-border bg-secondary px-2 py-1 font-mono text-xs text-foreground break-all">
-                  {request.address}
-                </span>
-              </div>
-            )}
-          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-accent-3">Sign Message</h2>
           <button
             onClick={onCancel}
-            className="text-gray-400 hover:text-gray-500 focus:outline-none"
+            disabled={submitting}
+            className="text-gray-400 hover:text-gray-500 focus:outline-none disabled:opacity-50"
             title="Close"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -90,11 +106,14 @@ export default function ManualSignModal({ request, onSubmit, onCancel }: ManualS
         </div>
 
         <div className="space-y-4">
-          <div className="bg-secondary border border-border p-3 text-sm text-foreground/80 space-y-1">
-            <p>Sign the message below with the wallet that owns the address shown, then paste the signature.</p>
-            <p className="text-xs text-foreground/60">
-              In Sparrow (or another wallet) use its message-signing feature to produce a BIP322 signature.
-            </p>
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-sm font-medium text-accent-2">Address</span>
+              {copyButton(request.address ?? '', 'address')}
+            </div>
+            <div className="bg-secondary border border-border px-3 py-2 font-mono text-xs text-foreground break-all">
+              {request.address}
+            </div>
           </div>
 
           <div>
@@ -102,12 +121,7 @@ export default function ManualSignModal({ request, onSubmit, onCancel }: ManualS
               <label className="text-sm font-medium text-accent-2" htmlFor="manual-sign-message">
                 Message
               </label>
-              <button
-                onClick={handleCopyMessage}
-                className="px-2 py-1 border border-border hover:bg-secondary-hover transition-colors text-xs font-medium"
-              >
-                {copied ? 'Copied' : 'Copy'}
-              </button>
+              {copyButton(request.message, 'message')}
             </div>
             <textarea
               id="manual-sign-message"
@@ -119,32 +133,43 @@ export default function ManualSignModal({ request, onSubmit, onCancel }: ManualS
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-accent-2 mb-2" htmlFor="manual-sign-signature">
-              Signature
-            </label>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <label className="text-sm font-medium text-accent-2" htmlFor="manual-sign-signature">
+                Signature
+              </label>
+              {copyButton(trimmedSignature, 'signature')}
+            </div>
             <textarea
               id="manual-sign-signature"
               value={signature}
               onChange={(event) => setSignature(event.target.value)}
               rows={4}
-              placeholder="Paste the signature produced by your wallet"
-              className="w-full bg-secondary text-foreground px-3 py-2 border border-border focus:outline-none focus:border-accent-3 font-mono text-xs resize-y"
+              disabled={submitting}
+              placeholder="Paste the BIP322 simple signature produced by your wallet"
+              className="w-full bg-secondary text-foreground px-3 py-2 border border-border focus:outline-none focus:border-accent-3 font-mono text-xs resize-y disabled:opacity-50"
             />
           </div>
 
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+          {error && (
+            <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-center gap-2 pt-2">
             <button
               onClick={onCancel}
-              className="px-4 py-2 border border-border hover:bg-secondary-hover text-sm font-medium transition-colors"
+              disabled={submitting}
+              className="px-4 py-2 border border-border hover:bg-secondary-hover text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!trimmedSignature}
+              disabled={!trimmedSignature || submitting}
               className="px-4 py-2 bg-foreground text-background hover:bg-foreground/80 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Submit Signature
+              {submitting ? 'Submitting...' : 'Submit'}
             </button>
           </div>
         </div>

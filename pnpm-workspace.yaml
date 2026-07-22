@@ -14,10 +14,10 @@ overrides:
   axios@<1.15.2: '>=1.15.2'
   esbuild@<0.28.1: '>=0.28.1'
   postcss@<8.5.10: '>=8.5.10'
+  sharp@<0.35.0: '>=0.35.0'
   ws@<8.20.1: '>=8.20.1'
 
 allowBuilds:
   better-sqlite3@12.11.1: true
   esbuild@0.28.1: true
-  sharp@0.34.5: true
   unrs-resolver@1.12.2: true

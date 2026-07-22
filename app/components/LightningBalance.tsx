@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import CardHeader from "@/app/components/CardHeader";
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
 import { LightningIcon } from "@/app/components/icons";
-import { useWallet } from "@/app/hooks/useWallet";
+import { useWallet, SignCancelledError } from "@/app/hooks/useWallet";
 import LightningModal from "@/app/components/modals/LightningModal";
 import WithdrawModal from "@/app/components/modals/WithdrawModal";
+import WalletConnectModal from "@/app/components/modals/WalletConnectModal";
 import type { AccountData, WalletInfo, CombinedAccountResponse } from "@/app/api/account/types";
 
 interface LightningBalanceProps {
@@ -32,8 +33,10 @@ export default function LightningBalance({
     lightningToken,
     isLightningAuthenticated,
     isInitialized,
+    isConnected,
     address,
     addressPublicKey,
+    walletType,
     connectWithLightning,
     signMessage,
   } = useWallet();
@@ -46,6 +49,7 @@ export default function LightningBalance({
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
+  const [showConnectModal, setShowConnectModal] = useState<boolean>(false);
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const containerClassName = getCollapsibleContainerClassName(
     `bg-background p-4 sm:p-6 shadow-md border border-border ${className}`.trim(),
@@ -113,6 +117,24 @@ export default function LightningBalance({
     }
   }, [isInitialized, fetchCombinedData]);
 
+  const handleConnectXverse = async () => {
+    setIsConnecting(true);
+    setError(null);
+    try {
+      const result = await connectWithLightning();
+      if (result) {
+        router.push(`/user/${result.address}`);
+      } else {
+        setError('Failed to connect wallet');
+      }
+    } catch (err) {
+      console.error('Connection error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   // Open reset confirmation modal
   const handleResetClick = () => {
     setShowResetConfirm(true);
@@ -168,6 +190,7 @@ export default function LightningBalance({
       // Re-fetch to ensure we have the latest data
       await fetchCombinedData();
     } catch (err) {
+      if (err instanceof SignCancelledError) return;
       console.error('Error resetting Lightning address:', err);
       setError(err instanceof Error ? err.message : 'Failed to reset Lightning address');
     } finally {
@@ -227,9 +250,10 @@ export default function LightningBalance({
 
   // Check if the connected wallet owns this account
   const isOwner = !userId || address === userId;
+  const isManual = walletType === 'manual';
 
   const displayLnAddress = accountData?.ln_address || null;
-  const hasData = isLightningAuthenticated && (balance !== null || walletInfo !== null || accountData !== null);
+  const hasData = isManual || (isLightningAuthenticated && (balance !== null || walletInfo !== null || accountData !== null));
 
   // Check if username matches lightning address
   const usernameWithDomain = walletInfo?.username ? `${walletInfo.username}@sati.pro` : null;
@@ -281,26 +305,10 @@ export default function LightningBalance({
 
         {!collapsed && (
           <>
-            {!isLightningAuthenticated ? (
+            {!isLightningAuthenticated && !isManual ? (
               <div className="flex justify-center py-8">
                 <button
-                  onClick={async () => {
-                    setIsConnecting(true);
-                    setError(null);
-                    try {
-                      const result = await connectWithLightning();
-                      if (result) {
-                        router.push(`/user/${result.address}`);
-                      } else {
-                        setError('Failed to connect wallet');
-                      }
-                    } catch (err) {
-                      console.error('Connection error:', err);
-                      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
-                    } finally {
-                      setIsConnecting(false);
-                    }
-                  }}
+                  onClick={() => (isConnected ? handleConnectXverse() : setShowConnectModal(true))}
                   disabled={isConnecting}
                   className="px-6 py-3 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -317,7 +325,7 @@ export default function LightningBalance({
                   <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
                   <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
                     <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
-                    {isOwner && isLightningAuthenticated && (
+                    {isOwner && (isLightningAuthenticated || isManual) && (
                       <button
                         onClick={() => setIsModalOpen(true)}
                         className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium flex-shrink-0"
@@ -367,7 +375,7 @@ export default function LightningBalance({
               </div>
             ) : (
               <div className="space-y-4">
-                {displayLnAddress && (
+                {displayLnAddress ? (
                   <div className="flex flex-col">
                     <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
                     <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2 h-[5rem]">
@@ -384,7 +392,7 @@ export default function LightningBalance({
                             <span>Reset</span>
                           </button>
                         )}
-                        {isOwner && isLightningAuthenticated && (
+                        {isOwner && (isLightningAuthenticated || isManual) && (
                           <button
                             onClick={() => setIsModalOpen(true)}
                             className="flex items-center gap-1 px-2 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
@@ -398,8 +406,23 @@ export default function LightningBalance({
                       </div>
                     </div>
                   </div>
-                )}
+                ) : isManual && isOwner ? (
+                  <div className="flex justify-center py-8">
+                    <button
+                      onClick={() => setIsModalOpen(true)}
+                      className="px-6 py-3 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground"
+                    >
+                      Set Lightning Address
+                    </button>
+                  </div>
+                ) : null}
               </div>
+            )}
+
+            {isManual && (
+              <p className="mt-4 text-xs text-foreground/50">
+                Balance and withdrawals require connecting with Xverse.
+              </p>
             )}
 
             {error && (
@@ -415,6 +438,12 @@ export default function LightningBalance({
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onUpdate={fetchCombinedData}
+      />
+
+      <WalletConnectModal
+        isOpen={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
+        onXverse={handleConnectXverse}
       />
 
       {/* Withdraw Modal */}

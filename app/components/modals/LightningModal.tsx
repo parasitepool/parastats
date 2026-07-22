@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useWallet } from '@/app/hooks/useWallet';
+import { useWallet, SignCancelledError } from '@/app/hooks/useWallet';
 import type { AccountData, WalletInfo, CombinedAccountResponse } from '@/app/api/account/types';
 
 interface LightningModalProps {
@@ -11,7 +11,7 @@ interface LightningModalProps {
 }
 
 export default function LightningModal({ isOpen, onClose, onUpdate }: LightningModalProps) {
-  const { address, lightningToken, signMessage } = useWallet();
+  const { address, lightningToken, signMessage, walletType } = useWallet();
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
@@ -107,37 +107,38 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
     setError(null);
 
     try {
-      // Request signature for the Lightning address (BIP322)
-      const signature = await signMessage({
+      // Sign the Lightning address (BIP322) and submit the update
+      const updatedData = await signMessage({
         address,
         message: newLnAddress,
-      });
+        submit: async (signature: string) => {
+          const response = await fetch('/api/account/update', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              btc_address: address,
+              ln_address: newLnAddress,
+              signature: signature,
+            }),
+          });
 
-      // Send update request
-      const response = await fetch('/api/account/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+          if (!response.ok) {
+            let errorMessage = 'Failed to update Lightning address';
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorMessage;
+            } catch {
+              // If response is not JSON, use default error message
+            }
+            throw new Error(errorMessage);
+          }
+
+          return await response.json() as AccountData;
         },
-        body: JSON.stringify({
-          btc_address: address,
-          ln_address: newLnAddress,
-          signature: signature,
-        }),
       });
 
-      if (!response.ok) {
-        let errorMessage = 'Failed to update Lightning address';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          // If response is not JSON, use default error message
-        }
-        throw new Error(errorMessage);
-      }
-
-      const updatedData: AccountData = await response.json();
       // Update modal state immediately with returned data
       setAccountData(updatedData);
       setNewLnAddress(updatedData.ln_address || '');
@@ -151,6 +152,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
         onUpdate();
       }
     } catch (err) {
+      if (err instanceof SignCancelledError) return;
       console.error('Error updating Lightning address:', err);
       setError(err instanceof Error ? err.message : 'Failed to update Lightning address');
     } finally {
@@ -168,6 +170,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
   const displayLnAddress = accountData?.ln_address || '';
   const hasAccountData = accountData !== null;
   const hasLightningData = walletInfo !== null && balance !== null;
+  const canEdit = hasAccountData || walletType === 'manual';
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
@@ -210,7 +213,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
             {/* Current Lightning Address */}
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">Current Lightning Address</h3>
-              {isEditing && hasAccountData ? (
+              {isEditing && canEdit ? (
                 <div className="space-y-2">
                   <input
                     type="text"
@@ -244,7 +247,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {hasAccountData ? (
+                  {canEdit ? (
                     <div
                       onClick={() => setIsEditing(true)}
                       className="flex items-center justify-between bg-secondary p-3 border border-border cursor-pointer hover:bg-secondary/80 transition-colors"

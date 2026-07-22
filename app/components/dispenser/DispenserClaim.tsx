@@ -175,13 +175,13 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             }),
         });
 
-        const data = await response.json();
+        const data = await response.json().catch(() => null);
 
         if (!response.ok) {
-            throw new Error(data.error || "Failed to submit claim");
+            throw new Error(data?.error || "Failed to submit claim");
         }
 
-        return data;
+        return data ?? {};
     }, [userId]);
 
     const handleClaim = async (tier: string, slotIndex: number, tierSlotIndex: number) => {
@@ -214,9 +214,11 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             const destinationAddress = ordinalsAccount.address;
             const message = buildClaimMessage(userId, tier, tierSlotIndex, destinationAddress);
 
-            const signature = await signMessage({ address, message });
-
-            const data = await submitClaim(tier, tierSlotIndex, destinationAddress, signature);
+            const data = await signMessage({
+                address,
+                message,
+                submit: (signature: string) => submitClaim(tier, tierSlotIndex, destinationAddress, signature),
+            });
 
             // setTxHex(data.hex);
             setLocalClaimed((prev) => new Set(prev).add(slotIndex));
@@ -264,9 +266,11 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         try {
             const message = buildClaimMessage(userId, slot.tier, slot.tierSlotIndex, destinationAddress);
 
-            const signature = await signMessage({ address: userId, message });
-
-            const data = await submitClaim(slot.tier, slot.tierSlotIndex, destinationAddress, signature);
+            const data = await signMessage({
+                address: userId,
+                message,
+                submit: (signature: string) => submitClaim(slot.tier, slot.tierSlotIndex, destinationAddress, signature),
+            });
 
             setLocalClaimed((prev) => new Set(prev).add(slot.index));
             setManualDestination("");
