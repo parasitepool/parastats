@@ -15,7 +15,7 @@ let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!db) {
-    db = new Database(dbPath);
+    db = new Database(dbPath, { timeout: 10000 });
     
     // Enable foreign keys
     db.pragma('journal_mode = WAL');

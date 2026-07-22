@@ -40,8 +40,8 @@ startRoundsCollector();
 console.log("🔄 Rounds collector started");
 
 // Set up a job to purge old data daily at midnight
-let purgeJob = cron.schedule("0 0 * * *", () => {
-  purgeOldData(90); // Keep 90 days of data
+let purgeJob = cron.schedule("0 0 * * *", async () => {
+  await purgeOldData(90); // Keep 90 days of data
   console.log("🧹 Purged old pool stats data");
 });
 
