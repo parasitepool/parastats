@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=22.19.0 <23"
+    "node": ">=24.15.0 <25"
   },
-  "packageManager": "pnpm@11.13.0",
+  "packageManager": "pnpm@11.15.1",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -23,7 +23,7 @@
     "dotenv": "^17.4.2",
     "echarts": "6.1.0",
     "framer-motion": "12.42.2",
-    "next": "^16.2.10",
+    "next": "^16.2.11",
     "node-cron": "^4.6.0",
     "pg": "8.22.0",
     "react": "19.2.7",
@@ -37,12 +37,12 @@
     "@eslint/eslintrc": "^3.3.6",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.20.1",
+    "@types/node": "^24.13.0",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^16.2.10",
+    "eslint-config-next": "^16.2.11",
     "tailwindcss": "4.3.2",
     "tsx": "^4.23.1",
     "typescript": "^6.0.3"
