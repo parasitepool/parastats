@@ -23,7 +23,7 @@ const phdToSlider = (phd: number) => ((phd - MIN_PHD) / (MAX_PHD - MIN_PHD)) * 1
 const sliderToPhd = (pos: number) => Math.round(MIN_PHD + (pos / 100) * (MAX_PHD - MIN_PHD));
 
 export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice, halt }: CreateOrderModalProps) {
-  const { address: walletAddress, isConnected } = useWallet();
+  const { address: walletAddress, isConnected, walletType } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [selectedPhd, setSelectedPhd] = useState(1);
   const [editing, setEditing] = useState(false);
@@ -345,7 +345,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             )}
 
             <div className="flex justify-center gap-3 mt-6">
-              {isConnected && (
+              {isConnected && walletType !== 'manual' && (
                 <button
                   onClick={handlePayWithXverse}
                   disabled={paying}
