@@ -15,7 +15,7 @@ import { parseHashrate } from '@/app/utils/formatters';
 import LightningBalance from '@/app/components/LightningBalance';
 import StratumInfo from '@/app/components/StratumInfo';
 import AnimatedCounter from '@/app/components/AnimatedCounter';
-import { useWallet } from '@/app/hooks/useWallet';
+import { useWallet, SignCancelledError } from '@/app/hooks/useWallet';
 import { useRouter } from 'next/navigation';
 import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
 import { BookmarkIcon, TrendingUpIcon } from '@/app/components/icons';
@@ -25,6 +25,7 @@ import Refinery from '@/app/components/Refinery';
 import ErrorBoundary from '@/app/components/ErrorBoundary';
 import UserMiners from '@/app/components/UserMiners';
 import CardHeader from '@/app/components/CardHeader';
+import WalletConnectModal from '@/app/components/modals/WalletConnectModal';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from '@/app/components/collapsible';
 
 const CURRENT_ROUND_BLOCK = Number.MAX_SAFE_INTEGER;
@@ -76,6 +77,7 @@ export default function UserDashboard() {
   const [hashrate, setHashrate] = useState<Hashrate>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
@@ -88,10 +90,12 @@ export default function UserDashboard() {
 
   const {
     address,
+    walletType,
     isLightningAuthenticated,
     isInitialized,
     isConnected,
     connectWithLightning,
+    signMessage,
   } = useWallet();
 
   // Validate Bitcoin address on mount
@@ -417,9 +421,10 @@ export default function UserDashboard() {
 
   const isPrivate = accountData?.metadata?.is_private ?? false;
   const isOwnProfile = isConnected && address === userId;
+  const isManualOwner = isOwnProfile && walletType === 'manual';
   const refineryLoading = !isInitialized || !hasInitiallyLoaded || isLoadingAccountData;
   const refineryActivated = Boolean(isLightningAuthenticated && accountData && accountData.ln_address);
-  const showRefinery = isOwnProfile && (refineryLoading || refineryActivated);
+  const showRefinery = isOwnProfile && (refineryLoading || refineryActivated || isManualOwner);
   const toggleCollapsedSection = (section: keyof CollapsedSections) => {
     setCollapsedSections(value => ({
       ...value,
@@ -434,53 +439,56 @@ export default function UserDashboard() {
     try {
       const metadata = { is_private: !isPrivate };
 
-      const { request: satConnectRequest, MessageSigningProtocols } = await import('@sats-connect/core');
-
-      const signResponse = await satConnectRequest('signMessage', {
+      await signMessage({
         address: userId,
         message: JSON.stringify(metadata),
-        protocol: MessageSigningProtocols.BIP322,
+        submit: (signature: string) => updateAccountMetadata(userId, metadata, signature),
       });
 
-      if (signResponse.status !== 'success') {
-        throw new Error('Failed to sign message');
-      }
-
-      let signature: string;
-      if (typeof signResponse.result === 'string') {
-        signature = signResponse.result;
-      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
-        signature = signResponse.result.signature;
-      } else {
-        throw new Error('Unexpected signature format');
-      }
-
-      await updateAccountMetadata(userId, metadata, signature);
       window.location.reload();
     } catch (error) {
       console.error('Failed to toggle visibility:', error);
-      alert('Failed to toggle visibility. Please try again.');
+      // Don't nag the user when they intentionally cancelled the signature.
+      if (!(error instanceof SignCancelledError)) {
+        alert(error instanceof Error ? error.message : 'Failed to toggle visibility. Please try again.');
+      }
     } finally {
       setIsTogglingVisibility(false);
     }
   };
 
-  // Handle account activation
-  const handleActivateAccount = async () => {
+  const handleConnectXverse = async () => {
     setIsConnecting(true);
     setError(null);
     try {
-      // If not authenticated, just connect the wallet
-      if (!isLightningAuthenticated) {
-        const result = await connectWithLightning();
-        if (result) {
-          router.push(`/user/${result.address}`);
-        } else {
-          setError('Failed to connect wallet');
-        }
-        return;
+      const result = await connectWithLightning();
+      // A null result means the user cancelled the wallet popup; stay quiet.
+      if (result) {
+        router.push(`/user/${result.address}`);
       }
+    } catch (err) {
+      console.error('Connect error:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
 
+  // Handle account activation
+  const handleActivateAccount = async () => {
+    if (!isConnected) {
+      setShowConnectModal(true);
+      return;
+    }
+
+    if (!isLightningAuthenticated) {
+      await handleConnectXverse();
+      return;
+    }
+
+    setIsConnecting(true);
+    setError(null);
+    try {
       // Already authenticated - do the full activation flow to set Lightning address
       const result = await connectWithLightning();
       if (!result || !result.address || !result.token) {
@@ -505,27 +513,12 @@ export default function UserDashboard() {
 
       const usernameAddress = `${combinedData.lightning.walletInfo.username}@sati.pro`;
 
-      // Request signature for the Lightning address using BIP322
-      const { request: satConnectRequest, MessageSigningProtocols } = await import('@sats-connect/core');
-
-      const signResponse = await satConnectRequest('signMessage', {
+      // Request signature for the Lightning address (BIP322). Activation is
+      // Xverse-only, so this resolves through the Xverse signing path.
+      const signature = await signMessage({
         address: result.address,
         message: usernameAddress,
-        protocol: MessageSigningProtocols.BIP322
       });
-
-      if (signResponse.status !== 'success') {
-        throw new Error('Failed to sign message');
-      }
-
-      let signature: string;
-      if (typeof signResponse.result === 'string') {
-        signature = signResponse.result;
-      } else if (signResponse.result && typeof signResponse.result === 'object' && 'signature' in signResponse.result) {
-        signature = signResponse.result.signature;
-      } else {
-        throw new Error('Unexpected signature format');
-      }
 
       // Send update request to set the Lightning address
       const updateResponse = await fetch('/api/account/update', {
@@ -554,6 +547,7 @@ export default function UserDashboard() {
       // Refresh the page to show updated data
       window.location.reload();
     } catch (err) {
+      if (err instanceof SignCancelledError) return;
       console.error('Activation error:', err);
       setError(err instanceof Error ? err.message : 'Failed to activate account');
     } finally {
@@ -743,7 +737,7 @@ export default function UserDashboard() {
                     />
                   </div>
               ) : isConnected && !isOwnProfile ? null
-              : !isLightningAuthenticated || !accountData || !accountData.ln_address ? (
+              : !isManualOwner && (!isLightningAuthenticated || !accountData || !accountData.ln_address) ? (
                       // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
                   <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
                     <div className="flex flex-col items-center justify-center py-8">
@@ -799,6 +793,12 @@ export default function UserDashboard() {
               />
             </ErrorBoundary>
           )}
+
+          <WalletConnectModal
+            isOpen={showConnectModal}
+            onClose={() => setShowConnectModal(false)}
+            onXverse={handleConnectXverse}
+          />
 
           <div className="w-full">
             <HashrateChart
