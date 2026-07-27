@@ -37,7 +37,7 @@ const FooterWithSearchParams = () => {
                 </div>
                 <div className="flex-1 text-center italic break-all">
                     <Link href="/rounds">
-                        <span className="cursor-pointer">Rounds</span>
+                        <span className="cursor-pointer">Blocks</span>
                     </Link>
                 </div>
                 <div className="flex-1 text-center italic break-all">
@@ -76,7 +76,7 @@ const FooterFallback = () => (
         </div>
         <div className="flex-1 text-center italic break-all">
             <Link href="/rounds">
-                <span className="cursor-pointer">Rounds</span>
+                <span className="cursor-pointer">Blocks</span>
             </Link>
         </div>
         <div className="flex-1 text-center italic break-all">

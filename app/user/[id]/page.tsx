@@ -829,7 +829,7 @@ export default function UserDashboard() {
               />
           )}
 
-          {/* Rounds Section */}
+          {/* Blocks Section */}
           {(!hasInitiallyLoaded || allRounds.length > 0) && (
               <div
                 className={getCollapsibleContainerClassName(
@@ -844,7 +844,7 @@ export default function UserDashboard() {
                 }}
               >
                 <CardHeader
-                  title="Rounds"
+                  title="Blocks"
                   icon={<BookmarkIcon />}
                   className={collapsedSections.rounds ? '' : 'mb-4 sm:mb-6'}
                   titleClassName="text-xl sm:text-2xl font-semibold"
@@ -917,7 +917,7 @@ export default function UserDashboard() {
                           <div key={round.block_height} className={`bg-background border p-4 shadow-sm ${round.is_winner ? 'border-white/20 bg-white/5 font-bold' : 'border-border'}`}>
                             <div className="flex items-center justify-between mb-2">
                               {round.block_height === CURRENT_ROUND_BLOCK ? (
-                                  <span className="text-accent-3 font-bold text-lg">Current Round</span>
+                                  <span className="text-accent-3 font-bold text-lg">Current Block</span>
                               ) : (
                                   <a
                                       href={`https://mempool.space/block/${round.block_height}`}

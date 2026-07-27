@@ -18,6 +18,7 @@ export interface RoundRow {
   winner_username: string | null;
   participant_status: ParticipantStatus;
   block_participant_status: ParticipantStatus;
+  total_work: number;
 }
 
 /**

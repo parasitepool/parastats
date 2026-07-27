@@ -11,6 +11,7 @@ interface Round {
   winner_diff: number | null;
   winner_username: string | null;
   participant_status: string;
+  total_work: number;
 }
 
 interface RoundParticipant {
@@ -188,17 +189,17 @@ export default function RoundsPage() {
   if (loading) {
     return (
       <main className="flex-grow p-4">
-        <div className="text-foreground/60">Loading rounds...</div>
+        <div className="text-foreground/60">Loading blocks...</div>
       </main>
     );
   }
 
   return (
     <main className="flex-grow p-4">
-      <h1 className="text-3xl font-bold mb-6">Round History</h1>
+      <h1 className="text-3xl font-bold mb-6">Block History</h1>
 
       {rounds.length === 0 ? (
-        <div className="text-foreground/60">No completed rounds yet.</div>
+        <div className="text-foreground/60">No completed blocks yet.</div>
       ) : (
         <div className="space-y-4">
           {rounds.map((round) => (
@@ -210,7 +211,7 @@ export default function RoundsPage() {
                 <div className="flex items-center gap-4">
                   <span className="text-lg font-semibold font-mono">
                     {round.block_height === 0 ? (
-                      <span className="text-accent-1">Current Round</span>
+                      <span className="text-accent-1">Current Block</span>
                     ) : (
                       <>
                         Block{' '}
@@ -235,6 +236,9 @@ export default function RoundsPage() {
                 <div className="flex items-center gap-4 text-sm text-foreground/60">
                   {round.winner_diff !== null && (
                     <span>Diff: {formatDifficulty(round.winner_diff)}</span>
+                  )}
+                  {round.total_work > 0 && (
+                    <span>Work: {formatDifficulty(round.total_work)}</span>
                   )}
                   {round.coinbase_value !== null && (
                     <span>{(round.coinbase_value / 1e8).toFixed(8)} BTC</span>

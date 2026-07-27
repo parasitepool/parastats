@@ -5,7 +5,7 @@ import {formatDifficulty, formatExpectedBlockTime, formatPrice, parseHashrate} f
 import StatCard from "./StatCard";
 import {getBitcoinPrice, getDifficultyAdjustment, getHashrate, type PoolStats as PoolStatsType} from "../utils/api";
 import {Adjustment, Hashrate} from "@mempool/mempool.js/lib/interfaces/bitcoin/difficulty";
-import {BookmarkIcon, ClockIcon, InfoIcon, LightningIcon, TrendingUpIcon, WalletIcon} from "./icons";
+import {BookmarkIcon, InfoIcon, LightningIcon, PickaxeIcon, TrendingUpIcon, WalletIcon} from "./icons";
 
 interface PoolStatsProps {
   poolStats?: PoolStatsType;
@@ -85,6 +85,11 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
       icon: <TrendingUpIcon />,
     },
     {
+      title: "Total Work Since Last Block",
+      value: formatDifficulty(poolStats?.workSinceLastBlock ?? undefined),
+      icon: <PickaxeIcon />,
+    },
+    {
       title: "Minimum Needed Diff",
       value: (
         <div className="flex items-baseline">
@@ -124,11 +129,6 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
         ? <a href={`https://mempool.space/block/${poolStats.lastBlockHash}`} target="_blank" rel="noopener noreferrer">{poolStats.lastBlockTime}</a>
         : '-',
       icon: <BookmarkIcon />,
-    },
-    {
-      title: "Pool Uptime",
-      value: poolStats?.uptime,
-      icon: <ClockIcon />,
     },
     {
       title: "Bitcoin Price",
