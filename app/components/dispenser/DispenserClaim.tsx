@@ -42,6 +42,14 @@ function buildClaimMessage(
     return `${username}|${tier}|${tierSlotIndex}|${destinationAddress}`;
 }
 
+function buildAuctionMessage(
+    username: string,
+    tier: string,
+    tierSlotIndex: number,
+): string {
+    return `${username}|${tier}|${tierSlotIndex}|auction`;
+}
+
 // Surface real failures but stay quiet when the user simply cancels signing.
 function getClaimErrorMessage(err: unknown): string | null {
     if (err instanceof SignCancelledError) {
@@ -119,9 +127,19 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     const [manualSlot, setManualSlot] = useState<Slot | null>(null);
     const [manualDestination, setManualDestination] = useState("");
     const [showRewards, setShowRewards] = useState(false);
+    // Auction flow
+    const [auctionModalSlot, setAuctionModalSlot] = useState<Slot | null>(null);
+    const [auctioningSlot, setAuctioningSlot] = useState<number | null>(null);
+    const [auctionReserve, setAuctionReserve] = useState("50000");
+    const [auctionIncrement, setAuctionIncrement] = useState("5000");
+    const [auctionHours, setAuctionHours] = useState("24");
+    const [createdAuctionId, setCreatedAuctionId] = useState<string | null>(null);
 
     const isOwner = address === userId;
     const isManual = walletType === "manual";
+
+    // Base URL of the standalone Leptos auction house
+    const auctionHouseUrl = process.env.NEXT_PUBLIC_AUCTION_HOUSE_URL;
 
     const handleCopyLink = async (inscriptionId: string, slotIndex: number) => {
         const url = `${window.location.origin}/dispenser/share/${inscriptionId}`;
@@ -179,6 +197,38 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
 
         if (!response.ok) {
             throw new Error(data?.error || "Failed to submit claim");
+        }
+
+        return data ?? {};
+    }, [userId]);
+
+    const submitAuction = useCallback(async (
+        tier: string,
+        tierSlotIndex: number,
+        reserve: number,
+        increment: number,
+        durationSecs: number,
+        signature: string,
+    ): Promise<{ id?: string }> => {
+        const response = await fetch("/api/dispenser/auction/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username: userId,
+                tier,
+                slot: tierSlotIndex,
+                signature,
+                reserve,
+                increment,
+                duration_secs: durationSecs,
+                anti_snipe_secs: 300,
+            }),
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+            throw new Error(data?.error || "Failed to create auction");
         }
 
         return data ?? {};
@@ -299,6 +349,64 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         return () => window.removeEventListener("keydown", handleEscKey);
     }, [manualSlot, closeManualClaim]);
 
+    const handleAuction = async () => {
+        if (!auctionModalSlot) return;
+
+        const { tier, tierSlotIndex, index } = auctionModalSlot;
+        const reserve = Number(auctionReserve);
+        const increment = Number(auctionIncrement);
+        const hours = Number(auctionHours);
+
+        if (!Number.isFinite(reserve) || reserve <= 0) {
+            setError("Reserve must be a positive number of sats");
+            return;
+        }
+        if (!Number.isFinite(increment) || increment <= 0) {
+            setError("Minimum increment must be a positive number of sats");
+            return;
+        }
+        if (!Number.isFinite(hours) || hours <= 0) {
+            setError("Duration must be a positive number of hours");
+            return;
+        }
+
+        setAuctioningSlot(index);
+        setError(null);
+        // Close the parameter prompt so the signing modal is visible.
+        setAuctionModalSlot(null);
+
+        try {
+            const message = buildAuctionMessage(userId, tier, tierSlotIndex);
+
+            // Signs through the wallet abstraction so manual (self-supplied)
+            // wallets get the paste-a-signature modal instead of a sats-connect
+            // call they can't service. Submitting inside the callback keeps
+            // failures retryable within that modal.
+            const data = await signMessage({
+                address: userId,
+                message,
+                submit: (signature: string) =>
+                    submitAuction(
+                        tier,
+                        tierSlotIndex,
+                        reserve,
+                        increment,
+                        Math.round(hours * 3600),
+                        signature,
+                    ),
+            });
+
+            // The slot is now reserved into the auction; reflect that locally.
+            setLocalClaimed((prev) => new Set(prev).add(index));
+            setCreatedAuctionId(data.id ?? null);
+        } catch (err) {
+            console.error("Auction error:", err);
+            setError(getClaimErrorMessage(err));
+        } finally {
+            setAuctioningSlot(null);
+        }
+    };
+
     // The panel is always shown so users can browse available rewards
     const slots = eligibility
         ? buildSlots(eligibility).map((slot) => ({
@@ -408,6 +516,22 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                         {claiming ? "Signing..." : "Claim"}
                                     </button>
                                 )}
+                                {/* Auctions are only for on-chain UTXO assets, not
+                                    redemption-code assets. */}
+                                {isOwner && !slot.claimed && !isCodeAsset && (
+                                    <button
+                                        onClick={() => {
+                                            setError(null);
+                                            setCreatedAuctionId(null);
+                                            setAuctionModalSlot(slot);
+                                        }}
+                                        disabled={claiming || claimingSlot !== null || auctioningSlot !== null}
+                                        className="flex items-center gap-1 px-2 py-1 border border-border hover:bg-secondary-hover transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Auction this asset"
+                                    >
+                                        Auction
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -494,6 +618,24 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 </div>
             )}
 
+            {!collapsed && createdAuctionId && (
+                <div className="mt-4 text-sm text-green-500 bg-green-500/10 p-2 border border-green-500/20 flex items-center justify-between gap-2">
+                    <span>Auction created.</span>
+                    {auctionHouseUrl ? (
+                        <a
+                            href={`${auctionHouseUrl.replace(/\/$/, "")}/auction/${createdAuctionId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline font-medium"
+                        >
+                            View auction
+                        </a>
+                    ) : (
+                        <span className="font-mono text-xs opacity-70">{createdAuctionId}</span>
+                    )}
+                </div>
+            )}
+
             {manualSlot && (
                 <div
                     className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
@@ -568,6 +710,79 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             )}
         </div>
         <DispenserRewards isOpen={showRewards} onClose={() => setShowRewards(false)} />
+        {auctionModalSlot && (
+            <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                onClick={() => auctioningSlot === null && setAuctionModalSlot(null)}
+            >
+                <div
+                    className="bg-background border border-border p-5 sm:p-6 w-full max-w-sm shadow-lg"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <h3 className="text-lg font-bold mb-1">Auction asset</h3>
+                    <p className="text-xs text-accent-2 mb-4">
+                        Reserve the asset into an auction. The winning bid is paid to your
+                        L1 address; the inscription transfers to the winner.
+                    </p>
+
+                    <label className="block text-xs font-medium text-accent-2 mb-1">
+                        Reserve price (sats)
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        value={auctionReserve}
+                        onChange={(e) => setAuctionReserve(e.target.value)}
+                        className="w-full mb-3 px-2 py-1.5 bg-secondary border border-border text-sm"
+                    />
+
+                    <label className="block text-xs font-medium text-accent-2 mb-1">
+                        Minimum increment (sats)
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        value={auctionIncrement}
+                        onChange={(e) => setAuctionIncrement(e.target.value)}
+                        className="w-full mb-3 px-2 py-1.5 bg-secondary border border-border text-sm"
+                    />
+
+                    <label className="block text-xs font-medium text-accent-2 mb-1">
+                        Duration (hours)
+                    </label>
+                    <input
+                        type="number"
+                        min="1"
+                        value={auctionHours}
+                        onChange={(e) => setAuctionHours(e.target.value)}
+                        className="w-full mb-4 px-2 py-1.5 bg-secondary border border-border text-sm"
+                    />
+
+                    {error && (
+                        <div className="mb-4 text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="flex items-center justify-end gap-2">
+                        <button
+                            onClick={() => setAuctionModalSlot(null)}
+                            disabled={auctioningSlot !== null}
+                            className="px-3 py-1.5 border border-border hover:bg-secondary-hover transition-colors text-sm font-medium disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleAuction}
+                            disabled={auctioningSlot !== null}
+                            className="px-3 py-1.5 bg-foreground text-background hover:bg-foreground/80 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {auctioningSlot !== null ? "Signing..." : "Start auction"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
         </>
     );
 }

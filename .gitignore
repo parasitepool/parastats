@@ -48,3 +48,6 @@ next-env.d.ts
 
 # cursor
 .cursor
+
+# Hermit
+.hermit
