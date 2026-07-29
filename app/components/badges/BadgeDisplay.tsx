@@ -1,16 +1,25 @@
 'use client';
 
-import type { UserRoundHistoryEntry } from '@/app/api/user/[address]/rounds/route';
+import type { BadgesPayload } from '@/lib/badge-types';
+import {
+  BLOCK_BADGE_ID,
+  BLOCK_WINNER_BADGE_ID,
+  LOYALTY_BADGE_ID,
+  REFINERY_BADGE_ID,
+  DISPENSER_BADGE_ID,
+  LOYALTY_BLOCKS_PER_INSTANCE,
+} from '@/lib/badge-types';
 import BlockBadge from './BlockBadge';
-import RefineryOperatorBadge from './RefineryOperatorBadge';
+import BlockWinnerBadge from './BlockWinnerBadge';
+import StackedMedal from './StackedMedal';
+import { PickaxeIcon, LoyaltyIcon, DispenserIcon, RefineryIcon } from './icons';
 
 interface BadgeDisplayProps {
-  rounds: UserRoundHistoryEntry[];
-  hasRefineryOperatorBadge?: boolean;
+  badges: BadgesPayload | null;
   loading?: boolean;
 }
 
-export default function BadgeDisplay({ rounds, hasRefineryOperatorBadge, loading }: BadgeDisplayProps) {
+export default function BadgeDisplay({ badges, loading }: BadgeDisplayProps) {
   if (loading) {
     return (
       <div className="flex items-center gap-2">
@@ -20,19 +29,70 @@ export default function BadgeDisplay({ rounds, hasRefineryOperatorBadge, loading
     );
   }
 
-  if ((!rounds || rounds.length === 0) && !hasRefineryOperatorBadge) {
+  const types = badges?.types ?? {};
+  const block = types[BLOCK_BADGE_ID];
+  const blockUnique = block?.unique ?? [];
+  const blockStacked = block?.bucket?.count ?? 0;
+  const winners = types[BLOCK_WINNER_BADGE_ID]?.unique ?? [];
+  const loyalty = types[LOYALTY_BADGE_ID]?.bucket?.count ?? 0;
+  const refinery = types[REFINERY_BADGE_ID]?.bucket?.count ?? 0;
+  const dispenser = types[DISPENSER_BADGE_ID]?.bucket?.count ?? 0;
+
+  const hasAny =
+    winners.length > 0 ||
+    blockUnique.length > 0 ||
+    blockStacked > 0 ||
+    loyalty > 0 ||
+    refinery > 0 ||
+    dispenser > 0;
+
+  if (!hasAny) {
     return <span className="text-gray-400">-</span>;
   }
 
+  const loyaltyBlocks = (loyalty * LOYALTY_BLOCKS_PER_INSTANCE / 1000);
+
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {rounds.map((round) => (
-        <BlockBadge
-          key={round.block_height}
-          blockHeight={round.block_height}
-        />
+      {winners.map((instance) => (
+        <BlockWinnerBadge key={`w-${instance.blockheight}`} blockHeight={instance.blockheight} />
       ))}
-      {hasRefineryOperatorBadge && <RefineryOperatorBadge />}
+
+      {blockUnique.map((instance) => (
+        <BlockBadge key={`b-${instance.blockheight}`} blockHeight={instance.blockheight} />
+      ))}
+      {blockStacked > 0 && (
+        <StackedMedal
+          count={blockStacked}
+          icon={<PickaxeIcon />}
+          tooltip={`${blockStacked} more block${blockStacked === 1 ? '' : 's'} mined`}
+        />
+      )}
+
+      {loyalty > 0 && (
+        <StackedMedal
+          count={loyalty}
+          icon={<LoyaltyIcon />}
+          tooltip={`Loyalty — ${loyaltyBlocks}k blocks mined`}
+        />
+      )}
+
+      {dispenser > 0 && (
+        <StackedMedal
+          count={dispenser}
+          icon={<DispenserIcon />}
+          tooltip={`${dispenser} dispenser asset type${dispenser === 1 ? '' : 's'} collected`}
+        />
+      )}
+
+      {refinery > 0 && (
+        <StackedMedal
+          count={refinery}
+          icon={<RefineryIcon />}
+          showCount={false}
+          tooltip={`Refinery Operator — ${refinery} order${refinery === 1 ? '' : 's'} fulfilled`}
+        />
+      )}
     </div>
   );
 }

@@ -9,7 +9,6 @@ import { startStratumCollector, stopStratumCollector } from "../lib/stratum-coll
 import { startHighestDiffCollector, stopHighestDiffCollector } from "../lib/highest-diff-collector";
 import { startRoundsCollector, stopRoundsCollector } from "../lib/rounds-collector";
 import { checkpointWal, closeDb } from "../lib/db";
-import { syncRefineryBadges } from "../lib/refinery-badge-sync";
 import cron from "node-cron";
 
 // Validate environment variables before starting
@@ -99,7 +98,5 @@ function shutdown() {
   console.log("✅ Shutdown complete");
   process.exit(0);
 }
-
-syncRefineryBadges().catch(err => console.error('🏭 Refinery badge sync error:', err));
 
 console.log("🚀 All jobs initialized and running");

@@ -240,6 +240,17 @@ function initializeTables() {
       ON block_participants(username, block_height DESC)
   `);
 
+  // Fetch-through cache of canonical badge payloads from the para server
+  // `GET /badges/{address}` endpoint. `payload` is the JSON-encoded
+  // BadgesPayload; `fetched_at` is a unix timestamp (seconds) used for TTL.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_badges (
+      address TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      fetched_at INTEGER NOT NULL
+    )
+  `);
+
   addColumnIfNotExists(db, `ALTER TABLE monitored_users ADD COLUMN has_refinery_badge BOOLEAN NOT NULL DEFAULT 0`);
 
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_status TEXT NOT NULL DEFAULT 'pending'`);

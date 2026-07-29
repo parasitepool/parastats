@@ -1,3 +1,10 @@
+
+default:
+  just --list
+
+dev:
+  pnpm dev
+
 install:
   pnpm install
 
@@ -12,6 +19,14 @@ audit:
   pnpm audit --dev --audit-level=high
 
 ci: install lint audit
+
+# Seed the local badge cache with demo users at various counts to preview the badge UI.
+# Prints the profile URLs to visit. Undo with: just demo_badges_clear
+demo_badges:
+  pnpm tsx scripts/demo-badges.ts
+
+demo_badges_clear:
+  pnpm tsx scripts/demo-badges.ts --clear
 
 prepare-release revision='master':
   #!/usr/bin/env bash

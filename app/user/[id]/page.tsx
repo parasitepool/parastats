@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect, useMemo } from 'react';
 import HashrateChart from '../../components/HashrateChart';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
-import { getUserData, getHistoricalUserStats, getHashrate, updateAccountMetadata, getUserBlockDiffs, getUserRounds, getUserRefineryOperatorBadge, type UserBlockDiffEntry, type UserRoundsResponse } from '@/app/utils/api';
+import { getUserData, getHistoricalUserStats, getHashrate, updateAccountMetadata, getUserBlockDiffs, getUserRounds, getUserBadges, type UserBlockDiffEntry, type UserRoundsResponse, type BadgesPayload } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
@@ -84,7 +84,7 @@ export default function UserDashboard() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [userBlockDiffs, setUserBlockDiffs] = useState<UserBlockDiffEntry[]>([]);
   const [roundsData, setRoundsData] = useState<UserRoundsResponse | null>(null);
-  const [hasRefineryOperatorBadge, setHasRefineryOperatorBadge] = useState(false);
+  const [badgesData, setBadgesData] = useState<BadgesPayload | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<CollapsedSections>(defaultCollapsedSections);
   const [loadedCollapsePreferencesUserId, setLoadedCollapsePreferencesUserId] = useState<string | null>(null);
 
@@ -325,8 +325,14 @@ export default function UserDashboard() {
 
     const fetchRounds = async () => {
       try {
-        const data = await getUserRounds(userId);
-        if (mounted) setRoundsData(data);
+        const [rounds, badges] = await Promise.all([
+          getUserRounds(userId),
+          getUserBadges(userId),
+        ]);
+        if (mounted) {
+          setRoundsData(rounds);
+          setBadgesData(badges);
+        }
       } catch (err) {
         console.error('Error fetching rounds data:', err);
       }
@@ -334,25 +340,6 @@ export default function UserDashboard() {
 
     fetchRounds();
     const intervalId = setInterval(fetchRounds, 60000);
-
-    return () => {
-      mounted = false;
-      clearInterval(intervalId);
-    };
-  }, [userId, isValidAddress]);
-
-  useEffect(() => {
-    if (!isValidAddress) return;
-
-    let mounted = true;
-
-    const fetchRefineryOperatorBadge = async () => {
-      const hasBadge = await getUserRefineryOperatorBadge(userId);
-      if (mounted) setHasRefineryOperatorBadge(hasBadge);
-    };
-
-    fetchRefineryOperatorBadge();
-    const intervalId = setInterval(fetchRefineryOperatorBadge, 60000);
 
     return () => {
       mounted = false;
@@ -605,8 +592,7 @@ export default function UserDashboard() {
       title: 'Achievements',
       value: (
         <BadgeDisplay
-          rounds={roundsData?.history ?? []}
-          hasRefineryOperatorBadge={hasRefineryOperatorBadge}
+          badges={badgesData}
           loading={!hasInitiallyLoaded}
         />
       ),
