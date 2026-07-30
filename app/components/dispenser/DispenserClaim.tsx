@@ -37,6 +37,29 @@ interface LiveAuction {
     min_next_bid: number;
 }
 
+// Auction terms are fixed server-side (the dispenser's `--auction-*` flags), so
+// sellers never choose them. We fetch them purely to show what they're agreeing
+// to before signing.
+interface AuctionDefaults {
+    reserve: number;
+    increment: number;
+    duration_secs: number;
+    anti_snipe_secs: number;
+}
+
+// Subsets of the dispenser's /tiers and /assets responses, used to resolve
+// which slots belong to a collection the operator allows auctioning.
+interface TierInfo {
+    name: string;
+    asset: string;
+}
+
+interface AssetInfo {
+    name: string;
+    auctionable?: boolean;
+    is_override_asset?: boolean;
+}
+
 interface DispenserClaimProps {
     userId: string;
     className?: string;
@@ -99,8 +122,37 @@ function buildAuctionIndex(auctions: LiveAuction[]): Map<string, LiveAuction> {
     return index;
 }
 
+// Tier names whose backing asset the dispenser allows auctioning. Slots in any
+// other tier get no auction button at all — the backend would reject them.
+function buildAuctionableTiers(tiers: TierInfo[], assets: AssetInfo[]): Set<string> {
+    const auctionableAssets = new Set(assets.filter((a) => a.auctionable).map((a) => a.name));
+    const result = new Set<string>();
+    for (const tier of tiers) {
+        if (auctionableAssets.has(tier.asset)) result.add(tier.name);
+    }
+    // Whitelist slots draw from the override asset, which has no /tiers entry.
+    const overrideAsset = assets.find((a) => a.is_override_asset);
+    if (overrideAsset?.auctionable) result.add("override");
+    return result;
+}
+
 function formatSats(sats: number): string {
     return sats.toLocaleString("en-US");
+}
+
+function formatDuration(seconds: number): string {
+    const units: [number, string][] = [
+        [86400, "day"],
+        [3600, "hour"],
+        [60, "minute"],
+    ];
+    for (const [size, label] of units) {
+        if (seconds >= size) {
+            const count = Math.round(seconds / size);
+            return `${count} ${label}${count === 1 ? "" : "s"}`;
+        }
+    }
+    return `${seconds} seconds`;
 }
 
 // Code/redemption assets carry no on-chain inscription image. We currently
@@ -156,9 +208,8 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     // Auction flow
     const [auctionModalSlot, setAuctionModalSlot] = useState<Slot | null>(null);
     const [auctioningSlot, setAuctioningSlot] = useState<number | null>(null);
-    const [auctionReserve, setAuctionReserve] = useState("50000");
-    const [auctionIncrement, setAuctionIncrement] = useState("5000");
-    const [auctionHours, setAuctionHours] = useState("24");
+    const [auctionDefaults, setAuctionDefaults] = useState<AuctionDefaults | null>(null);
+    const [auctionableTiers, setAuctionableTiers] = useState<Set<string>>(new Set());
     const [createdAuctionId, setCreatedAuctionId] = useState<string | null>(null);
     const [liveAuctions, setLiveAuctions] = useState<Map<string, LiveAuction>>(new Map());
 
@@ -223,12 +274,43 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         }
     }, []);
 
+    // Auction terms and the auctionable-asset whitelist are both operator
+    // config, so they load once alongside the slot grid. On failure the
+    // whitelist stays empty, which hides the auction action rather than
+    // offering one the backend would reject.
+    const fetchAuctionConfig = useCallback(async () => {
+        try {
+            const [defaultsRes, tiersRes, assetsRes] = await Promise.all([
+                fetch("/api/dispenser/auction/defaults"),
+                fetch("/api/dispenser/tiers"),
+                fetch("/api/dispenser/assets"),
+            ]);
+
+            if (defaultsRes.ok) {
+                setAuctionDefaults(await defaultsRes.json());
+            }
+            if (tiersRes.ok && assetsRes.ok) {
+                const tiers: TierInfo[] = await tiersRes.json();
+                const assets: AssetInfo[] = await assetsRes.json();
+                setAuctionableTiers(
+                    buildAuctionableTiers(
+                        Array.isArray(tiers) ? tiers : [],
+                        Array.isArray(assets) ? assets : [],
+                    ),
+                );
+            }
+        } catch (err) {
+            console.error("Error fetching dispenser auction config:", err);
+        }
+    }, []);
+
     useEffect(() => {
         if (isInitialized) {
             fetchEligibility();
             fetchAuctions();
+            fetchAuctionConfig();
         }
-    }, [isInitialized, fetchEligibility, fetchAuctions]);
+    }, [isInitialized, fetchEligibility, fetchAuctions, fetchAuctionConfig]);
 
     const submitClaim = useCallback(async (
         tier: string,
@@ -257,12 +339,10 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         return data ?? {};
     }, [userId]);
 
+    // Reserve, increment and duration are set by the dispenser, not sent here.
     const submitAuction = useCallback(async (
         tier: string,
         tierSlotIndex: number,
-        reserve: number,
-        increment: number,
-        durationSecs: number,
         signature: string,
     ): Promise<{ id?: string }> => {
         const response = await fetch("/api/dispenser/auction/create", {
@@ -273,10 +353,6 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 tier,
                 slot: tierSlotIndex,
                 signature,
-                reserve,
-                increment,
-                duration_secs: durationSecs,
-                anti_snipe_secs: 300,
             }),
         });
 
@@ -408,26 +484,10 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         if (!auctionModalSlot) return;
 
         const { tier, tierSlotIndex, index } = auctionModalSlot;
-        const reserve = Number(auctionReserve);
-        const increment = Number(auctionIncrement);
-        const hours = Number(auctionHours);
-
-        if (!Number.isFinite(reserve) || reserve <= 0) {
-            setError("Reserve must be a positive number of sats");
-            return;
-        }
-        if (!Number.isFinite(increment) || increment <= 0) {
-            setError("Minimum increment must be a positive number of sats");
-            return;
-        }
-        if (!Number.isFinite(hours) || hours <= 0) {
-            setError("Duration must be a positive number of hours");
-            return;
-        }
 
         setAuctioningSlot(index);
         setError(null);
-        // Close the parameter prompt so the signing modal is visible.
+        // Close the confirmation prompt so the signing modal is visible.
         setAuctionModalSlot(null);
 
         try {
@@ -440,15 +500,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             const data = await signMessage({
                 address: userId,
                 message,
-                submit: (signature: string) =>
-                    submitAuction(
-                        tier,
-                        tierSlotIndex,
-                        reserve,
-                        increment,
-                        Math.round(hours * 3600),
-                        signature,
-                    ),
+                submit: (signature: string) => submitAuction(tier, tierSlotIndex, signature),
             });
 
             // The slot is now reserved into the auction; reflect that locally.
@@ -608,9 +660,10 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                         {claiming ? "Signing..." : "Claim"}
                                     </button>
                                 )}
-                                {/* Auctions are only for on-chain UTXO assets, not
-                                    redemption-code assets. */}
-                                {isOwner && !slot.claimed && !isCodeAsset && (
+                                {/* Auctions are only for on-chain UTXO assets (not
+                                    redemption-code assets) from a collection the
+                                    dispenser whitelists for auctioning. */}
+                                {isOwner && !slot.claimed && !isCodeAsset && auctionableTiers.has(slot.tier) && (
                                     <button
                                         onClick={() => {
                                             setError(null);
@@ -817,38 +870,30 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                         L1 address; the inscription transfers to the winner.
                     </p>
 
-                    <label className="block text-xs font-medium text-accent-2 mb-1">
-                        Reserve price (sats)
-                    </label>
-                    <input
-                        type="number"
-                        min="1"
-                        value={auctionReserve}
-                        onChange={(e) => setAuctionReserve(e.target.value)}
-                        className="w-full mb-3 px-2 py-1.5 bg-secondary border border-border text-sm"
-                    />
-
-                    <label className="block text-xs font-medium text-accent-2 mb-1">
-                        Minimum increment (sats)
-                    </label>
-                    <input
-                        type="number"
-                        min="1"
-                        value={auctionIncrement}
-                        onChange={(e) => setAuctionIncrement(e.target.value)}
-                        className="w-full mb-3 px-2 py-1.5 bg-secondary border border-border text-sm"
-                    />
-
-                    <label className="block text-xs font-medium text-accent-2 mb-1">
-                        Duration (hours)
-                    </label>
-                    <input
-                        type="number"
-                        min="1"
-                        value={auctionHours}
-                        onChange={(e) => setAuctionHours(e.target.value)}
-                        className="w-full mb-4 px-2 py-1.5 bg-secondary border border-border text-sm"
-                    />
+                    {/* Auction terms are fixed by the dispenser and shown here for
+                        confirmation only — there is nothing to fill in. */}
+                    {auctionDefaults && (
+                        <dl className="mb-4 bg-secondary border border-border divide-y divide-border text-sm">
+                            <div className="flex items-center justify-between px-3 py-2">
+                                <dt className="text-xs font-medium text-accent-2">Starting price</dt>
+                                <dd className="font-mono">{formatSats(auctionDefaults.reserve)} sats</dd>
+                            </div>
+                            <div className="flex items-center justify-between px-3 py-2">
+                                <dt className="text-xs font-medium text-accent-2">Minimum increment</dt>
+                                <dd className="font-mono">{formatSats(auctionDefaults.increment)} sats</dd>
+                            </div>
+                            <div className="flex items-center justify-between px-3 py-2">
+                                <dt className="text-xs font-medium text-accent-2">Duration</dt>
+                                <dd className="font-mono">{formatDuration(auctionDefaults.duration_secs)}</dd>
+                            </div>
+                            {auctionDefaults.anti_snipe_secs > 0 && (
+                                <div className="flex items-center justify-between px-3 py-2">
+                                    <dt className="text-xs font-medium text-accent-2">Late-bid extension</dt>
+                                    <dd className="font-mono">{formatDuration(auctionDefaults.anti_snipe_secs)}</dd>
+                                </div>
+                            )}
+                        </dl>
+                    )}
 
                     {error && (
                         <div className="mb-4 text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
