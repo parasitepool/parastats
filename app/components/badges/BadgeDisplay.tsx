@@ -7,12 +7,23 @@ import {
   LOYALTY_BADGE_ID,
   REFINERY_BADGE_ID,
   DISPENSER_BADGE_ID,
+  BRAVOCADO_BADGE_ID,
+  MINER_BADGE_ID,
+  AUCTION_WINNER_BADGE_ID,
   LOYALTY_BLOCKS_PER_INSTANCE,
 } from '@/lib/badge-types';
 import BlockBadge from './BlockBadge';
 import BlockWinnerBadge from './BlockWinnerBadge';
 import StackedMedal from './StackedMedal';
-import { PickaxeIcon, LoyaltyIcon, DispenserIcon, RefineryIcon } from './icons';
+import {
+  PickaxeIcon,
+  LoyaltyIcon,
+  DispenserIcon,
+  RefineryIcon,
+  MushroomIcon,
+  MinerRigIcon,
+  GavelIcon,
+} from './icons';
 
 interface BadgeDisplayProps {
   badges: BadgesPayload | null;
@@ -37,6 +48,9 @@ export default function BadgeDisplay({ badges, loading }: BadgeDisplayProps) {
   const loyalty = types[LOYALTY_BADGE_ID]?.bucket?.count ?? 0;
   const refinery = types[REFINERY_BADGE_ID]?.bucket?.count ?? 0;
   const dispenser = types[DISPENSER_BADGE_ID]?.bucket?.count ?? 0;
+  const bravocado = types[BRAVOCADO_BADGE_ID]?.bucket?.count ?? 0;
+  const miner = types[MINER_BADGE_ID]?.bucket?.count ?? 0;
+  const auctionWins = types[AUCTION_WINNER_BADGE_ID]?.bucket?.count ?? 0;
 
   const hasAny =
     winners.length > 0 ||
@@ -44,7 +58,10 @@ export default function BadgeDisplay({ badges, loading }: BadgeDisplayProps) {
     blockStacked > 0 ||
     loyalty > 0 ||
     refinery > 0 ||
-    dispenser > 0;
+    dispenser > 0 ||
+    bravocado > 0 ||
+    miner > 0 ||
+    auctionWins > 0;
 
   if (!hasAny) {
     return <span className="text-gray-400">-</span>;
@@ -74,6 +91,32 @@ export default function BadgeDisplay({ badges, loading }: BadgeDisplayProps) {
           count={loyalty}
           icon={<LoyaltyIcon />}
           tooltip={`Loyalty — ${loyaltyBlocks}k blocks mined`}
+        />
+      )}
+
+      {auctionWins > 0 && (
+        <StackedMedal
+          count={auctionWins}
+          icon={<GavelIcon />}
+          tooltip={`Auction Winner — ${auctionWins} auction${auctionWins === 1 ? '' : 's'} won`}
+        />
+      )}
+
+      {bravocado > 0 && (
+        <StackedMedal
+          count={bravocado}
+          icon={<MushroomIcon />}
+          showCount={false}
+          tooltip="Bravocado — collected from the dispenser"
+        />
+      )}
+
+      {miner > 0 && (
+        <StackedMedal
+          count={miner}
+          icon={<MinerRigIcon />}
+          showCount={false}
+          tooltip="Miner — collected from the dispenser"
         />
       )}
 

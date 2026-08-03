@@ -9,9 +9,12 @@ export const BLOCK_WINNER_BADGE_ID = 'block_winner';
 export const LOYALTY_BADGE_ID = 'loyalty';
 export const REFINERY_BADGE_ID = 'refinery';
 export const DISPENSER_BADGE_ID = 'dispenser';
+export const BRAVOCADO_BADGE_ID = 'bravocado';
+export const MINER_BADGE_ID = 'miner';
+export const AUCTION_WINNER_BADGE_ID = 'auction_winner';
 
 /** Blocks of participation per loyalty instance (mirrors para's LOYALTY_BLOCKS_PER_INSTANCE). */
-export const LOYALTY_BLOCKS_PER_INSTANCE = 10_000;
+export const LOYALTY_BLOCKS_PER_INSTANCE = 21_000;
 
 export interface BadgeInstance {
   blockheight: number;
