@@ -28,7 +28,7 @@ export default function StackedMedal({ count, tooltip, icon, showCount = true }:
       </svg>
 
       {showCount && count > 1 && (
-        <span className="pointer-events-none absolute -top-1 -right-1 min-w-[18px] rounded-full bg-orange-500 px-1 text-center text-[10px] font-bold leading-[18px] text-white shadow">
+        <span className="pointer-events-none absolute -top-1 -right-1 min-w-[18px] rounded-full bg-[#b0b0b0] px-1 text-center text-[10px] font-bold leading-[18px] text-black ring-2 ring-background shadow">
           {count}
         </span>
       )}
