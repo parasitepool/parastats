@@ -28,9 +28,14 @@ import {
 interface BadgeDisplayProps {
   badges: BadgesPayload | null;
   loading?: boolean;
+  /**
+   * Called when the stacked "N more blocks mined" medal is clicked (e.g. to
+   * jump to the Blocks section). When omitted, that medal is not clickable.
+   */
+  onBlocksClick?: () => void;
 }
 
-export default function BadgeDisplay({ badges, loading }: BadgeDisplayProps) {
+export default function BadgeDisplay({ badges, loading, onBlocksClick }: BadgeDisplayProps) {
   if (loading) {
     return (
       <div className="flex items-center gap-2">
@@ -82,7 +87,11 @@ export default function BadgeDisplay({ badges, loading }: BadgeDisplayProps) {
         <StackedMedal
           count={blockStacked}
           icon={<PickaxeIcon />}
-          tooltip={`${blockStacked} more block${blockStacked === 1 ? '' : 's'} mined`}
+          tooltip={
+            `${blockStacked} more block${blockStacked === 1 ? '' : 's'} mined` +
+            (onBlocksClick ? ' — view all' : '')
+          }
+          onClick={onBlocksClick}
         />
       )}
 
