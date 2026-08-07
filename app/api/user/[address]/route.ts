@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { formatDifficulty, parseHashrate } from '@/app/utils/formatters';
 import { formatRelativeTime } from '@/app/utils/formatters';
-import { fetch } from '@/lib/http-client';
+import { fetch, HttpError } from '@/lib/http-client';
 import { fetchWithCache } from '@/lib/aggregator-cache';
+import { isValidBitcoinAddress } from '@/app/utils/validators';
 
 export interface WorkerData {
   workername: string;
@@ -54,8 +55,13 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ address: string }> }
 ) {
+  const { address } = await params;
+
+  if (!isValidBitcoinAddress(address)) {
+    return NextResponse.json({ error: "Invalid Bitcoin address" }, { status: 400 });
+  }
+
   try {
-    const { address } = await params;
     const apiUrl = process.env.API_URL;
     if (!apiUrl) {
       console.error("Failed to fetch user data: No API_URL defined in env");
@@ -67,14 +73,15 @@ export async function GET(
       headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
     }
 
+    const url = `${apiUrl}/aggregator/users/${encodeURIComponent(address)}`;
     const { data: userData } = await fetchWithCache<UserData>(
-      `${apiUrl}/aggregator/users/${address}`,
+      url,
       async () => {
-        const response = await fetch(`${apiUrl}/aggregator/users/${address}`, {
+        const response = await fetch(url, {
           headers,
         });
         if (!response.ok) {
-          throw new Error(`Failed to fetch user data: ${response.statusText} (${response.status})`);
+          throw new HttpError(response.status, response.statusText, url);
         }
         return await response.json() as UserData;
       },
@@ -92,6 +99,18 @@ export async function GET(
 
     return NextResponse.json(processedData);
   } catch (error) {
+    // Upstream 404 is routine (address not in the pool) — no stack trace needed
+    if (error instanceof HttpError && error.status === 404) {
+      console.log(`User ${address} not found (404)`);
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    if (error instanceof HttpError) {
+      console.error(`Error fetching user data: ${error.message}`);
+      return NextResponse.json(
+        { error: "Failed to fetch user data" },
+        { status: 502 }
+      );
+    }
     console.error("Error fetching user data:", error);
     return NextResponse.json(
       { error: "Failed to fetch user data" },
@@ -117,6 +136,9 @@ function processWorkerData(workers: WorkerData[]): ProcessedWorkerData[] {
 }
 
 function calculateUptime(authorisedTimestamp: number): string {
+  // 0 means the user was never authorised; measuring from the epoch would report decades.
+  if (!Number.isFinite(authorisedTimestamp) || authorisedTimestamp <= 0) return 'N/A';
+
   const now = Math.floor(Date.now() / 1000); // Current time in Unix timestamp
   const uptimeSeconds = now - authorisedTimestamp;
 

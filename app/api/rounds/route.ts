@@ -7,18 +7,24 @@ export async function GET() {
     const db = getDb();
 
     const rounds = db.prepare(`
-      SELECT block_height, block_hash, coinbase_value, winner_diff, winner_username, participant_status
-      FROM rounds
-      WHERE block_height != 0
-      ORDER BY block_height DESC
+      SELECT r.block_height, r.block_hash, r.coinbase_value, r.winner_diff, r.winner_username, r.participant_status,
+             COALESCE(w.total_work, 0) AS total_work
+      FROM rounds r
+      LEFT JOIN (
+        SELECT block_height, SUM(total_work) AS total_work
+        FROM round_participants
+        GROUP BY block_height
+      ) w ON w.block_height = r.block_height
+      WHERE r.block_height != 0
+      ORDER BY r.block_height DESC
     `).all() as RoundRow[];
 
     // Prepend synthetic current-round entry if participant data exists
-    const currentRoundExists = db.prepare(
-      `SELECT 1 FROM round_participants WHERE block_height = 0 LIMIT 1`
-    ).get();
+    const currentRound = db.prepare(
+      `SELECT SUM(total_work) AS total_work FROM round_participants WHERE block_height = 0`
+    ).get() as { total_work: number | null };
 
-    if (currentRoundExists) {
+    if (currentRound.total_work !== null) {
       rounds.unshift({
         block_height: 0,
         block_hash: null,
@@ -27,6 +33,7 @@ export async function GET() {
         winner_username: null,
         participant_status: 'complete',
         block_participant_status: 'complete',
+        total_work: currentRound.total_work,
       });
     }
 

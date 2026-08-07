@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(Math.max(1, parseInt(searchParams.get('limit') || '10', 10)), MAX_LIMIT);
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '10', 10) || 10, 1), MAX_LIMIT);
     const address = searchParams.get('address');
     const type = searchParams.get('type') || 'recent'; // recent, leaderboard, user-diffs
 

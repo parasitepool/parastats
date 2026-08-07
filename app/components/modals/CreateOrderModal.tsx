@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { request, RpcErrorCode } from '@sats-connect/core';
+import QRCode from 'react-qr-code';
 import { useWallet } from '@/app/hooks/useWallet';
 import { InfoIcon, CopyIcon, CheckIcon } from '@/app/components/icons';
 import type { OrderResponse } from '@/app/api/router/types';
@@ -22,7 +23,7 @@ const phdToSlider = (phd: number) => ((phd - MIN_PHD) / (MAX_PHD - MIN_PHD)) * 1
 const sliderToPhd = (pos: number) => Math.round(MIN_PHD + (pos / 100) * (MAX_PHD - MIN_PHD));
 
 export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice, halt }: CreateOrderModalProps) {
-  const { address: walletAddress, isConnected } = useWallet();
+  const { address: walletAddress, isConnected, walletType } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [selectedPhd, setSelectedPhd] = useState(1);
   const [editing, setEditing] = useState(false);
@@ -150,7 +151,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl"
+        className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-start mb-4">
@@ -285,6 +286,18 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
 
         {view === 'payment' && orderData && (
           <div className="space-y-4">
+            <div className="flex flex-col items-center gap-2">
+              <div className="bg-white p-6 rounded-md">
+                <QRCode
+                  value={orderData.payment_address}
+                  size={160}
+                  bgColor="#ffffff"
+                  fgColor="#000000"
+                  level="M"
+                />
+              </div>
+              <p className="text-[10px] text-foreground/40">Scan to get the deposit address</p>
+            </div>
             <div>
               <h3 className="text-sm font-medium text-accent-2 mb-2">Payment Address</h3>
               <div className="bg-secondary p-3 border border-border flex items-center justify-between gap-2">
@@ -332,7 +345,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             )}
 
             <div className="flex justify-center gap-3 mt-6">
-              {isConnected && (
+              {isConnected && walletType !== 'manual' && (
                 <button
                   onClick={handlePayWithXverse}
                   disabled={paying}

@@ -6,9 +6,10 @@ import MinerSetupGuide from '../MinerSetupGuide';
 interface HelpModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onManualConnect?: () => void;
 }
 
-export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
+export default function HelpModal({ isOpen, onClose, onManualConnect }: HelpModalProps) {
   // Close modal on escape key
   useEffect(() => {
     const handleEscKey = (e: KeyboardEvent) => {
@@ -60,10 +61,18 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
         <div className="text-[10px] text-gray-300 mb-4 italic">
           Participation in Bitcoin mining, including through Parasite Pool, which is still considered in beta testing, involves risks such as market volatility, hardware failure, and changes in network difficulty. Parasite Pool is in beta and has found three blocks as of 2026-06-22; there is no assurance of future block discoveries or payouts. Users should exercise caution and consider their financial situation before engaging in mining activities.
         </div>
-        <div className="flex justify-end">
+        <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2">
+          {onManualConnect && (
+            <button
+              onClick={onManualConnect}
+              className="px-4 py-2 border border-foreground text-foreground text-sm font-medium hover:bg-secondary-hover transition-colors focus:outline-none"
+            >
+              Connect manually with another wallet
+            </button>
+          )}
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground"
+            className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground sm:ml-auto"
           >
             Close
           </button>

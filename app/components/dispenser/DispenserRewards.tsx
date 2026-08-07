@@ -29,6 +29,9 @@ interface Reward {
   description?: string;
   // Lowest share-difficulty target for this reward, in Terahashes (e.g. "21.00").
   targetTera: string;
+  // Units still available to claim out of the total supply (e.g. 6 of 13).
+  remaining: number;
+  total: number;
 }
 
 // Threshold values from the dispenser are in trillions.
@@ -46,6 +49,8 @@ function buildRewards(assets: AssetInfo[], tiers: TierInfo[]): Reward[] {
       name: asset.name,
       description: asset.description,
       targetTera: (lowestThreshold / TERA).toFixed(2),
+      remaining: asset.total_utxos - asset.assigned,
+      total: asset.total_utxos,
     });
   }
   return rewards.sort((a, b) => parseFloat(a.targetTera) - parseFloat(b.targetTera));
@@ -135,9 +140,14 @@ export default function DispenserRewards({ isOpen, onClose }: DispenserRewardsPr
                 <div className="min-w-0">
                   <p className="text-sm font-semibold truncate">{reward.description || reward.name}</p>
                 </div>
-                <span className="text-sm font-mono font-semibold text-accent-1 flex-shrink-0">
-                  {reward.targetTera}T
-                </span>
+                <div className="flex-shrink-0 text-right">
+                  <span className="text-sm font-mono font-semibold text-accent-1">
+                    {reward.targetTera}T
+                  </span>
+                  <span className="block text-xs font-mono text-foreground/60">
+                    {reward.remaining}/{reward.total} left
+                  </span>
+                </div>
               </li>
             ))}
           </ul>

@@ -5,6 +5,7 @@
 /.pnp
 .pnp.*
 .yarn/*
+.hermit/*
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
@@ -48,3 +49,6 @@ next-env.d.ts
 
 # cursor
 .cursor
+
+# Hermit
+.hermit

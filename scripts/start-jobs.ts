@@ -8,8 +8,7 @@ import {
 import { startStratumCollector, stopStratumCollector } from "../lib/stratum-collector";
 import { startHighestDiffCollector, stopHighestDiffCollector } from "../lib/highest-diff-collector";
 import { startRoundsCollector, stopRoundsCollector } from "../lib/rounds-collector";
-import { closeDb } from "../lib/db";
-import { syncRefineryBadges } from "../lib/refinery-badge-sync";
+import { checkpointWal, closeDb } from "../lib/db";
 import cron from "node-cron";
 
 // Validate environment variables before starting
@@ -40,10 +39,16 @@ startRoundsCollector();
 console.log("🔄 Rounds collector started");
 
 // Set up a job to purge old data daily at midnight
-let purgeJob = cron.schedule("0 0 * * *", () => {
-  purgeOldData(399); // Keep 399 days of data
+let purgeJob = cron.schedule("0 0 * * *", async () => {
+  await purgeOldData();
   console.log("🧹 Purged old pool stats data");
 });
+
+checkpointWal();
+let checkpointJob = cron.schedule("*/5 * * * *", () => {
+  checkpointWal();
+});
+console.log("🗜️ WAL checkpoint job started");
 
 // Handle graceful shutdown
 process.on("SIGTERM", shutdown);
@@ -65,6 +70,10 @@ function shutdown() {
 
   if (purgeJob) {
     purgeJob.stop();
+  }
+
+  if (checkpointJob) {
+    checkpointJob.stop();
   }
 
   // Stop stratum collector
@@ -89,7 +98,5 @@ function shutdown() {
   console.log("✅ Shutdown complete");
   process.exit(0);
 }
-
-syncRefineryBadges().catch(err => console.error('🏭 Refinery badge sync error:', err));
 
 console.log("🚀 All jobs initialized and running");

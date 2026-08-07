@@ -169,22 +169,19 @@ export async function updateAccountMetadata(
   metadata: Record<string, unknown>,
   signature: string
 ): Promise<unknown> {
-  try {
-    return await withRetry(async () => {
-      const response = await fetch('/api/account/metadata', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ btc_address, metadata, signature }),
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      return await response.json();
-    });
-  } catch (error) {
-    console.error(`Error updating account metadata for ${btc_address}:`, error);
-    throw error;
+  const response = await fetch('/api/account/metadata', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ btc_address, metadata, signature }),
+  });
+
+  const data: { error?: string } | null = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(data?.error || `Failed to update account metadata (${response.status})`);
   }
+
+  return data;
 }
 
 /**
@@ -266,13 +263,24 @@ export async function getUserBlockDiffs(address: string, limit: number = 50): Pr
   }
 }
 
-export async function getUserRefineryOperatorBadge(address: string): Promise<boolean> {
+// User badges API (canonical block badges from the para server, cached in parastats)
+export type { BadgesPayload, BadgeType, BadgeInstance, BadgeBucket } from '@/lib/badge-types';
+import type { BadgesPayload } from '@/lib/badge-types';
+
+export async function getUserBadges(address: string): Promise<BadgesPayload | null> {
   try {
-    const response = await fetch(`/api/router/refinery-operator?address=${encodeURIComponent(address)}`, { cache: 'no-store' });
-    if (!response.ok) return false;
-    const data = await response.json() as { hasRefineryOperatorBadge?: unknown };
-    return data.hasRefineryOperatorBadge === true;
-  } catch {
-    return false;
+    return await withRetry(async () => {
+      const response = await fetch(`/api/user/${address}/badges`);
+      if (response.status === 403 || response.status === 404) {
+        return null;
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    });
+  } catch (error) {
+    console.error(`Error fetching badges for user ${address}:`, error);
+    throw error;
   }
 }
