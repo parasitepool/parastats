@@ -20,8 +20,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Apply security headers to all API routes
-        source: '/api/:path*',
+        // Apply security headers to all routes
+        source: '/:path*',
         headers: [
           {
             key: 'X-Content-Type-Options',
@@ -43,12 +43,10 @@ const nextConfig: NextConfig = {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()',
           },
-        ],
-      },
-      {
-        // Apply HSTS to all routes (enforce HTTPS)
-        source: '/:path*',
-        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+          },
           {
             key: 'Strict-Transport-Security',
             value: 'max-age=31536000; includeSubDomains',

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
+import { isValidBitcoinAddress } from '@/app/utils/validators';
 
 export async function POST(request: Request) {
   try {
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (address.length < 10 || address.length > 100) {
+    if (!isValidBitcoinAddress(address)) {
       return NextResponse.json(
         { error: 'Invalid address format' },
         { status: 400 }
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     }
 
     const response = await fetchWithTimeout(
-      `${lightningApiUrl}/login/${address}/auth_nonce/${identifier}`,
+      `${lightningApiUrl}/login/${encodeURIComponent(address)}/auth_nonce/${encodeURIComponent(identifier)}`,
       {
         method: 'GET',
         headers: {
@@ -68,4 +69,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

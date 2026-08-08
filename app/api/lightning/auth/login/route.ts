@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
+import { isValidBitcoinAddress } from '@/app/utils/validators';
 
 export async function POST(request: Request) {
   try {
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     }
 
     if (
-      address.length < 10 || address.length > 100 ||
+      !isValidBitcoinAddress(address) ||
       public_key.length > 200 ||
       signature.length > 500 ||
       nonce.length > 200
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     }
 
     const response = await fetchWithTimeout(
-      `${lightningApiUrl}/login/${address}/auth_sign/${identifier}`,
+      `${lightningApiUrl}/login/${encodeURIComponent(address)}/auth_sign/${encodeURIComponent(identifier)}`,
       {
         method: 'POST',
         headers: {
@@ -99,4 +100,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
