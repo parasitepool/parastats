@@ -13,7 +13,7 @@ verifyDepsBeforeRun: error
 overrides:
   axios@<1.15.2: '>=1.15.2'
   esbuild@<0.28.1: '>=0.28.1'
-  postcss@<8.5.10: '>=8.5.10'
+  postcss@<8.5.23: '>=8.5.23'
   sharp@<0.35.0: '>=0.35.0'
   ws@<8.20.1: '>=8.20.1'
 

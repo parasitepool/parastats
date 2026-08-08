@@ -54,9 +54,14 @@ export interface RateLimitResult {
 
 /**
  * Get client identifier from request
- * Uses X-Forwarded-For header if behind a proxy, falls back to generic identifier
+ * Prefers Cloudflare's single-value client IP header, then common proxy headers.
  */
 export function getClientIdentifier(request: Request): string {
+  const cloudflareIp = request.headers.get('cf-connecting-ip')?.trim();
+  if (cloudflareIp) {
+    return cloudflareIp;
+  }
+
   // Try to get real IP from common headers (when behind proxy/load balancer)
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {

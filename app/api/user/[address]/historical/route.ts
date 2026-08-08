@@ -5,6 +5,8 @@ import { getDb } from '../../../../../lib/db';
 // Enable caching based on interval
 export const revalidate = 60;
 
+const ALLOWED_INTERVALS = new Set(['1m', '5m', '15m', '30m', '1h']);
+
 export interface HistoricalUserStats {
   timestamp: string;
   hashrate: number;
@@ -20,11 +22,9 @@ export async function GET(
     const period = searchParams.get('period') || '24h';
     const interval = searchParams.get('interval') || '5m';
 
-    // Validate interval is positive for numeric intervals
-    const intervalMatch = interval.match(/^(-?\d+)([mh])$/);
-    if (!intervalMatch || parseInt(intervalMatch[1], 10) <= 0) {
+    if (!ALLOWED_INTERVALS.has(interval)) {
       return new NextResponse(
-        JSON.stringify({ error: "Interval must be a positive value with unit (e.g., '5m', '1h')" }), 
+        JSON.stringify({ error: "Interval must be one of: '1m', '5m', '15m', '30m', '1h'" }),
         { 
           status: 400,
           headers: {
@@ -73,51 +73,44 @@ export async function GET(
     
     // Calculate the time range based on the period
     const now = Math.floor(Date.now() / 1000);
-    let startTime = now;
     
     // Parse period format (e.g., "18d" or "6h")
-    const periodMatch = period.match(/^(-?\d+)([dh])$/);
-    
-    if (periodMatch) {
-      const value = parseInt(periodMatch[1], 10);
-      if (value <= 0) {
-        return new NextResponse(
-          JSON.stringify({ error: "Period must be a positive value (e.g., '24h' or '7d')" }),
-          { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
-        );
-      }
-
-      const unit = periodMatch[2];
-      
-      // Calculate total days for max period check
-      const totalDays = unit === 'd' ? value : value / 24;
-      
-      // Set max period based on the selected interval
-      let maxPeriodDays = 30; // Default max
-      
-      // Apply interval-specific limits
-      if (interval === '1m') {
-        maxPeriodDays = 2; // 2 days max for 1-minute intervals
-      } else if (interval === '5m') {
-        maxPeriodDays = 10; // 10 days max for 5-minute intervals
-      }
-      
-      if (totalDays > maxPeriodDays) {
-        return new NextResponse(
-          JSON.stringify({ 
-            error: `For ${interval} interval, period cannot exceed ${maxPeriodDays} days` 
-          }),
-          { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
-        );
-      }
-      
-      // Calculate seconds based on unit (d for days, h for hours)
-      const multiplier = unit === 'd' ? 24 * 60 * 60 : 60 * 60;
-      startTime = now - value * multiplier;
-    } else {
-      // Default to 24 hours if format is invalid
-      startTime = now - 24 * 60 * 60;
+    const periodMatch = period.match(/^([1-9]\d*)([dh])$/);
+    if (!periodMatch) {
+      return new NextResponse(
+        JSON.stringify({ error: "Period must be a positive value (e.g., '24h' or '7d')" }),
+        { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+      );
     }
+
+    const value = parseInt(periodMatch[1], 10);
+    const unit = periodMatch[2];
+
+    // Calculate total days for max period check
+    const totalDays = unit === 'd' ? value : value / 24;
+
+    // Set max period based on the selected interval
+    let maxPeriodDays = 30; // Default max
+
+    // Apply interval-specific limits
+    if (interval === '1m') {
+      maxPeriodDays = 2; // 2 days max for 1-minute intervals
+    } else if (interval === '5m') {
+      maxPeriodDays = 10; // 10 days max for 5-minute intervals
+    }
+
+    if (totalDays > maxPeriodDays) {
+      return new NextResponse(
+        JSON.stringify({
+          error: `For ${interval} interval, period cannot exceed ${maxPeriodDays} days`
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } }
+      );
+    }
+
+    // Calculate seconds based on unit (d for days, h for hours)
+    const multiplier = unit === 'd' ? 24 * 60 * 60 : 60 * 60;
+    const startTime = now - value * multiplier;
 
     const db = getDb();
 
@@ -153,44 +146,41 @@ export async function GET(
         intervalSeconds = 5 * 60; // Default to 5 minutes
     }
 
-    // Calculate intervals for the time range
-    const intervals = [];
-    for (let t = startTime; t < now; t += intervalSeconds) {
-      intervals.push({
-        start: t,
-        end: t + intervalSeconds
-      });
-    }
+    const rows = db.prepare(`
+      WITH bucketed AS (
+        SELECT
+          ${hashrateColumn} AS hashrate,
+          CAST((created_at - ?) / ? AS INTEGER) AS bucket,
+          ROW_NUMBER() OVER (
+            PARTITION BY CAST((created_at - ?) / ? AS INTEGER)
+            ORDER BY created_at DESC
+          ) AS row_number
+        FROM user_stats_history
+        WHERE user_id = ? AND created_at >= ? AND created_at < ?
+      )
+      SELECT hashrate, bucket
+      FROM bucketed
+      WHERE row_number = 1
+      ORDER BY bucket ASC
+    `).all(
+      startTime,
+      intervalSeconds,
+      startTime,
+      intervalSeconds,
+      user.id,
+      startTime,
+      now,
+    ) as { hashrate: string; bucket: number }[];
 
-    // Query for each interval and aggregate
-    const results: HistoricalUserStats[] = [];
+    const results = rows.flatMap(({ hashrate: rawHashrate, bucket }) => {
+      const hashrate = parseHashrate(rawHashrate);
+      if (hashrate <= 0) return [];
 
-    const stmt = db.prepare(`
-      SELECT
-        ${hashrateColumn} as hashrate,
-        created_at as timestamp
-      FROM user_stats_history
-      WHERE user_id = ? AND created_at >= ? AND created_at < ?
-      ORDER BY created_at DESC
-      LIMIT 1
-    `);
-
-    for (const { start, end } of intervals) {
-      const rows = stmt.all(user.id, start, end) as { timestamp: number; hashrate: string }[];
-
-      if (rows.length > 0) {
-        const row = rows[0];
-        const hashrate = parseHashrate(row.hashrate);
-        
-        // Only include intervals that have real data
-        if (hashrate > 0) {
-          results.push({
-            timestamp: new Date(start * 1000).toISOString(),
-            hashrate: hashrate
-          });
-        }
-      }
-    }
+      return [{
+        timestamp: new Date((startTime + bucket * intervalSeconds) * 1000).toISOString(),
+        hashrate,
+      }];
+    });
 
     return new NextResponse(JSON.stringify(results), {
       headers: {
@@ -212,4 +202,4 @@ export async function GET(
       }
     );
   }
-} 
+}
