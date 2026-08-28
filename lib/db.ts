@@ -255,6 +255,14 @@ function initializeTables() {
 
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_status TEXT NOT NULL DEFAULT 'pending'`);
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_fetched_at INTEGER`);
+  addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN network_difficulty REAL`);
+  addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN network_difficulty_fetched_at INTEGER`);
+  // Backfill the attempt marker for rounds whose difficulty was filled before
+  // the marker column existed, so they aren't refetched on first deploy.
+  db.prepare(`
+    UPDATE rounds SET network_difficulty_fetched_at = created_at
+    WHERE network_difficulty IS NOT NULL AND network_difficulty_fetched_at IS NULL
+  `).run();
 
   // Add total_work to existing round_participants caches. When newly added,
   // re-mark completed rounds as pending so the collector refetches real work.

@@ -421,6 +421,10 @@ export default function UserDashboard() {
     }));
   };
 
+  const openBlocksPage = () => {
+    router.push('/rounds');
+  };
+
   const handleToggleVisibility = async () => {
     if (!isOwnProfile) return;
 
@@ -596,6 +600,7 @@ export default function UserDashboard() {
         <BadgeDisplay
           badges={badgesData}
           loading={!hasInitiallyLoaded}
+          onBlocksClick={openBlocksPage}
         />
       ),
       icon: (

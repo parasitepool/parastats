@@ -9,6 +9,7 @@ export async function GET() {
 
     const rows = db.prepare(`
       SELECT r.block_height, r.block_hash, r.coinbase_value, r.winner_diff, r.winner_username, r.participant_status,
+             r.network_difficulty,
              m.is_public AS winner_is_public,
              COALESCE(w.total_work, 0) AS total_work
       FROM rounds r
@@ -21,6 +22,11 @@ export async function GET() {
       WHERE r.block_height != 0
       ORDER BY r.block_height DESC
     `).all() as (RoundRow & { winner_is_public: number | null })[];
+
+    // Best diff in the current round across all participants.
+    const bestDiffRow = db.prepare(
+      `SELECT MAX(top_diff) AS best_diff FROM round_participants WHERE block_height = 0`
+    ).get() as { best_diff: number | null };
 
     // PRIVACY: only return truncated addresses, and redact winners who opted
     // out of public listing (unmonitored winners stay visible, matching the
@@ -43,11 +49,12 @@ export async function GET() {
         block_height: 0,
         block_hash: null,
         coinbase_value: null,
-        winner_diff: null,
+        winner_diff: bestDiffRow.best_diff,
         winner_username: null,
         participant_status: 'complete',
         block_participant_status: 'complete',
         total_work: currentRound.total_work,
+        network_difficulty: null,
       });
     }
 

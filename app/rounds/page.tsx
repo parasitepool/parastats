@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { formatDifficulty, formatAddress } from '@/app/utils/formatters';
+import { getHashrate } from '@/app/utils/api';
 import Board, { BoardColumn } from '@/app/components/tables/Board';
 
 interface Round {
@@ -12,6 +13,7 @@ interface Round {
   winner_username: string | null;
   participant_status: string;
   total_work: number;
+  network_difficulty: number | null;
 }
 
 interface RoundParticipant {
@@ -102,6 +104,7 @@ export default function RoundsPage() {
   const [participants, setParticipants] = useState<Record<LeaderboardType, ParticipantRow[]>>(emptyParticipants);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [mobileTab, setMobileTab] = useState<LeaderboardType>('work');
+  const [networkDifficulty, setNetworkDifficulty] = useState<number | null>(null);
   const latestRequest = useRef(0);
   const expandedStatus = rounds.find(r => r.block_height === expandedRound)?.participant_status;
   const prevStatusRef = useRef(expandedStatus);
@@ -122,6 +125,20 @@ export default function RoundsPage() {
   useEffect(() => {
     fetchRounds();
   }, [fetchRounds]);
+
+  useEffect(() => {
+    const fetchNetworkDifficulty = async () => {
+      try {
+        const data = await getHashrate();
+        setNetworkDifficulty(data.currentDifficulty ?? null);
+      } catch (error) {
+        console.error('Error fetching current network difficulty:', error);
+      }
+    };
+    fetchNetworkDifficulty();
+    const interval = setInterval(fetchNetworkDifficulty, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Always poll rounds: 30s when incomplete rounds exist, 120s otherwise
   useEffect(() => {
@@ -202,12 +219,16 @@ export default function RoundsPage() {
         <div className="text-foreground/60">No completed blocks yet.</div>
       ) : (
         <div className="space-y-4">
-          {rounds.map((round) => (
-            <div key={round.block_height} className="border border-border bg-background shadow-md">
-              <button
-                onClick={() => toggleRound(round.block_height)}
-                className="w-full p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-foreground/5 transition-colors cursor-pointer text-left"
-              >
+          {rounds.map((round) => {
+            const networkDiff = round.block_height === 0
+              ? networkDifficulty
+              : round.network_difficulty;
+            return (
+              <div key={round.block_height} className="border border-border bg-background shadow-md">
+                <button
+                  onClick={() => toggleRound(round.block_height)}
+                  className="w-full p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-foreground/5 transition-colors cursor-pointer text-left"
+                >
                 <div className="flex items-center gap-4">
                   <span className="text-lg font-semibold font-mono">
                     {round.block_height === 0 ? (
@@ -235,7 +256,12 @@ export default function RoundsPage() {
                 </div>
                 <div className="flex items-center gap-4 text-sm text-foreground/60">
                   {round.winner_diff !== null && (
-                    <span>Diff: {formatDifficulty(round.winner_diff)}</span>
+                    <span>
+                      {round.block_height === 0 ? 'Best diff' : 'Diff'}: {formatDifficulty(round.winner_diff)}
+                    </span>
+                  )}
+                  {networkDiff !== null && (
+                    <span>Net: {formatDifficulty(networkDiff)}</span>
                   )}
                   {round.total_work > 0 && (
                     <span>Work: {formatDifficulty(round.total_work)}</span>
@@ -311,8 +337,9 @@ export default function RoundsPage() {
                   )}
                 </div>
               )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
     </main>
