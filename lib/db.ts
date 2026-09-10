@@ -2,12 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-// Ensure the data directory exists - configurable via environment variable
 const dataDir = process.env.PARASTATS_DATA_DIR || path.join(process.cwd(), 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-
 const dbPath = path.join(dataDir, 'pool-stats.db');
 
 // Singleton database instance
@@ -15,6 +10,7 @@ let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!db) {
+    fs.mkdirSync(/* turbopackIgnore: true */ dataDir, { recursive: true });
     db = new Database(dbPath, { timeout: 10000 });
     
     // Enable foreign keys

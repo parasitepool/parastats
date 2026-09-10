@@ -136,7 +136,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
       ordersUrl.searchParams.set('address', address);
 
       const [statusRes, ordersRes] = await Promise.all([
-        fetch('/api/router/status').catch(() => null),
+        fetch('/api/router/status', { cache: 'no-store' }).catch(() => null),
         fetch(ordersUrl, { cache: 'no-store' }).catch(() => null),
       ]);
 

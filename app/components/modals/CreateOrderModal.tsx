@@ -5,7 +5,9 @@ import { request, RpcErrorCode } from '@sats-connect/core';
 import QRCode from 'react-qr-code';
 import { useWallet } from '@/app/hooks/useWallet';
 import { InfoIcon, CopyIcon, CheckIcon } from '@/app/components/icons';
-import type { OrderResponse } from '@/app/api/router/types';
+import { getBitcoinPrice } from '@/app/utils/api';
+import { formatHashDays, formatPrice } from '@/app/utils/formatters';
+import type { OrderDetail, OrderResponse } from '@/app/api/router/types';
 
 interface CreateOrderModalProps {
   isOpen: boolean;
@@ -16,37 +18,137 @@ interface CreateOrderModalProps {
   halt: boolean;
 }
 
-const MIN_PHD = 1;
+const MIN_PHD = 0.199;
+const MIN_SLIDER_PHD = 1;
 const MAX_PHD = 99;
-const NOTCHES = [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
-const phdToSlider = (phd: number) => ((phd - MIN_PHD) / (MAX_PHD - MIN_PHD)) * 100;
-const sliderToPhd = (pos: number) => Math.round(MIN_PHD + (pos / 100) * (MAX_PHD - MIN_PHD));
+const phdToSlider = (phd: number) => phd < MIN_SLIDER_PHD ? 0 : phd;
+const sliderToPhd = (pos: number) => pos === 0 ? MIN_PHD : clamp(Math.round(pos), MIN_SLIDER_PHD, MAX_PHD);
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const formatPhd = (phd: number) => (phd < 1 ? formatHashDays(phd * 1e15) : `${trimPhd(phd)} PHd`);
+
+const trimPhd = (phd: number) => String(Math.round(phd * 100) / 100);
+
+type AmountUnit = 'sats' | 'btc';
 
 export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice, halt }: CreateOrderModalProps) {
   const { address: walletAddress, isConnected, walletType } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [selectedPhd, setSelectedPhd] = useState(1);
-  const [editing, setEditing] = useState(false);
+  const [editingField, setEditingField] = useState<'phd' | AmountUnit | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [balanceSats, setBalanceSats] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<'form' | 'payment'>('form');
   const [orderData, setOrderData] = useState<OrderResponse | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [paymentSent, setPaymentSent] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const [bitcoinPrice, setBitcoinPrice] = useState<number | null>(null);
+
+  const minSats = Math.max(1, Math.ceil(MIN_PHD * hashPrice));
+  const maxSats = Math.ceil(MAX_PHD * hashPrice);
+  const chargeSats = clamp(Math.ceil(selectedPhd * hashPrice), minSats, maxSats);
+  const firstSatsIncrement = Math.ceil(minSats / 1000) * 1000;
+  const maxSpendSliderPosition = Math.max(0, 1 + Math.floor((maxSats - firstSatsIncrement) / 1000));
+  const spendSliderPosition = chargeSats <= minSats
+    ? 0
+    : clamp(Math.round((chargeSats - firstSatsIncrement) / 1000) + 1, 0, maxSpendSliderPosition);
 
   useEffect(() => {
     if (isOpen) {
       setError(null);
       setSelectedPhd(1);
-      setEditing(false);
+      setEditingField(null);
       setEditValue('');
+      setBalanceSats(null);
       setSubmitting(false);
       setView('form');
       setOrderData(null);
       setCopiedField(null);
       setPaying(false);
+      setPaymentSent(false);
+      setPaymentConfirmed(false);
+      setBitcoinPrice(null);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || view !== 'payment' || !orderData) return;
+
+    let cancelled = false;
+    let checking = false;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    let closeTimeout: ReturnType<typeof setTimeout> | undefined;
+
+    const checkPayment = async () => {
+      if (cancelled || checking) return;
+      checking = true;
+
+      try {
+        const response = await fetch(`/api/router/order/${orderData.order_id}`, { cache: 'no-store' });
+        if (!response.ok) return;
+
+        const detail: OrderDetail = await response.json();
+        if (detail.txids?.length) {
+          cancelled = true;
+          if (intervalId) clearInterval(intervalId);
+          setPaymentConfirmed(true);
+          closeTimeout = setTimeout(onClose, 3000);
+          try {
+            await onCreated?.();
+          } catch {}
+        }
+      } catch {}
+      finally {
+        checking = false;
+      }
+    };
+
+    checkPayment();
+    intervalId = setInterval(checkPayment, 5000);
+
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+      if (closeTimeout) clearTimeout(closeTimeout);
+    };
+  }, [isOpen, view, orderData, onClose, onCreated]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+
+    getBitcoinPrice().then(price => {
+      if (!cancelled) setBitcoinPrice(price);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || walletType !== 'xverse') return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await request('getBalance', null);
+        if (cancelled || response.status !== 'success') return;
+        const confirmed = Number(response.result.confirmed);
+        if (Number.isFinite(confirmed)) setBalanceSats(confirmed);
+      } catch {}
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, walletType]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -56,14 +158,6 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
     window.addEventListener('keydown', handleEscKey);
     return () => window.removeEventListener('keydown', handleEscKey);
   }, [isOpen, onClose]);
-
-  const commitEdit = (raw: string) => {
-    const parsed = parseFloat(raw);
-    if (Number.isFinite(parsed)) {
-      setSelectedPhd(Math.min(MAX_PHD, Math.max(MIN_PHD, Math.round(parsed))));
-    }
-    setEditing(false);
-  };
 
   if (!isOpen) return null;
 
@@ -83,6 +177,58 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
     } catch {}
   };
 
+  const setPhdAmount = (phd: number) => {
+    setSelectedPhd(clamp(phd, MIN_PHD, MAX_PHD));
+  };
+
+  const setSatsAmount = (sats: number) => {
+    setPhdAmount((sats - 0.5) / hashPrice);
+  };
+
+  const commitPhdEdit = (raw: string) => {
+    const parsed = parseFloat(raw);
+    if (Number.isFinite(parsed)) setPhdAmount(parsed);
+    setEditingField(null);
+  };
+
+  const amountToSats = (amount: number, unit: AmountUnit) => {
+    return unit === 'sats' ? amount : amount * 1e8;
+  };
+
+  const satsToAmount = (sats: number, unit: AmountUnit) => {
+    return unit === 'sats' ? String(sats) : (sats / 1e8).toFixed(8);
+  };
+
+  const getAmountEditSats = () => {
+    if (editingField !== 'sats' && editingField !== 'btc') return chargeSats;
+    const parsed = parseFloat(editValue);
+    if (!Number.isFinite(parsed)) return chargeSats;
+    return amountToSats(parsed, editingField);
+  };
+
+  const commitAmountEdit = () => {
+    if (editingField === 'sats' || editingField === 'btc') {
+      const parsed = parseFloat(editValue);
+      if (Number.isFinite(parsed)) setSatsAmount(amountToSats(parsed, editingField));
+    }
+    setEditingField(null);
+  };
+
+  const startPhdEdit = () => {
+    setEditValue(trimPhd(selectedPhd));
+    setEditingField('phd');
+  };
+
+  const startAmountEdit = (unit: AmountUnit) => {
+    setEditValue(satsToAmount(getAmountEditSats(), unit));
+    setEditingField(unit);
+  };
+
+  const editingSats = getAmountEditSats();
+  const editingUsd = bitcoinPrice !== null
+    ? formatPrice((editingSats / 1e8) * bitcoinPrice)
+    : bitcoinPrice === null ? 'Loading...' : '—';
+
   const handleCreate = async () => {
     setSubmitting(true);
     setError(null);
@@ -97,7 +243,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             username: `${address}.refinery`,
             password: null,
           },
-          hash_days: Math.round(selectedPhd * 1e15),
+          hash_days: selectedPhd * 1e15,
           hash_price: hashPrice,
         }),
       });
@@ -135,8 +281,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
         throw new Error(response.error?.message || 'Failed to send transaction');
       }
 
-      onClose();
-      await onCreated?.();
+      setPaymentSent(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message || 'Failed to send payment');
@@ -182,78 +327,180 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
                 Work
                 <span className="relative inline-flex group">
                   <InfoIcon className="h-4 w-4 text-foreground/60 cursor-help" />
-                  <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs font-normal text-foreground opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <span className="pointer-events-none absolute bottom-full left-0 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs font-normal text-foreground opacity-0 group-hover:opacity-100 transition-opacity z-10">
                     PHd (petahash-day): Work done by 1 PH/s over 1 day. Conceptually like a KWh (kilowatt-hour).
                   </span>
                 </span>
               </h3>
-              <div className="space-y-2">
-                <div className="text-center text-foreground font-medium">
-                  {editing ? (
-                    <span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={() => commitEdit(editValue)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') commitEdit(editValue);
-                        }}
-                        autoFocus
-                        className="w-24 bg-secondary border border-foreground text-center text-foreground outline-none"
-                      /> PHd
-                    </span>
-                  ) : (
-                    <>
-                      <span
-                        onClick={() => { setEditValue(String(selectedPhd)); setEditing(true); }}
-                        className="cursor-text border-b border-dashed border-foreground/40 hover:border-foreground"
-                      >
-                        {selectedPhd} PHd
-                      </span>
-                      <div className="text-xs text-foreground/30 mt-0.5">click to type</div>
-                    </>
-                  )}
+              <div className="bg-secondary p-3 border border-border space-y-2">
+                <div
+                  className="cursor-text"
+                  onClick={() => {
+                    if (editingField !== 'phd') startPhdEdit();
+                  }}
+                >
+                  <p className="text-foreground break-all">
+                      {editingField === 'phd' ? (
+                        <span>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={() => commitPhdEdit(editValue)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitPhdEdit(editValue);
+                            }}
+                            autoFocus
+                            className="w-24 bg-secondary border border-foreground text-center text-foreground outline-none"
+                          /> PHd
+                        </span>
+                      ) : (
+                        <span className="border-b border-dashed border-foreground/40 hover:border-foreground">
+                          {formatPhd(selectedPhd)}
+                        </span>
+                      )}
+                  </p>
                 </div>
                 <div className="relative h-7">
                   <input
                     type="range"
                     min={0}
-                    max={100}
-                    step={0.1}
-                    value={phdToSlider(selectedPhd)}
+                    max={MAX_PHD}
+                    step={1}
+                    value={clamp(phdToSlider(selectedPhd), 0, 100)}
                     onChange={(e) => {
-                      setSelectedPhd(Math.min(MAX_PHD, Math.max(MIN_PHD, sliderToPhd(parseFloat(e.target.value)))));
-                      setEditing(false);
+                      setSelectedPhd(clamp(sliderToPhd(parseFloat(e.target.value)), MIN_PHD, MAX_PHD));
+                      setEditingField(null);
                     }}
                     className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full phd-slider z-10"
                   />
-                  <div className="absolute inset-0 mx-[8px] pointer-events-none">
-                    {NOTCHES.map(phd => (
-                      <div key={phd} className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-7 bg-foreground/30" style={{ left: `${phdToSlider(phd)}%`, width: '1px' }} />
-                    ))}
-                  </div>
-                </div>
-                <div className="relative mx-[8px]">
-                  <span className="absolute text-xs text-accent-2 -translate-x-1/2" style={{ left: `${phdToSlider(1)}%` }}>1</span>
-                  <span className="absolute text-xs text-accent-2 -translate-x-1/2" style={{ left: `${phdToSlider(99)}%` }}>99</span>
-                  <span>&nbsp;</span>
                 </div>
               </div>
             </div>
             <div>
-              <h3 className="text-sm font-medium text-accent-2 mb-2">Price</h3>
-              <div className="bg-secondary p-3 border border-border">
-                <p className="text-foreground">
-                  {Math.ceil(selectedPhd * hashPrice).toLocaleString()} sats
-                  <span className="text-foreground/40 ml-2">({(Math.ceil(selectedPhd * hashPrice) / 1e8).toFixed(8)} BTC)</span>
-                </p>
+              <h3 className="text-sm font-medium text-accent-2 mb-2">Spend</h3>
+              <div className="bg-secondary p-3 border border-border space-y-2">
+                <div
+                  className="cursor-text"
+                  onClick={() => {
+                    if (editingField !== 'sats' && editingField !== 'btc') startAmountEdit('sats');
+                  }}
+                >
+                  <p className="text-foreground break-all">
+                    {editingField === 'sats' || editingField === 'btc' ? (
+                      <span data-spend-editor className="inline-flex flex-wrap items-baseline gap-1">
+                        {editingField === 'sats' ? (
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={(e) => {
+                              const nextTarget = e.relatedTarget;
+                              const editor = e.currentTarget.closest('[data-spend-editor]');
+                              if (!(nextTarget instanceof Node) || !editor?.contains(nextTarget)) {
+                                commitAmountEdit();
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitAmountEdit();
+                            }}
+                            autoFocus
+                            className="w-28 bg-secondary border border-foreground text-center text-foreground outline-none"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startAmountEdit('sats')}
+                            className="border-b border-dashed border-foreground/40 hover:border-foreground"
+                          >
+                            {Math.round(editingSats).toLocaleString()}
+                          </button>
+                        )}
+                        <span>sats</span>
+                        <span className="text-foreground/40">(</span>
+                        {editingField === 'btc' ? (
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={(e) => {
+                              const nextTarget = e.relatedTarget;
+                              const editor = e.currentTarget.closest('[data-spend-editor]');
+                              if (!(nextTarget instanceof Node) || !editor?.contains(nextTarget)) {
+                                commitAmountEdit();
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') commitAmountEdit();
+                            }}
+                            autoFocus
+                            className="w-28 bg-secondary border border-foreground text-center text-foreground outline-none"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => startAmountEdit('btc')}
+                            className="border-b border-dashed border-foreground/40 hover:border-foreground"
+                          >
+                            {(editingSats / 1e8).toFixed(8)}
+                          </button>
+                        )}
+                        <span className="text-foreground/40">BTC)</span>
+                        <span className="text-foreground/40 ml-2">(~{editingUsd})</span>
+                      </span>
+                    ) : (
+                        <span className="border-b border-dashed border-foreground/40 hover:border-foreground">
+                          {chargeSats.toLocaleString()} sats
+                          <span className="text-foreground/40 ml-2">({(chargeSats / 1e8).toFixed(8)} BTC)</span>
+                          {bitcoinPrice !== null && (
+                            <span className="text-foreground/40 ml-2">(~{formatPrice((chargeSats / 1e8) * bitcoinPrice)})</span>
+                          )}
+                        </span>
+                    )}
+                  </p>
+                </div>
+                <div className="relative h-7">
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxSpendSliderPosition}
+                    step={1}
+                    value={spendSliderPosition}
+                    onChange={(e) => {
+                      const sliderPosition = Number(e.target.value);
+                      const sats = sliderPosition === 0
+                        ? minSats
+                        : Math.min(maxSats, firstSatsIncrement + (sliderPosition - 1) * 1000);
+                      setSatsAmount(sats);
+                      setEditingField(null);
+                    }}
+                    className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full phd-slider z-10"
+                  />
+                </div>
+              </div>
+              <div className="mt-4 border border-border bg-secondary/50 px-3 py-2 text-sm space-y-1">
+                {walletType === 'xverse' && balanceSats != null && (
+                  <div className="flex items-baseline justify-between gap-4">
+                    <span className="text-foreground/60">Balance</span>
+                    <span className="text-foreground text-right">{balanceSats.toLocaleString()} sats</span>
+                  </div>
+                )}
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-foreground/60">Hashprice</span>
+                  <span className="text-foreground text-right">{hashPrice.toLocaleString()} sats/PHd</span>
+                </div>
+                <div className="flex items-baseline justify-between gap-4">
+                  <span className="text-foreground/60">BTC price</span>
+                  <span className="text-foreground text-right">{formatPrice(bitcoinPrice)}</span>
+                </div>
               </div>
             </div>
 
-            <div className="text-[10px] text-gray-300 italic mt-10">
-              Each order will deliver {selectedPhd} PHd of work. Delivery will start after 1 confirmation. Confirmation must happen within 6 blocks, otherwise the order will expire. Use a high fee rate.
+            <div className="text-[10px] text-gray-300 italic mt-6">
+              This order will deliver {formatPhd(selectedPhd)} of work. Delivery will start after 1 confirmation. Confirmation must happen within 6 blocks, otherwise the order will expire. Use a high fee rate.
             </div>
 
             {halt && (
@@ -281,16 +528,27 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             ) : (
               <p className="text-sm text-accent-2 text-center mt-4">Connect your wallet to create an order</p>
             )}
+
           </div>
         )}
 
         {view === 'payment' && orderData && (
+          paymentConfirmed ? (
+            <div className="flex min-h-[420px] flex-col items-center justify-center gap-4">
+              <div className="h-40 w-40 rounded-full bg-green-500 flex items-center justify-center">
+                <svg className="h-24 w-24 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <p className="text-sm text-green-500">Payment detected</p>
+            </div>
+          ) : (
           <div className="space-y-4">
             <div className="flex flex-col items-center gap-2">
-              <div className="bg-white p-6 rounded-md">
+              <div className="bg-white p-2 rounded-md overflow-hidden">
                 <QRCode
                   value={orderData.payment_address}
-                  size={160}
+                  size={208}
                   bgColor="#ffffff"
                   fgColor="#000000"
                   level="M"
@@ -320,6 +578,9 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
                 <p className="text-foreground flex-1">
                   {orderData.payment_amount.toLocaleString()} sats
                   <span className="text-foreground/40 ml-2">({(orderData.payment_amount / 1e8).toFixed(8)} BTC)</span>
+                  {bitcoinPrice !== null && (
+                    <span className="text-foreground/40 ml-2">(~{formatPrice((orderData.payment_amount / 1e8) * bitcoinPrice)})</span>
+                  )}
                 </p>
                 <button
                   onClick={() => copyToClipboard(String(orderData.payment_amount), 'amount')}
@@ -344,24 +605,26 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
               </div>
             )}
 
-            <div className="flex justify-center gap-3 mt-6">
-              {isConnected && walletType !== 'manual' && (
-                <button
-                  onClick={handlePayWithXverse}
-                  disabled={paying}
-                  className={`px-4 py-2 text-sm font-medium ${paying ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
-                >
-                  {paying ? 'Paying…' : 'Pay with Xverse'}
-                </button>
-              )}
-              <button
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium bg-secondary text-foreground border border-border hover:bg-secondary/80"
-              >
-                Close
-              </button>
+            <div className="flex flex-col items-center gap-3 mt-6">
+              <div className="flex items-center gap-2 text-sm text-foreground/60">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground" />
+                <span>Waiting for payment</span>
+              </div>
+              <div className="flex justify-center gap-3">
+                {isConnected && walletType !== 'manual' && (
+                  <button
+                    type="button"
+                    onClick={handlePayWithXverse}
+                    disabled={paying || paymentSent || paymentConfirmed}
+                    className={`px-4 py-2 text-sm font-medium ${paying || paymentSent || paymentConfirmed ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
+                  >
+                    {paying ? 'Paying…' : paymentConfirmed ? 'Payment detected' : paymentSent ? 'Waiting for payment…' : 'Pay with Xverse'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
+          )
         )}
       </div>
     </div>
