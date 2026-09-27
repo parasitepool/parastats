@@ -1,46 +1,29 @@
-/**
- * Formats a number to always show 3 significant digits with appropriate unit suffix
- * e.g. 1234 -> 1.23K, 1234567 -> 1.23M, etc.
- */
 export function formatDifficulty(value: number | string | undefined): string {
   if (!value) return '0';
-  
+
   const numValue = typeof value === 'string' ? parseFloat(value) : value;
-  if (numValue === 0) return '0';
-  
+  if (numValue < 1) return '0';
+
   const units = ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
-  const floor = Math.floor(Math.log10(numValue) / 3);
-  const unitIndex = Math.min(floor, units.length - 1);
-  
+  const unitIndex = Math.min(Math.floor(Math.log10(numValue) / 3), units.length - 1);
+
   const scaledValue = numValue / Math.pow(1000, unitIndex);
-  
-  // Always show 3 significant digits
-  if (scaledValue >= 100) {
-    return `${Math.round(scaledValue)}${units[unitIndex]}`;
-  } else if (scaledValue >= 10) {
-    return `${scaledValue.toFixed(1)}${units[unitIndex]}`;
-  } else {
-    return `${scaledValue.toFixed(2)}${units[unitIndex]}`;
-  }
+  const truncated = Math.floor(scaledValue * 100) / 100;
+
+  return `${truncated.toFixed(2)}${units[unitIndex]}`;
 }
 
 function formatScaled(value: number | string | undefined, units: string[]): string {
   if (!value) return `0 ${units[0]}`;
 
   const numValue = typeof value === 'string' ? parseFloat(value) : value;
-  if (numValue === 0) return `0 ${units[0]}`;
+  if (numValue < 1) return `0 ${units[0]}`;
 
-  const floor = Math.floor(Math.log10(numValue) / 3);
-  const unitIndex = Math.min(floor, units.length - 1);
+  const unitIndex = Math.min(Math.floor(Math.log10(numValue) / 3), units.length - 1);
   const scaledValue = numValue / Math.pow(1000, unitIndex);
+  const truncated = Math.floor(scaledValue * 100) / 100;
 
-  if (scaledValue >= 100) {
-    return `${Math.round(scaledValue)} ${units[unitIndex]}`;
-  } else if (scaledValue >= 10) {
-    return `${scaledValue.toFixed(1)} ${units[unitIndex]}`;
-  } else {
-    return `${scaledValue.toFixed(2)} ${units[unitIndex]}`;
-  }
+  return `${truncated.toFixed(2)} ${units[unitIndex]}`;
 }
 
 export function formatHashrate(value: number | string | undefined): string {

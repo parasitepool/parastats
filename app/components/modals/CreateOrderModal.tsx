@@ -28,7 +28,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 
 const formatPhd = (phd: number) => (phd < 1 ? formatHashDays(phd * 1e15) : `${trimPhd(phd)} PHd`);
 
-const trimPhd = (phd: number) => String(Math.round(phd * 100) / 100);
+const trimPhd = (phd: number) => String(Math.floor(phd * 100) / 100);
 
 type AmountUnit = 'sats' | 'btc';
 
