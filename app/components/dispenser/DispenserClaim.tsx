@@ -45,7 +45,13 @@ interface AuctionDefaults {
     increment: number;
     duration_secs: number;
     anti_snipe_secs: number;
+    // The dispenser has a router configured, so a seller may send the
+    // proceeds into a Refinery hashrate order instead of their address.
+    refinery_enabled?: boolean;
 }
+
+// Where an auction's winning payment goes. Mirrors guac's `Payout`.
+type AuctionPayout = "address" | "refinery";
 
 // Subsets of the dispenser's /tiers and /assets responses, used to resolve
 // which slots belong to a collection the operator allows auctioning.
@@ -76,12 +82,16 @@ function buildClaimMessage(
     return `${username}|${tier}|${tierSlotIndex}|${destinationAddress}`;
 }
 
+// The payout choice rides inside the signed message (as a `|refinery` suffix)
+// so nothing between the wallet and guac can redirect the seller's proceeds.
 function buildAuctionMessage(
     username: string,
     tier: string,
     tierSlotIndex: number,
+    payout: AuctionPayout,
 ): string {
-    return `${username}|${tier}|${tierSlotIndex}|auction`;
+    const base = `${username}|${tier}|${tierSlotIndex}|auction`;
+    return payout === "refinery" ? `${base}|refinery` : base;
 }
 
 function getSafeClaimUrl(value: unknown): string | null {
@@ -224,6 +234,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     const [auctionableTiers, setAuctionableTiers] = useState<Set<string>>(new Set());
     const [createdAuctionId, setCreatedAuctionId] = useState<string | null>(null);
     const [liveAuctions, setLiveAuctions] = useState<Map<string, LiveAuction>>(new Map());
+    const [auctionPayout, setAuctionPayout] = useState<AuctionPayout>("address");
 
     const isOwner = address === userId;
     const isManual = walletType === "manual";
@@ -356,6 +367,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         tier: string,
         tierSlotIndex: number,
         signature: string,
+        payout: AuctionPayout,
     ): Promise<{ id?: string }> => {
         const response = await fetch("/api/dispenser/auction/create", {
             method: "POST",
@@ -365,6 +377,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 tier,
                 slot: tierSlotIndex,
                 signature,
+                payout,
             }),
         });
 
@@ -504,6 +517,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         if (!auctionModalSlot) return;
 
         const { tier, tierSlotIndex, index } = auctionModalSlot;
+        const payout = auctionPayout;
 
         setAuctioningSlot(index);
         setError(null);
@@ -511,7 +525,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         setAuctionModalSlot(null);
 
         try {
-            const message = buildAuctionMessage(userId, tier, tierSlotIndex);
+            const message = buildAuctionMessage(userId, tier, tierSlotIndex, payout);
 
             // Signs through the wallet abstraction so manual (self-supplied)
             // wallets get the paste-a-signature modal instead of a sats-connect
@@ -520,7 +534,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             const data = await signMessage({
                 address: userId,
                 message,
-                submit: (signature: string) => submitAuction(tier, tierSlotIndex, signature),
+                submit: (signature: string) => submitAuction(tier, tierSlotIndex, signature, payout),
             });
 
             // The slot is now reserved into the auction; reflect that locally.
@@ -688,6 +702,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                         onClick={() => {
                                             setError(null);
                                             setCreatedAuctionId(null);
+                                            setAuctionPayout("address");
                                             setAuctionModalSlot(slot);
                                         }}
                                         disabled={claiming || claimingSlot !== null || auctioningSlot !== null}
@@ -886,9 +901,32 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 >
                     <h3 className="text-lg font-bold mb-1">Auction asset</h3>
                     <p className="text-xs text-accent-2 mb-4">
-                        Reserve the asset into an auction. The winning bid is paid to your
-                        L1 address; the inscription transfers to the winner.
+                        Reserve the asset into an auction. The winning bid is paid to{" "}
+                        {auctionPayout === "refinery" ? "your Refinery hashrate order" : "your L1 address"};
+                        the inscription transfers to the winner.
                     </p>
+
+                    {/* Only offered when the dispenser has a router behind it;
+                        guac refuses the choice otherwise. */}
+                    {auctionDefaults?.refinery_enabled && (
+                        <label className="mb-4 flex items-start gap-2 text-sm cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={auctionPayout === "refinery"}
+                                onChange={(e) => setAuctionPayout(e.target.checked ? "refinery" : "address")}
+                                disabled={auctioningSlot !== null}
+                            />
+                            <span>
+                                <span className="font-medium">Fund my Refinery with the proceeds</span>
+                                <span className="block text-xs text-accent-2">
+                                    Settlement pays a hashrate order opened for {userId}.refinery.
+                                    The work bought is priced at the hashprice when the payment
+                                    confirms, and shows up in your Refinery orders.
+                                </span>
+                            </span>
+                        </label>
+                    )}
 
                     {/* Auction terms are fixed by the dispenser and shown here for
                         confirmation only — there is nothing to fill in. */}

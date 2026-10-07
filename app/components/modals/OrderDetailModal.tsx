@@ -117,7 +117,9 @@ export default function OrderDetailModal({ orderId, onClose }: OrderDetailModalP
               <div className="bg-secondary p-3 border border-border">
                 <p className="text-sm text-foreground/60">Requested</p>
                 <p className="text-foreground font-medium">
-                  {detail.requested_hash_days != null ? formatHashDays(detail.requested_hash_days) : 'Unlimited'}
+                  {detail.open && !detail.requested_hash_days
+                    ? 'Set when payment confirms'
+                    : detail.requested_hash_days != null ? formatHashDays(detail.requested_hash_days) : 'Unlimited'}
                 </p>
               </div>
               <div className="bg-secondary p-3 border border-border">
@@ -131,7 +133,7 @@ export default function OrderDetailModal({ orderId, onClose }: OrderDetailModalP
                 <p className="text-foreground font-medium">
                   {detail.hash_price != null
                     ? `${detail.hash_price.toLocaleString()} sats/PHd`
-                    : '—'}
+                    : detail.open ? 'Market price at payment' : '—'}
                 </p>
               </div>
               <div className="bg-secondary p-3 border border-border">

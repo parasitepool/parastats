@@ -15,6 +15,8 @@ interface OrderRow {
   status: string;
   review: Review;
   requested: number | null;
+  /** Open order not yet funded: nothing requested until the payment lands. */
+  awaitingPayment: boolean;
   hashrate: number;
   best_share: number | null;
   progress: number;
@@ -30,6 +32,13 @@ export function ReviewBadge({ review }: { review: Review }) {
   if (review === 'flagged') return <span className="text-red-500 text-sm ml-1" title="Flagged for review">⚑</span>;
   if (review === 'cleared') return <span className="text-foreground/40 text-sm ml-1" title="Cleared">✓</span>;
   return null;
+}
+
+// An open order has nothing to show until its payment confirms and the
+// router prices it; a sink order has no target at all.
+function formatRequested(row: Pick<OrderRow, 'requested' | 'awaitingPayment'>): string {
+  if (row.awaitingPayment) return 'Awaiting payment';
+  return row.requested != null ? formatHashDays(row.requested) : 'Unlimited';
 }
 
 function OrderProgressBar({ progress, requested }: { progress: number; requested: number | null }) {
@@ -66,7 +75,7 @@ const columns = [
   {
     key: 'requested' as keyof OrderRow,
     header: 'Requested',
-    render: (value: OrderRow[keyof OrderRow]) => value != null ? formatHashDays(Number(value)) : 'Unlimited',
+    render: (_value: OrderRow[keyof OrderRow], row: OrderRow) => formatRequested(row),
   },
   {
     key: 'hashrate' as keyof OrderRow,
@@ -163,6 +172,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
       status: o.status,
       review: o.review,
       requested: o.requested_hash_days,
+      awaitingPayment: Boolean(o.open) && !o.requested_hash_days,
       hashrate: o.hashrate,
       best_share: o.best_share,
       progress: o.requested_hash_days ? Math.min(100, (o.delivered_hash_days / o.requested_hash_days) * 100) : 0,
@@ -269,7 +279,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <p className="text-foreground/60">Requested</p>
-                    <p className="font-medium">{order.requested != null ? formatHashDays(order.requested) : 'Unlimited'}</p>
+                    <p className="font-medium">{formatRequested(order)}</p>
                   </div>
                   <div>
                     <p className="text-foreground/60">Hashrate</p>

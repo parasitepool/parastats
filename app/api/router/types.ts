@@ -168,6 +168,8 @@ export interface OrderSummary {
   endpoint: string;
   username: string;
   requested_hash_days: number | null;
+  /** Open orders are priced when paid; `requested_hash_days` is 0 until then. */
+  open?: boolean;
   hashrate: number;
   delivered_hash_days: number;
   best_share: number | null;
@@ -182,6 +184,9 @@ export interface OrderDetail {
   hash_price: number | null;
   payment_address: string | null;
   payment_amount: number | null;
+  /** Open orders are priced when paid; `requested_hash_days` is 0 until then. */
+  open?: boolean;
+  payment_deadline_height?: number | null;
   txids: string[];
   created_at: number;
   created_at_height: number | null;
@@ -190,10 +195,17 @@ export interface OrderDetail {
   sessions: SessionDetail[];
 }
 
+/**
+ * A fixed order names its work and price and is paid exactly. An open order
+ * (no `hash_days`/`hash_price`) gets an address that accepts any amount for
+ * `payment_deadline_blocks`; the router prices the work when the payment
+ * confirms. Auction payouts use the open form.
+ */
 export interface OrderRequest {
   upstream_target: UpstreamTarget;
-  hash_days: number;
-  hash_price: number;
+  hash_days?: number;
+  hash_price?: number;
+  payment_deadline_blocks?: number;
 }
 
 export interface OrderResponse {
@@ -201,4 +213,6 @@ export interface OrderResponse {
   payment_address: string;
   payment_amount: number;
   hash_price: number;
+  open?: boolean;
+  payment_deadline_height?: number;
 }
