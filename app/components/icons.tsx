@@ -301,6 +301,21 @@ export const SettingsIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => 
   </svg>
 );
 
+export const GavelIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    viewBox="0 0 20 20"
+    fill="currentColor"
+  >
+    <g transform="translate(10 10) rotate(-45)">
+      <rect x="-1" y="-7" width="2" height="6" rx="1" />
+      <rect x="-4" y="-9" width="8" height="3" rx="1.5" />
+      <rect x="-1" y="-1" width="2" height="9" rx="1" />
+    </g>
+  </svg>
+);
+
 export const XverseLogo: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"

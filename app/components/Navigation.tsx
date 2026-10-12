@@ -2,13 +2,12 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
 import { useRef, KeyboardEvent, Dispatch, SetStateAction, useEffect } from 'react';
 
 import parasiteLogo from '@/public/parasite-white.png';
 import ErrorModal from './modals/ErrorModal';
 import ConnectButton from './ConnectButton';
-import AuctionBadge from './AuctionBadge';
+import AuctionButton from './AuctionButton';
 
 interface NavigationProps {
   address?: string;
@@ -28,8 +27,6 @@ export default function Navigation({
   onAddressSubmit = () => {}
 }: NavigationProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const pathname = usePathname();
-  const isAccountPage = pathname?.startsWith('/user/') ?? false;
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -88,9 +85,9 @@ export default function Navigation({
             </div>
         </div>
 
-        {/* Right: Connect Button */}
+        {/* Right: Auction Link + Connect Button */}
         <div className="flex-shrink-0 flex items-center space-x-6 w-auto sm:w-[200px] lg:w-[300px] justify-end absolute right-4 top-4 md:relative md:right-auto md:top-auto">
-          {isAccountPage && <AuctionBadge />}
+          <AuctionButton />
           <ConnectButton />
         </div>
 

@@ -22,6 +22,7 @@ import { BookmarkIcon, TrendingUpIcon } from '@/app/components/icons';
 import DispenserClaim from "@/app/components/dispenser/DispenserClaim";
 import BadgeDisplay from '@/app/components/badges/BadgeDisplay';
 import Refinery from '@/app/components/Refinery';
+import Auction from '@/app/components/auction/Auction';
 import ErrorBoundary from '@/app/components/ErrorBoundary';
 import UserMiners from '@/app/components/UserMiners';
 import CardHeader from '@/app/components/CardHeader';
@@ -35,6 +36,7 @@ interface CollapsedSections {
   stratumLightning: boolean;
   refinery: boolean;
   dispenser: boolean;
+  auction: boolean;
   hashrateChart: boolean;
   rounds: boolean;
   miners: boolean;
@@ -44,6 +46,7 @@ const defaultCollapsedSections: CollapsedSections = {
   stratumLightning: false,
   refinery: false,
   dispenser: false,
+  auction: false,
   hashrateChart: false,
   rounds: false,
   miners: false,
@@ -60,6 +63,7 @@ function parseCollapsedSections(value: string | null): CollapsedSections {
     stratumLightning: Boolean(parsedState.stratumLightning),
     refinery: Boolean(parsedState.refinery),
     dispenser: Boolean(parsedState.dispenser),
+    auction: Boolean(parsedState.auction),
     hashrateChart: Boolean(parsedState.hashrateChart),
     rounds: Boolean(parsedState.rounds),
     miners: Boolean(parsedState.miners),
@@ -786,6 +790,13 @@ export default function UserDashboard() {
               />
             </ErrorBoundary>
           )}
+
+          <ErrorBoundary>
+            <Auction
+              collapsed={collapsedSections.auction}
+              onToggle={() => toggleCollapsedSection('auction')}
+            />
+          </ErrorBoundary>
 
           <WalletConnectModal
             isOpen={showConnectModal}
