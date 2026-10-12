@@ -6,20 +6,35 @@ import ShadowBlockCard from "./ShadowBlockCard";
 import { Block } from "@mempool/mempool.js/lib/interfaces/bitcoin/blocks";
 import { getPreference, setPreference } from "../../lib/localStorage";
 import { getBlocksTipHeight, getRecentBlocks, getRecentBlockTopDiffs, type BlockTopDiff } from "../utils/api";
-import { PlusIcon, MinusIcon, ChevronLeftIcon, ChevronRightIcon } from "./icons";
+import { ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } from "./icons";
 import Link from "next/link";
 
-// Combined Mining card that connects both chains
-function MiningCard({ nextHeight, isCompact }: { nextHeight: number; isCompact: boolean }) {
+// Expand/compact toggle, sized to match the shadow card row beside it
+function ExpandToggle({ isCompact, onToggle }: { isCompact: boolean; onToggle: () => void }) {
   return (
-    <div className="flex-shrink-0 flex flex-col items-center justify-center">
+    <button
+      onClick={onToggle}
+      className="w-full flex-1 min-h-6 flex items-center justify-center border border-border text-accent-2 hover:text-primary hover:bg-foreground/5 transition-all duration-300 ease-in-out"
+      aria-label={isCompact ? "Expand view" : "Compact view"}
+      title={isCompact ? "Expand view" : "Compact view"}
+    >
+      {isCompact ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronUpIcon className="h-4 w-4" />}
+    </button>
+  );
+}
+
+// Combined Mining card that connects both chains
+function MiningCard({ nextHeight, isCompact, onToggle }: { nextHeight: number; isCompact: boolean; onToggle: () => void }) {
+  return (
+    <div className="flex-shrink-0 self-stretch flex flex-col items-center justify-start gap-1">
       <Link
         href="/template"
         className={`border border-dashed border-gray-500/50 p-2 snap-start animate-pulse-soft flex flex-col items-center justify-center ${
           isCompact ? 'w-28' : 'w-48'
         }`}
         style={{
-          transition: 'width 0.3s ease-in-out',
+          height: isCompact ? '85px' : '200px',
+          transition: 'width 0.3s ease-in-out, height 0.3s ease-in-out',
         }}
       >
         <div className="font-bold text-gray-400">{nextHeight}</div>
@@ -31,6 +46,7 @@ function MiningCard({ nextHeight, isCompact }: { nextHeight: number; isCompact: 
           </div>
         )}
       </Link>
+      <ExpandToggle isCompact={isCompact} onToggle={onToggle} />
     </div>
   );
 }
@@ -175,18 +191,6 @@ export default function RecentBlocks() {
 
   return (
     <div className="w-full relative">
-      <div className="mb-2 flex justify-between items-center">
-        <div></div>
-        <button
-          onClick={() => setIsCompact(!isCompact)}
-          className="text-accent-2 hover:text-primary flex items-center gap-1 transition-all duration-300 ease-in-out"
-          aria-label={isCompact ? "Expand view" : "Compact view"}
-        >
-            <span className="text-sm">{isCompact ? "Expand" : "Compact"}</span>
-          {isCompact ? <PlusIcon /> : <MinusIcon />}
-        </button>
-      </div>
-
       {blocks.length > 0 ? (
         <>
           {showLeftArrow && (
@@ -200,8 +204,12 @@ export default function RecentBlocks() {
           )}
 
           <div className={`flex ${isCompact ? 'gap-2' : 'gap-4'}`}>
-            {/* Combined Mining card - vertically centered */}
-            <MiningCard nextHeight={nextBlockHeight} isCompact={isCompact} />
+            {/* Combined Mining card with expand toggle below */}
+            <MiningCard
+              nextHeight={nextBlockHeight}
+              isCompact={isCompact}
+              onToggle={() => setIsCompact(!isCompact)}
+            />
             
             {/* Scrollable chains container */}
             <div
@@ -246,8 +254,21 @@ export default function RecentBlocks() {
           )}
         </>
       ) : (
-        <div className="w-full py-10 text-center text-accent-2 border border-border">
-          {loading ? "Loading block data..." : "No block data available"}
+        <div className={`flex ${isCompact ? 'gap-2' : 'gap-4'}`}>
+          {/* Keep the expand toggle available while blocks load */}
+          <div
+            className={`flex-shrink-0 self-stretch flex flex-col ${
+              isCompact ? 'w-28' : 'w-48'
+            }`}
+          >
+            <ExpandToggle
+              isCompact={isCompact}
+              onToggle={() => setIsCompact(!isCompact)}
+            />
+          </div>
+          <div className="flex-1 py-10 text-center text-accent-2 border border-border">
+            {loading ? "Loading block data..." : "No block data available"}
+          </div>
         </div>
       )}
     </div>

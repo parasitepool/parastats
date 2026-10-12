@@ -32,8 +32,8 @@ export default function ConnectButton() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const shortenAddress = (addr: string) => {
-    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  const shortenAddress = (addr: string, head = 6) => {
+    return `${addr.slice(0, head)}...${addr.slice(-4)}`;
   };
 
   const handleXverseConnect = async () => {
@@ -108,12 +108,15 @@ export default function ConnectButton() {
         <button
           onClick={handleButtonClick}
           disabled={isConnecting}
-          className="cursor-pointer px-4 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          className="cursor-pointer h-10 flex items-center justify-center px-3 sm:px-4 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isConnecting ? (
             'Connecting...'
           ) : isConnected && address ? (
-            shortenAddress(address)
+            <>
+              <span className="sm:hidden">{shortenAddress(address, 4)}</span>
+              <span className="hidden sm:inline">{shortenAddress(address)}</span>
+            </>
           ) : (
             'Connect'
           )}

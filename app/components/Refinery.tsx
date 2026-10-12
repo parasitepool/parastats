@@ -184,7 +184,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
     return (
       <div className={containerClassName} onClick={handleClick}>
         <CardHeader
-          title={<>Refinery <span className="text-sm font-normal text-foreground/60">(beta)</span></>}
+          title="Refinery"
           icon={<RefineryIcon />}
           className={collapsed ? '' : 'mb-4'}
         />
@@ -214,7 +214,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
   return (
     <div className={containerClassName} onClick={handleClick}>
       <CardHeader
-        title={<>Refinery <span className="text-sm font-normal text-foreground/60">(beta)</span></>}
+        title="Refinery"
         icon={<RefineryIcon />}
         className={collapsed ? '' : 'mb-4'}
         action={collapsed ? null : (

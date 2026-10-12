@@ -88,6 +88,7 @@ export default function UserDashboard() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [userBlockDiffs, setUserBlockDiffs] = useState<UserBlockDiffEntry[]>([]);
   const [roundsData, setRoundsData] = useState<UserRoundsResponse | null>(null);
+  const [roundsLoaded, setRoundsLoaded] = useState(false);
   const [badgesData, setBadgesData] = useState<BadgesPayload | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<CollapsedSections>(defaultCollapsedSections);
   const [loadedCollapsePreferencesUserId, setLoadedCollapsePreferencesUserId] = useState<string | null>(null);
@@ -321,6 +322,14 @@ export default function UserDashboard() {
     };
   }, [userId, isValidAddress]);
 
+  // Reset rounds/badges state when navigating to a different address,
+  // so the previous user's data isn't shown while the new data loads
+  useEffect(() => {
+    setRoundsData(null);
+    setRoundsLoaded(false);
+    setBadgesData(null);
+  }, [userId]);
+
   // Fetch user rounds data on mount and every 60 seconds
   useEffect(() => {
     if (!isValidAddress) return;
@@ -341,6 +350,10 @@ export default function UserDashboard() {
         }
       } catch (err) {
         console.error('Error fetching rounds data:', err);
+      } finally {
+        if (mounted) {
+          setRoundsLoaded(true);
+        }
       }
     };
 
@@ -418,6 +431,14 @@ export default function UserDashboard() {
   const refineryLoading = !isInitialized || !hasInitiallyLoaded || isLoadingAccountData;
   const refineryActivated = Boolean(isLightningAuthenticated && accountData && accountData.ln_address);
   const showRefinery = isOwnProfile && (refineryLoading || refineryActivated || isManualOwner);
+  // Everything that decides the page layout (wallet init, user data, account data,
+  // rounds, collapse preferences) has resolved - render sections all at once
+  const layoutReady =
+    isInitialized &&
+    hasInitiallyLoaded &&
+    !isLoadingAccountData &&
+    roundsLoaded &&
+    loadedCollapsePreferencesUserId === userId;
   const toggleCollapsedSection = (section: keyof CollapsedSections) => {
     setCollapsedSections(value => ({
       ...value,
@@ -717,7 +738,7 @@ export default function UserDashboard() {
 
             {/* Account Activation / Lightning & Stratum Information */}
             <div className="w-full mt-4">
-              {!isInitialized || !hasInitiallyLoaded || isLoadingAccountData ? (
+              {!layoutReady ? (
                   // Loading state - Show shimmer components while data is loading
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <StratumInfo
@@ -780,7 +801,7 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {showRefinery && (
+          {layoutReady && showRefinery && (
             <ErrorBoundary>
               <Refinery
                 address={userId}
@@ -791,12 +812,22 @@ export default function UserDashboard() {
             </ErrorBoundary>
           )}
 
-          <ErrorBoundary>
-            <Auction
-              collapsed={collapsedSections.auction}
-              onToggle={() => toggleCollapsedSection('auction')}
-            />
-          </ErrorBoundary>
+          {layoutReady ? (
+            <ErrorBoundary>
+              <Auction
+                collapsed={collapsedSections.auction}
+                onToggle={() => toggleCollapsedSection('auction')}
+              />
+            </ErrorBoundary>
+          ) : (
+            // Skeleton placeholder until the layout is known
+            <div className="w-full bg-background border border-border p-4 sm:p-6 shadow-md">
+              <div className="h-7 w-40 rounded bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
+              {!collapsedSections.auction && (
+                <div className="h-14 rounded bg-gray-200 dark:bg-gray-700 animate-pulse mt-4"></div>
+              )}
+            </div>
+          )}
 
           <WalletConnectModal
             isOpen={showConnectModal}
@@ -824,17 +855,17 @@ export default function UserDashboard() {
       /> */}
 
           {/* Workers Table/Cards - show shimmer when loading or actual data when loaded */}
-          {(!hasInitiallyLoaded || (userData && userData.workerData && userData.workerData.length > 0)) && (
+          {(!layoutReady || (userData && userData.workerData && userData.workerData.length > 0)) && (
               <UserMiners
                 workers={userData?.workerData}
-                isLoading={!hasInitiallyLoaded}
+                isLoading={!layoutReady}
                 collapsed={collapsedSections.miners}
                 onToggle={() => toggleCollapsedSection('miners')}
               />
           )}
 
           {/* Blocks Section */}
-          {(!hasInitiallyLoaded || allRounds.length > 0) && (
+          {(!layoutReady || allRounds.length > 0) && (
               <div
                 className={getCollapsibleContainerClassName(
                   'w-full bg-background border border-border p-4 sm:p-6 shadow-md',

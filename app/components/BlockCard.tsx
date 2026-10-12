@@ -47,12 +47,12 @@ export default function BlockCard({ block, newBlock, isCompact = true }: BlockCa
   return (
     <Link
       href={`https://mempool.space/block/${block.id}`}
-      className={`flex-shrink-0 border p-2 hover:bg-foreground/5 transition-all duration-300 ease-in-out snap-start ${
+      className={`flex-shrink-0 overflow-hidden border p-2 hover:bg-foreground/5 transition-all duration-300 ease-in-out snap-start ${
         isCompact ? 'w-28' : 'w-48'
       }`}
       style={{
-        maxHeight: isCompact ? '85px' : '200px', 
-        transition: 'max-height 0.3s ease-in-out, width 0.3s ease-in-out'
+        height: isCompact ? '85px' : '200px',
+        transition: 'height 0.3s ease-in-out, width 0.3s ease-in-out'
       }}
       target="_blank"
       rel="noopener noreferrer"
@@ -96,15 +96,17 @@ export default function BlockCard({ block, newBlock, isCompact = true }: BlockCa
           {block.extras.pool.name || "Unknown"}
         </div>
         {!isCompact && (
-          <div className="truncate font-medium">
-            <Image 
-              src={`/pool_images/${block.extras.pool.slug}.svg`} 
-              alt={block.extras.pool.name || "Unknown"} 
-              width={20} 
-              height={20} 
-              className="w-auto h-5" 
+          <div className="relative h-5 w-5 flex-shrink-0">
+            <Image
+              src={`/pool_images/${block.extras.pool.slug}.svg`}
+              alt={block.extras.pool.name || "Unknown"}
+              fill
+              sizes="20px"
+              className="object-contain"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
+                // Clear srcset or the browser keeps using it over the fallback src
+                target.srcset = '';
                 target.src = "/pool_images/default.svg";
               }}
             />
