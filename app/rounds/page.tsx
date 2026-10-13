@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { formatDifficulty, formatAddress } from '@/app/utils/formatters';
 import { getHashrate } from '@/app/utils/api';
 import Board, { BoardColumn } from '@/app/components/tables/Board';
@@ -74,9 +75,9 @@ const participationColumns: BoardColumn<ParticipantRow>[] = [
 ];
 
 const LEADERBOARDS: { type: LeaderboardType; label: string; title: string; columns: BoardColumn<ParticipantRow>[] }[] = [
-  { type: 'work', label: 'Work', title: 'Most Work', columns: workColumns },
   { type: 'difficulty', label: 'Difficulty', title: 'Top Difficulties', columns: diffColumns },
-  { type: 'participation', label: 'Participation', title: 'Most Participation', columns: participationColumns },
+  { type: 'participation', label: 'Participation', title: 'Top Loyalty', columns: participationColumns },
+  { type: 'work', label: 'Work', title: 'Most Work', columns: workColumns },
 ];
 
 const emptyParticipants: Record<LeaderboardType, ParticipantRow[]> = {
@@ -84,6 +85,15 @@ const emptyParticipants: Record<LeaderboardType, ParticipantRow[]> = {
   difficulty: [],
   participation: [],
 };
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 sm:text-right">
+      <div className="text-xs text-foreground/40">{label}</div>
+      <div className="text-base text-foreground/80">{value}</div>
+    </div>
+  );
+}
 
 function toRows(data: RoundParticipant[]): ParticipantRow[] {
   return data.map((p, i) => ({
@@ -103,7 +113,7 @@ export default function RoundsPage() {
   const [expandedRound, setExpandedRound] = useState<number | null>(null);
   const [participants, setParticipants] = useState<Record<LeaderboardType, ParticipantRow[]>>(emptyParticipants);
   const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [mobileTab, setMobileTab] = useState<LeaderboardType>('work');
+  const [mobileTab, setMobileTab] = useState<LeaderboardType>('difficulty');
   const [networkDifficulty, setNetworkDifficulty] = useState<number | null>(null);
   const latestRequest = useRef(0);
   const expandedStatus = rounds.find(r => r.block_height === expandedRound)?.participant_status;
@@ -213,8 +223,6 @@ export default function RoundsPage() {
 
   return (
     <main className="flex-grow p-4">
-      <h1 className="text-3xl font-bold mb-6">Block History</h1>
-
       {rounds.length === 0 ? (
         <div className="text-foreground/60">No completed blocks yet.</div>
       ) : (
@@ -227,9 +235,10 @@ export default function RoundsPage() {
               <div key={round.block_height} className="border border-border bg-background shadow-md">
                 <button
                   onClick={() => toggleRound(round.block_height)}
-                  className="w-full p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-foreground/5 transition-colors cursor-pointer text-left"
+                  className="relative w-full p-4 flex flex-col gap-3 sm:grid sm:grid-cols-[auto_minmax(0,2.2fr)_repeat(4,minmax(0,1fr))_auto] sm:items-center sm:gap-4 hover:bg-foreground/5 transition-colors cursor-pointer text-left"
                 >
-                <div className="flex items-center gap-4">
+                {/* Identity: block height + winner */}
+                <div className="flex flex-col gap-1 min-w-0 pr-6 sm:pr-0">
                   <span className="text-lg font-semibold font-mono">
                     {round.block_height === 0 ? (
                       <span className="text-accent-1">Current Block</span>
@@ -248,27 +257,6 @@ export default function RoundsPage() {
                       </>
                     )}
                   </span>
-                  {round.winner_username && (
-                    <span className="text-sm text-foreground/60">
-                      Winner: {formatAddress(round.winner_username)}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-4 text-sm text-foreground/60">
-                  {round.winner_diff !== null && (
-                    <span>
-                      {round.block_height === 0 ? 'Best diff' : 'Diff'}: {formatDifficulty(round.winner_diff)}
-                    </span>
-                  )}
-                  {networkDiff !== null && (
-                    <span>Net: {formatDifficulty(networkDiff)}</span>
-                  )}
-                  {round.total_work > 0 && (
-                    <span>Work: {formatDifficulty(round.total_work)}</span>
-                  )}
-                  {round.coinbase_value !== null && (
-                    <span>{(round.coinbase_value / 1e8).toFixed(8)} BTC</span>
-                  )}
                   {round.block_height !== 0 && round.participant_status !== 'complete' && (
                     <span className={
                       round.participant_status === 'error' ? 'text-red-500' :
@@ -279,8 +267,42 @@ export default function RoundsPage() {
                        'Pending'}
                     </span>
                   )}
-                  <span className="text-foreground/40">{expandedRound === round.block_height ? '▲' : '▼'}</span>
                 </div>
+
+                {/* Stats: 2-col grid on mobile, aligned columns on desktop */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:contents">
+                  {round.winner_username ? (
+                    <div className="col-span-2 sm:col-span-1 min-w-0">
+                      <div className="text-xs text-foreground/40">Winner</div>
+                      <Link
+                        href={`/user/${round.winner_username}`}
+                        className="text-base text-foreground/80 hover:underline break-all"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {round.winner_username}
+                      </Link>
+                    </div>
+                  ) : <div className="hidden sm:block" />}
+                  {round.winner_diff !== null ? (
+                    <StatCell
+                      label={round.block_height === 0 ? 'Best diff' : 'Diff'}
+                      value={formatDifficulty(round.winner_diff)}
+                    />
+                  ) : <div className="hidden sm:block" />}
+                  {networkDiff !== null ? (
+                    <StatCell label="Net" value={formatDifficulty(networkDiff)} />
+                  ) : <div className="hidden sm:block" />}
+                  {round.total_work > 0 ? (
+                    <StatCell label="Work" value={formatDifficulty(round.total_work)} />
+                  ) : <div className="hidden sm:block" />}
+                  {round.coinbase_value !== null ? (
+                    <StatCell label="Reward" value={`${(round.coinbase_value / 1e8).toFixed(8)} BTC`} />
+                  ) : <div className="hidden sm:block" />}
+                </div>
+
+                <span className="absolute top-4 right-4 sm:static text-foreground/40">
+                  {expandedRound === round.block_height ? '▲' : '▼'}
+                </span>
               </button>
 
               {expandedRound === round.block_height && (

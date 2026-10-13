@@ -91,9 +91,9 @@ export default function Navigation({
 
   return (
     <header className="bg-background text-foreground py-5">
-      <div className="container mx-auto flex items-center justify-between gap-3 sm:gap-6">
+      <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 sm:gap-6">
         {/* Left: Logo (bug on mobile, wordmark on md and up) */}
-        <Link href="/" className="flex flex-shrink-0">
+        <Link href="/" className="flex flex-shrink-0 max-[420px]:w-full max-[420px]:justify-center">
           <Image
             src={bugLogo}
             alt="Parasite Logo"
@@ -144,7 +144,7 @@ export default function Navigation({
         )}
 
         {/* Right: Search + Auction + Connect Button */}
-        <div className="flex flex-shrink-0 items-center gap-2 sm:gap-4">
+        <div className="flex flex-shrink-0 items-center gap-2 sm:gap-4 ml-auto">
           {!searchOpen && (
             <>
               <button
@@ -154,6 +154,12 @@ export default function Navigation({
               >
                 Search
               </button>
+              <Link
+                href="/rounds"
+                className="flex-shrink-0 h-10 flex items-center justify-center px-3 sm:px-4 bg-secondary border border-border text-xs sm:text-sm font-medium hover:bg-secondary/80"
+              >
+                Blocks
+              </Link>
               <AuctionButton />
             </>
           )}

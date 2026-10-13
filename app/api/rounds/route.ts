@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { formatAddress } from '@/app/utils/formatters';
 import type { RoundRow } from './types';
 
 export async function GET() {
@@ -28,14 +27,14 @@ export async function GET() {
       `SELECT MAX(top_diff) AS best_diff FROM round_participants WHERE block_height = 0`
     ).get() as { best_diff: number | null };
 
-    // PRIVACY: only return truncated addresses, and redact winners who opted
-    // out of public listing (unmonitored winners stay visible, matching the
-    // participant queries).
+    // PRIVACY: redact winners who opted out of public listing (unmonitored
+    // winners stay visible, matching the participant queries). Public
+    // winners' full addresses are returned since they're on-chain anyway.
     const rounds: RoundRow[] = rows.map(({ winner_is_public, winner_username, ...row }) => ({
       ...row,
       winner_username:
         winner_username && (winner_is_public === null || winner_is_public === 1)
-          ? formatAddress(winner_username)
+          ? winner_username
           : null,
     }));
 
