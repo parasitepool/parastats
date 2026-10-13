@@ -32,6 +32,8 @@ interface LiveAuction {
     id: string;
     inscription_id: string;
     outpoint: string;
+    // Every inscription in the lot; a pack auction holds several
+    items?: { inscription_id: string; outpoint: string }[];
     end_time: number;
     current_high: number | null;
     min_next_bid: number;
@@ -134,12 +136,18 @@ function buildSlots(data: Eligibility): Slot[] {
 }
 
 // Auctions are keyed by both inscription id and outpoint so a slot resolves
-// whichever identifier the eligibility response carries for it.
+// whichever identifier the eligibility response carries for it. Every item of
+// a pack points at the same auction.
 function buildAuctionIndex(auctions: LiveAuction[]): Map<string, LiveAuction> {
     const index = new Map<string, LiveAuction>();
     for (const auction of auctions) {
-        if (auction.inscription_id) index.set(auction.inscription_id, auction);
-        if (auction.outpoint) index.set(auction.outpoint, auction);
+        const items = auction.items?.length
+            ? auction.items
+            : [{ inscription_id: auction.inscription_id, outpoint: auction.outpoint }];
+        for (const item of items) {
+            if (item.inscription_id) index.set(item.inscription_id, auction);
+            if (item.outpoint) index.set(item.outpoint, auction);
+        }
     }
     return index;
 }
