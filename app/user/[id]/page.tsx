@@ -594,7 +594,7 @@ export default function UserDashboard() {
                 onMouseLeave={() => setTooltipVisible(false)}
             >
             <span className="text-sm text-muted-foreground cursor-help">
-              ({Number(((parseHashrate(userData.bestDifficulty) / hashrate.currentDifficulty) * 100).toFixed(4))}%)
+              ({Number(((parseHashrate(userData.bestDifficulty) / hashrate.currentDifficulty) * 100).toFixed(2))}%)
             </span>
               {tooltipVisible && (
                   <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-48 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
@@ -812,21 +812,13 @@ export default function UserDashboard() {
             </ErrorBoundary>
           )}
 
-          {layoutReady ? (
+          {layoutReady && isOwnProfile && (
             <ErrorBoundary>
               <Auction
                 collapsed={collapsedSections.auction}
                 onToggle={() => toggleCollapsedSection('auction')}
               />
             </ErrorBoundary>
-          ) : (
-            // Skeleton placeholder until the layout is known
-            <div className="w-full bg-background border border-border p-4 sm:p-6 shadow-md">
-              <div className="h-7 w-40 rounded bg-gray-200 dark:bg-gray-700 animate-pulse"></div>
-              {!collapsedSections.auction && (
-                <div className="h-14 rounded bg-gray-200 dark:bg-gray-700 animate-pulse mt-4"></div>
-              )}
-            </div>
           )}
 
           <WalletConnectModal

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/formatters';
-import { ReviewBadge, statusColor } from '@/app/components/Refinery';
+import { ReviewBadge, statusColor } from '@/app/components/refinery/OrdersTable';
 import type { OrderDetail } from '@/app/api/router/types';
 
 interface OrderDetailModalProps {
@@ -117,9 +117,7 @@ export default function OrderDetailModal({ orderId, onClose }: OrderDetailModalP
               <div className="bg-secondary p-3 border border-border">
                 <p className="text-sm text-foreground/60">Requested</p>
                 <p className="text-foreground font-medium">
-                  {detail.open && !detail.requested_hash_days
-                    ? 'Set when payment confirms'
-                    : detail.requested_hash_days != null ? formatHashDays(detail.requested_hash_days) : 'Unlimited'}
+                  {detail.requested_hash_days != null ? formatHashDays(detail.requested_hash_days) : 'Unlimited'}
                 </p>
               </div>
               <div className="bg-secondary p-3 border border-border">
@@ -133,7 +131,7 @@ export default function OrderDetailModal({ orderId, onClose }: OrderDetailModalP
                 <p className="text-foreground font-medium">
                   {detail.hash_price != null
                     ? `${detail.hash_price.toLocaleString()} sats/PHd`
-                    : detail.open ? 'Market price at payment' : '—'}
+                    : '—'}
                 </p>
               </div>
               <div className="bg-secondary p-3 border border-border">

@@ -13,7 +13,7 @@ interface CreateOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: () => void | Promise<void>;
-  address: string;
+  address: string | null;
   hashPrice: number;
   halt: boolean;
 }
@@ -230,6 +230,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
     : bitcoinPrice === null ? 'Loading...' : '—';
 
   const handleCreate = async () => {
+    if (!address) return;
     setSubmitting(true);
     setError(null);
 
@@ -313,7 +314,11 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
             <div>
               <h3 className="text-sm font-medium text-accent-2 mb-2">Workername</h3>
               <div className="bg-secondary p-3 border border-border">
-                <p className="text-foreground break-all">{address}.refinery</p>
+                {address ? (
+                  <p className="text-foreground break-all">{address}.refinery</p>
+                ) : (
+                  <p className="text-foreground/60">Connect your wallet</p>
+                )}
               </div>
             </div>
             <div>

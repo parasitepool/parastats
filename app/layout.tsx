@@ -46,7 +46,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`antialiased`}>
         <WalletProvider>
-          <div className="min-h-screen flex flex-col container mx-auto">
+          <div className="min-h-screen flex flex-col container mx-auto px-4">
             <NavigationWrapper />
             {children}
             <Footer />

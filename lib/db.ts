@@ -249,6 +249,16 @@ function initializeTables() {
 
   addColumnIfNotExists(db, `ALTER TABLE monitored_users ADD COLUMN has_refinery_badge BOOLEAN NOT NULL DEFAULT 0`);
 
+  // Used-capacity samples from the refinery router, one row per minute.
+  // Rows older than ROUTER_CAPACITY_RETENTION_SECONDS are purged by the
+  // daily cleanup job.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS router_capacity (
+      timestamp INTEGER PRIMARY KEY,
+      used_hash_days REAL NOT NULL
+    )
+  `);
+
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_status TEXT NOT NULL DEFAULT 'pending'`);
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN block_participant_fetched_at INTEGER`);
   addColumnIfNotExists(db, `ALTER TABLE rounds ADD COLUMN network_difficulty REAL`);
@@ -276,6 +286,9 @@ function initializeTables() {
       ON round_participants(block_height, total_work DESC);
   `);
 }
+
+/** How long used-capacity samples are kept in the router_capacity table. */
+export const ROUTER_CAPACITY_RETENTION_SECONDS = 3 * 24 * 60 * 60;
 
 export function checkpointWal() {
   try {

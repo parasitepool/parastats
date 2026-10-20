@@ -8,6 +8,7 @@ import {
 import { startStratumCollector, stopStratumCollector } from "../lib/stratum-collector";
 import { startHighestDiffCollector, stopHighestDiffCollector } from "../lib/highest-diff-collector";
 import { startRoundsCollector, stopRoundsCollector } from "../lib/rounds-collector";
+import { startRouterCapacityCollector, purgeOldRouterCapacity } from "../lib/router-capacity-collector";
 import { checkpointWal, closeDb } from "../lib/db";
 import cron from "node-cron";
 
@@ -38,9 +39,13 @@ console.log("🏆 Highest diff collector started");
 startRoundsCollector();
 console.log("🔄 Rounds collector started");
 
+// Start router capacity collector (samples used capacity every minute)
+let routerCapacityJob = startRouterCapacityCollector();
+
 // Set up a job to purge old data daily at midnight
 let purgeJob = cron.schedule("0 0 * * *", async () => {
   await purgeOldData();
+  purgeOldRouterCapacity();
   console.log("🧹 Purged old pool stats data");
 });
 
@@ -74,6 +79,11 @@ function shutdown() {
 
   if (checkpointJob) {
     checkpointJob.stop();
+  }
+
+  if (routerCapacityJob) {
+    routerCapacityJob.stop();
+    console.log("⛽ Router capacity collector stopped");
   }
 
   // Stop stratum collector

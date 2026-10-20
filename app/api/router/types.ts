@@ -21,13 +21,13 @@ export interface MiningStats {
   sps_5m: number;
   sps_15m: number;
   sps_1hr: number;
-  best_share: number | null;
-  last_share: number | null;
   accepted_shares: number;
   rejected_shares: number;
   accepted_work: number;
   rejected_work: number;
   delivered_hash_days: number;
+  best_share: number | null;
+  last_share: number | null;
 }
 
 export interface UpstreamTarget {
@@ -76,6 +76,24 @@ interface RealtimeStats {
   rejected_shares: number;
   accepted_work: number;
   rejected_work: number;
+  best_share: number | null;
+  last_share: number | null;
+}
+
+export interface Connects1h {
+  total: number;
+  sessions: number;
+  probes: number;
+  rejects: number;
+  pending: number;
+}
+
+export interface Disconnects1h {
+  total: number;
+  client: number;
+  server: number;
+  trim: number;
+  rejects: number;
 }
 
 export interface UpstreamStats extends RealtimeStats {
@@ -84,6 +102,7 @@ export interface UpstreamStats extends RealtimeStats {
   orders: number;
   pending: number;
   disconnected: number;
+  disconnects_1h: number;
   totals: UpstreamTotals;
 }
 
@@ -93,44 +112,13 @@ export interface DownstreamStats extends RealtimeStats {
   sessions: number;
   idle: number;
   disconnected: number;
+  connects_1h: Connects1h;
+  disconnects_1h: Disconnects1h;
   totals: DownstreamTotals;
-}
-
-export interface OrphanReceipt {
-  derivation_index: number;
-  address: string;
-  amount: number;
-  first_seen_height: number;
 }
 
 export interface WalletInfo {
   synced: boolean;
-  orphan_receipts: OrphanReceipt[];
-}
-
-export interface IntentClaimCounts {
-  enonce1: number;
-  ip: number;
-}
-
-export interface PlacementCounts {
-  intent: number;
-  resumed: number;
-  redirected: number;
-  estimated: number;
-  blind: number;
-}
-
-export interface RoutingInfo {
-  sessions_trimmed_1h: number;
-  intents_created_1h: number;
-  intents_expired_1h: number;
-  intent_claims_1h: IntentClaimCounts;
-  placements_1h: PlacementCounts;
-  deficit_hashrate: number;
-  bucket_order_count: number;
-  sink_order_count: number;
-  starving_order_count: number;
 }
 
 export interface RouterStatus {
@@ -138,13 +126,16 @@ export interface RouterStatus {
   block_count: number;
   recent_blocks: string[];
   hash_price: number;
-  premium_percent: number;
+  hash_value: number;
+  difficulty_multiplier: number;
   total_capacity_hash_days: number;
   used_capacity_hash_days: number;
   halt: boolean;
   boost: boolean;
   wallet: WalletInfo;
-  routing: RoutingInfo;
+  deficit_hashrate: number;
+  surplus_hashrate: number;
+  starving_order_count: number;
   upstream: UpstreamStats;
   downstream: DownstreamStats;
   git_commit: string;
@@ -158,6 +149,7 @@ export interface SessionDetail {
   username: string;
   enonce1: string;
   version_mask: string | null;
+  remote_address: string;
   stats: MiningStats;
 }
 
@@ -167,9 +159,8 @@ export interface OrderSummary {
   review: Review;
   endpoint: string;
   username: string;
+  /** Sink orders have no work target (null); bucket orders always do. */
   requested_hash_days: number | null;
-  /** Open orders are priced when paid; `requested_hash_days` is 0 until then. */
-  open?: boolean;
   hashrate: number;
   delivered_hash_days: number;
   best_share: number | null;
@@ -180,13 +171,12 @@ export interface OrderDetail {
   status: OrderStatus;
   review: Review;
   upstream_target: UpstreamTarget;
+  upstream_address: string | null;
+  upstream_disconnects_total: number;
   requested_hash_days: number | null;
   hash_price: number | null;
   payment_address: string | null;
   payment_amount: number | null;
-  /** Open orders are priced when paid; `requested_hash_days` is 0 until then. */
-  open?: boolean;
-  payment_deadline_height?: number | null;
   txids: string[];
   created_at: number;
   created_at_height: number | null;
@@ -195,17 +185,11 @@ export interface OrderDetail {
   sessions: SessionDetail[];
 }
 
-/**
- * A fixed order names its work and price and is paid exactly. An open order
- * (no `hash_days`/`hash_price`) gets an address that accepts any amount for
- * `payment_deadline_blocks`; the router prices the work when the payment
- * confirms. Auction payouts use the open form.
- */
+/** A bucket order names its work (hash_days) and bid (hash_price, sats/PHd). */
 export interface OrderRequest {
   upstream_target: UpstreamTarget;
-  hash_days?: number;
-  hash_price?: number;
-  payment_deadline_blocks?: number;
+  hash_days: number;
+  hash_price: number;
 }
 
 export interface OrderResponse {
@@ -213,6 +197,23 @@ export interface OrderResponse {
   payment_address: string;
   payment_amount: number;
   hash_price: number;
-  open?: boolean;
-  payment_deadline_height?: number;
+}
+
+/** A used-capacity sample recorded by the local router capacity collector. */
+export interface CapacityPoint {
+  /** Unix epoch seconds. */
+  timestamp: number;
+  used_hash_days: number;
+}
+
+/** A bucket order's creation time, assembled server-side from order details. */
+export interface OrderTimelinePoint {
+  id: number;
+  status: OrderStatus;
+  /** Unix epoch seconds. */
+  created_at: number;
+  requested_hash_days: number;
+  /** Live values from the order summary (not cached). */
+  hashrate: number;
+  best_share: number | null;
 }

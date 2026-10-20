@@ -6,7 +6,13 @@ import { useWallet } from '../hooks/useWallet';
 import HelpModal from './modals/HelpModal';
 import WalletConnectModal, { WalletConnectView } from './modals/WalletConnectModal';
 
-export default function ConnectButton() {
+interface ConnectButtonProps {
+  /** Overrides the button classes (used for the full-width mobile menu row). */
+  className?: string;
+}
+
+export default function ConnectButton({ className }: ConnectButtonProps) {
+  const buttonClassName = className ?? 'cursor-pointer h-10 flex items-center justify-center px-3 sm:px-4 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed';
   const { address, isConnected, disconnect, connectWithLightning } = useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -108,7 +114,7 @@ export default function ConnectButton() {
         <button
           onClick={handleButtonClick}
           disabled={isConnecting}
-          className="cursor-pointer h-10 flex items-center justify-center px-3 sm:px-4 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          className={buttonClassName}
         >
           {isConnecting ? (
             'Connecting...'

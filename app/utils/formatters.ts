@@ -1,3 +1,6 @@
+// Two decimals max, trailing zeros dropped: 12.00 -> "12", 2.50 -> "2.5".
+const trimTrailingZeros = (value: number) => String(parseFloat(value.toFixed(2)));
+
 export function formatDifficulty(value: number | string | undefined): string {
   if (!value) return '0';
 
@@ -10,7 +13,7 @@ export function formatDifficulty(value: number | string | undefined): string {
   const scaledValue = numValue / Math.pow(1000, unitIndex);
   const truncated = Math.floor(scaledValue * 100) / 100;
 
-  return `${truncated.toFixed(2)}${units[unitIndex]}`;
+  return `${trimTrailingZeros(truncated)}${units[unitIndex]}`;
 }
 
 function formatScaled(value: number | string | undefined, units: string[]): string {
@@ -23,7 +26,7 @@ function formatScaled(value: number | string | undefined, units: string[]): stri
   const scaledValue = numValue / Math.pow(1000, unitIndex);
   const truncated = Math.floor(scaledValue * 100) / 100;
 
-  return `${truncated.toFixed(2)} ${units[unitIndex]}`;
+  return `${trimTrailingZeros(truncated)} ${units[unitIndex]}`;
 }
 
 export function formatHashrate(value: number | string | undefined): string {
@@ -150,14 +153,8 @@ export function formatCompactNumber(value: bigint | number): string {
 
   const scaledValue = num / Math.pow(1000, suffixIndex);
 
-  // Always show 4 significant digits
-  if (Math.abs(scaledValue) >= 100) {
-    return `${scaledValue.toFixed(1)}${suffixes[suffixIndex]}`;
-  } else if (Math.abs(scaledValue) >= 10) {
-    return `${scaledValue.toFixed(2)}${suffixes[suffixIndex]}`;
-  } else {
-    return `${scaledValue.toFixed(3)}${suffixes[suffixIndex]}`;
-  }
+  // Two decimals max, trailing zeros dropped
+  return `${trimTrailingZeros(scaledValue)}${suffixes[suffixIndex]}`;
 }
 
 export function formatHashDays(value: number | string | undefined): string {

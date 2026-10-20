@@ -142,6 +142,13 @@ body {
     animation: gavel-bang 2.5s ease-in-out infinite;
     pointer-events: none;
   }
+
+  /* Same glow as the auction button hover (static, no crackle), for the active nav item */
+  .nav-active {
+    box-shadow:
+      0 0 6px rgba(255, 245, 180, 0.8),
+      0 0 18px rgba(247, 147, 26, 0.45);
+  }
 }
 
 /* Hide scrollbar but maintain functionality */

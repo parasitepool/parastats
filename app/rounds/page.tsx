@@ -215,14 +215,14 @@ export default function RoundsPage() {
 
   if (loading) {
     return (
-      <main className="flex-grow p-4">
+      <main className="flex-grow py-4">
         <div className="text-foreground/60">Loading blocks...</div>
       </main>
     );
   }
 
   return (
-    <main className="flex-grow p-4">
+    <main className="flex-grow py-4">
       {rounds.length === 0 ? (
         <div className="text-foreground/60">No completed blocks yet.</div>
       ) : (

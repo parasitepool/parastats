@@ -2,13 +2,15 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter, usePathname } from 'next/navigation';
 import { Dispatch, SetStateAction, useEffect, useRef, useState, KeyboardEvent } from 'react';
 
 import parasiteLogo from '@/public/parasite-white.png';
-import bugLogo from '@/public/bug.png';
 import ErrorModal from './modals/ErrorModal';
 import ConnectButton from './ConnectButton';
 import AuctionButton from './AuctionButton';
+import { useWallet } from '@/app/hooks/useWallet';
+import { formatAddress } from '@/app/utils/formatters';
 
 interface NavigationProps {
   address?: string;
@@ -29,8 +31,24 @@ export default function Navigation({
 }: NavigationProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchExpanded, setSearchExpanded] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const { address: walletAddress, isConnected, disconnect } = useWallet();
+
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const desktopLinkClass = (href: string) =>
+    `flex-shrink-0 h-10 flex items-center justify-center px-3 sm:px-4 border border-border text-xs sm:text-sm font-medium bg-secondary hover:bg-secondary/80 ${
+      isActive(href) ? 'nav-active' : ''
+    }`;
+  const mobileLinkClass = (href: string) =>
+    `block px-4 py-3 text-sm font-medium border-t border-border hover:bg-foreground/5 ${
+      isActive(href) ? 'nav-active' : ''
+    }`;
 
   // Cmd/Ctrl + K opens the search
   useEffect(() => {
@@ -38,7 +56,10 @@ export default function Navigation({
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault(); // Prevent default browser behavior
         // Don't open the search while the error modal is up
-        if (!showModal) setSearchOpen(true);
+        if (!showModal) {
+          setSearchOpen(true);
+          setMenuOpen(false);
+        }
       }
     };
 
@@ -76,6 +97,39 @@ export default function Navigation({
     };
   }, [searchOpen]);
 
+  // Close the menu on outside click/tap or Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const handleClickOutside = (e: Event) => {
+      const target = e.target as Node;
+      if (menuRef.current?.contains(target) || menuButtonRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    };
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside, true);
+    document.addEventListener('touchstart', handleClickOutside, true);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside, true);
+      document.removeEventListener('touchstart', handleClickOutside, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen]);
+
+  const openSearch = () => {
+    setSearchOpen(true);
+    setMenuOpen(false);
+  };
+
+  const toggleMenu = () => {
+    setMenuOpen(open => !open);
+    setSearchOpen(false);
+  };
+
   const handleSubmit = () => {
     onAddressSubmit(address);
     setSearchOpen(false);
@@ -90,20 +144,14 @@ export default function Navigation({
   };
 
   return (
-    <header className="bg-background text-foreground py-5">
+    <header className="relative bg-background text-foreground py-5">
       <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 sm:gap-6">
-        {/* Left: Logo (bug on mobile, wordmark on md and up) */}
-        <Link href="/" className="flex flex-shrink-0 max-[420px]:w-full max-[420px]:justify-center">
-          <Image
-            src={bugLogo}
-            alt="Parasite Logo"
-            className="h-10 w-auto invert md:hidden"
-            loading="eager"
-          />
+        {/* Left: Logo (hidden on small screens while the search is open) */}
+        <Link href="/" className={`flex-shrink-0 ${searchOpen ? 'hidden lg:flex' : 'flex'}`}>
           <Image
             src={parasiteLogo}
             alt="Parasite Logo"
-            className="hidden md:block h-12 lg:h-16 w-auto"
+            className="h-10 sm:h-12 lg:h-16 w-auto"
             loading="eager"
           />
         </Link>
@@ -114,7 +162,7 @@ export default function Navigation({
             <div className="w-full max-w-md flex justify-end">
               <div
                 ref={searchRef}
-                className={`relative h-10 transition-all duration-150 ease-out ${
+                className={`relative h-10 transition-all duration-150 ease-out shadow-[0_0_6px_rgba(255,245,180,0.8),0_0_18px_rgba(247,147,26,0.45)] ${
                   searchExpanded ? 'w-full opacity-100' : 'w-10 opacity-0'
                 }`}
               >
@@ -143,28 +191,111 @@ export default function Navigation({
           </div>
         )}
 
-        {/* Right: Search + Auction + Connect Button */}
+        {/* Right: all items inline on md+; hamburger menu below md */}
         <div className="flex flex-shrink-0 items-center gap-2 sm:gap-4 ml-auto">
           {!searchOpen && (
             <>
+              <div className="hidden lg:contents">
+                <button
+                  onClick={openSearch}
+                  className="flex-shrink-0 h-10 flex items-center justify-center px-3 sm:px-4 bg-secondary border border-border text-xs sm:text-sm font-medium hover:bg-secondary/80"
+                  aria-label="Search wallet address"
+                >
+                  Search
+                </button>
+                <Link
+                  href="/rounds"
+                  className={desktopLinkClass('/rounds')}
+                >
+                  Blocks
+                </Link>
+                <Link
+                  href="/refinery"
+                  className={desktopLinkClass('/refinery')}
+                >
+                  Refinery
+                </Link>
+                <AuctionButton />
+              </div>
               <button
-                onClick={() => setSearchOpen(true)}
-                className="flex-shrink-0 h-10 flex items-center justify-center px-3 sm:px-4 bg-secondary border border-border text-xs sm:text-sm font-medium hover:bg-secondary/80"
-                aria-label="Search wallet address"
+                ref={menuButtonRef}
+                onClick={toggleMenu}
+                className="lg:hidden flex-shrink-0 h-10 flex items-center justify-center px-3 bg-secondary border border-border hover:bg-secondary/80"
+                aria-label="Menu"
+                aria-expanded={menuOpen}
               >
-                Search
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {menuOpen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  )}
+                </svg>
               </button>
-              <Link
-                href="/rounds"
-                className="flex-shrink-0 h-10 flex items-center justify-center px-3 sm:px-4 bg-secondary border border-border text-xs sm:text-sm font-medium hover:bg-secondary/80"
-              >
-                Blocks
-              </Link>
-              <AuctionButton />
             </>
           )}
-          <ConnectButton />
+          <div className="hidden lg:contents">
+            <ConnectButton />
+          </div>
         </div>
+      </div>
+
+      {/* Mobile nav menu. Kept mounted while hidden so the ConnectButton
+          instance (and any modal it opens) survives the menu closing. */}
+      <div
+        ref={menuRef}
+        className={`lg:hidden absolute top-full left-0 w-full bg-background border-x border-b border-border shadow-lg z-50 ${menuOpen && !searchOpen ? '' : 'hidden'}`}
+      >
+        <button
+          onClick={openSearch}
+          className="block w-full text-left px-4 py-3 text-sm font-medium hover:bg-foreground/5 border-t border-border"
+        >
+          Search
+        </button>
+        <Link
+          href="/rounds"
+          onClick={() => setMenuOpen(false)}
+          className={mobileLinkClass('/rounds')}
+        >
+          Blocks
+        </Link>
+        <Link
+          href="/refinery"
+          onClick={() => setMenuOpen(false)}
+          className={mobileLinkClass('/refinery')}
+        >
+          Refinery
+        </Link>
+        <AuctionButton
+          className="btn-auction block w-full text-left px-4 py-3 text-sm font-medium hover:bg-foreground/5 border-t border-border"
+          onClick={() => setMenuOpen(false)}
+        />
+        {isConnected && walletAddress ? (
+          <>
+            <button
+              onClick={() => {
+                router.push(`/user/${walletAddress}`);
+                setMenuOpen(false);
+              }}
+              className="block w-full text-left px-4 py-3 text-sm font-medium hover:bg-foreground/5 border-t border-border"
+            >
+              Account <span className="text-foreground/60">({formatAddress(walletAddress)})</span>
+            </button>
+            <button
+              onClick={() => {
+                disconnect();
+                setMenuOpen(false);
+              }}
+              className="block w-full text-left px-4 py-3 text-sm font-medium hover:bg-foreground/5 border-t border-border"
+            >
+              Disconnect <span className="text-foreground/60">({formatAddress(walletAddress)})</span>
+            </button>
+          </>
+        ) : (
+          <div className="border-t border-border p-2">
+            <ConnectButton className="cursor-pointer h-10 w-full flex items-center justify-center px-4 bg-foreground text-background hover:bg-gray-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" />
+          </div>
+        )}
       </div>
       
       {/* Error Modal */}
