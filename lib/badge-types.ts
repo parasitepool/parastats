@@ -11,6 +11,7 @@ export const REFINERY_BADGE_ID = 'refinery';
 export const DISPENSER_BADGE_ID = 'dispenser';
 export const BRAVOCADO_BADGE_ID = 'bravocado';
 export const MINER_BADGE_ID = 'miner';
+export const AUCTION_BIDDER_BADGE_ID = 'auction_bidder';
 export const AUCTION_WINNER_BADGE_ID = 'auction_winner';
 
 /** Blocks of participation per loyalty instance (mirrors para's LOYALTY_BLOCKS_PER_INSTANCE). */

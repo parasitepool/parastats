@@ -9,6 +9,7 @@ import {
   DISPENSER_BADGE_ID,
   BRAVOCADO_BADGE_ID,
   MINER_BADGE_ID,
+  AUCTION_BIDDER_BADGE_ID,
   AUCTION_WINNER_BADGE_ID,
   LOYALTY_BLOCKS_PER_INSTANCE,
 } from '@/lib/badge-types';
@@ -22,6 +23,7 @@ import {
   RefineryIcon,
   MushroomIcon,
   MinerRigIcon,
+  BidPaddleIcon,
   GavelIcon,
 } from './icons';
 
@@ -52,6 +54,7 @@ export default function BadgeDisplay({ badges, loading, onBlocksClick }: BadgeDi
   const dispenser = types[DISPENSER_BADGE_ID]?.bucket?.count ?? 0;
   const bravocado = types[BRAVOCADO_BADGE_ID]?.bucket?.count ?? 0;
   const miner = types[MINER_BADGE_ID]?.bucket?.count ?? 0;
+  const auctionBids = types[AUCTION_BIDDER_BADGE_ID]?.bucket?.count ?? 0;
   const auctionWins = types[AUCTION_WINNER_BADGE_ID]?.bucket?.count ?? 0;
 
   const hasAny =
@@ -63,6 +66,7 @@ export default function BadgeDisplay({ badges, loading, onBlocksClick }: BadgeDi
     dispenser > 0 ||
     bravocado > 0 ||
     miner > 0 ||
+    auctionBids > 0 ||
     auctionWins > 0;
 
   if (!hasAny) {
@@ -94,6 +98,14 @@ export default function BadgeDisplay({ badges, loading, onBlocksClick }: BadgeDi
           count={loyalty}
           icon={<LoyaltyIcon />}
           tooltip={`Loyalty — ${loyaltyBlocks}k blocks mined`}
+        />
+      )}
+
+      {auctionBids > 0 && (
+        <StackedMedal
+          count={auctionBids}
+          icon={<BidPaddleIcon />}
+          tooltip={`Auction Bidder — bid on ${auctionBids} auction${auctionBids === 1 ? '' : 's'}`}
         />
       )}
 

@@ -19,6 +19,7 @@ import {
   DISPENSER_BADGE_ID,
   BRAVOCADO_BADGE_ID,
   MINER_BADGE_ID,
+  AUCTION_BIDDER_BADGE_ID,
   AUCTION_WINNER_BADGE_ID,
   LOYALTY_BLOCKS_PER_INSTANCE,
   type BadgesPayload,
@@ -36,6 +37,7 @@ interface Spec {
   dispenser: number;   // distinct dispenser asset types
   bravocado?: number;  // bravocado collected from the dispenser (0 or 1)
   miner?: number;      // miner collected from the dispenser (0 or 1)
+  bids?: number;       // auctions bid on
   auctions?: number;   // auctions won
   note: string;
 }
@@ -49,10 +51,11 @@ const DEMO_USERS: Spec[] = [
   { address: '3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy',        block: 6, winners: [812345], loyalty: 0, refinery: 0, dispenser: 0, note: '1 winner trophy + 3 medals + "3"' },
   { address: '12dRugNcdxK39288NjcDV4GX7rMsKCGn6B',        block: 0, winners: [], loyalty: 1, refinery: 0, dispenser: 0, note: 'loyalty x1 (no bubble)' },
   { address: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',        block: 0, winners: [], loyalty: 3, refinery: 0, dispenser: 0, note: `loyalty x3 (${(3 * LOYALTY_BLOCKS_PER_INSTANCE) / 1000}k blocks)` },
-  { address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', block: 0, winners: [], loyalty: 0, refinery: 1, dispenser: 0, auctions: 1, note: 'refinery x1 (no bubble) + 1 auction won' },
-  { address: '3P14159f73E4gFr7JterCCQh9QjiTjiZrG',        block: 0, winners: [], loyalty: 0, refinery: 3, dispenser: 0, auctions: 3, note: 'refinery x3 + 3 auctions won' },
+  { address: 'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq', block: 0, winners: [], loyalty: 0, refinery: 1, dispenser: 0, bids: 1, auctions: 1, note: 'refinery x1 (no bubble) + 1 auction bid on and won' },
+  { address: '3P14159f73E4gFr7JterCCQh9QjiTjiZrG',        block: 0, winners: [], loyalty: 0, refinery: 3, dispenser: 0, bids: 5, auctions: 3, note: 'refinery x3 + 5 auctions bid on, 3 won' },
+  { address: 'bc1qc7slrfxkknqcq2jevvvkdgvrt8080852dfjewde450xdlk4ugp7szw5tk9', block: 0, winners: [], loyalty: 0, refinery: 0, dispenser: 0, bids: 2, note: 'auction bidder x2, never won' },
   { address: 'bc1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3', block: 0, winners: [], loyalty: 0, refinery: 0, dispenser: 4, bravocado: 1, miner: 1, note: 'dispenser x4 asset types, incl. bravocado + miner' },
-  { address: '1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF',        block: 42, winners: [790111, 795222], loyalty: 3, refinery: 2, dispenser: 5, bravocado: 1, miner: 1, auctions: 2, note: 'the full set' },
+  { address: '1FeexV6bAHb8ybZjqQMjJrcCrHGW9sb6uF',        block: 42, winners: [790111, 795222], loyalty: 3, refinery: 2, dispenser: 5, bravocado: 1, miner: 1, bids: 4, auctions: 2, note: 'the full set' },
 ];
 
 function buildBlock(total: number): BadgeType {
@@ -71,7 +74,7 @@ function buildBucket(count: number): BadgeType {
 
 function buildPayload(spec: Spec): BadgesPayload {
   return {
-    version: 2,
+    version: 3,
     computed_at: new Date().toISOString(),
     types: {
       [BLOCK_BADGE_ID]: buildBlock(spec.block),
@@ -81,6 +84,7 @@ function buildPayload(spec: Spec): BadgesPayload {
       [DISPENSER_BADGE_ID]: buildBucket(spec.dispenser),
       [BRAVOCADO_BADGE_ID]: buildBucket(spec.bravocado ?? 0),
       [MINER_BADGE_ID]: buildBucket(spec.miner ?? 0),
+      [AUCTION_BIDDER_BADGE_ID]: buildBucket(spec.bids ?? 0),
       [AUCTION_WINNER_BADGE_ID]: buildBucket(spec.auctions ?? 0),
     },
   };

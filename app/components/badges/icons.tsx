@@ -100,6 +100,31 @@ export function MinerRigIcon() {
   );
 }
 
+/** Auction bidder: a raised bidding paddle. */
+export function BidPaddleIcon() {
+  return (
+    <g transform="translate(24 22)">
+      {/* handle */}
+      <rect x="-1.2" y="2" width="2.4" height="9.5" rx="1.2" fill="#c9962f" />
+      {/* paddle face */}
+      <circle cx="0" cy="-3" r="7.2" fill="#f7d774" />
+      <circle cx="0" cy="-3" r="5.4" fill="#fff3c4" />
+      {/* bid number */}
+      <text
+        x="0"
+        y="-0.4"
+        textAnchor="middle"
+        fontSize="7.5"
+        fontWeight="700"
+        fontFamily="ui-sans-serif, system-ui, sans-serif"
+        fill="#1a1a1a"
+      >
+        1
+      </text>
+    </g>
+  );
+}
+
 /** Auction winner: a gavel resting on its striking block. */
 export function GavelIcon() {
   return (
