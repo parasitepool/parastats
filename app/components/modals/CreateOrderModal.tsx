@@ -18,7 +18,7 @@ interface CreateOrderModalProps {
   halt: boolean;
 }
 
-const MIN_PHD = 0.199;
+const MIN_PHD = 0.299;
 const MIN_SLIDER_PHD = 1;
 const MAX_PHD = 99;
 const phdToSlider = (phd: number) => phd < MIN_SLIDER_PHD ? 0 : phd;

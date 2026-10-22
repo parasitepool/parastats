@@ -19,6 +19,46 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<echarts.ECharts | null>(null);
 
+  // Scale the y-axis to the visible zoom window (merged so dataZoom is left
+  // alone), same pattern as the HashrateChart.
+  const applyYAxisScale = useCallback((chart: echarts.ECharts, startPercent: number, endPercent: number) => {
+    const currentOption = chart.getOption() as {
+      series?: Array<{ data?: (number | null)[] }>;
+      xAxis?: Array<{ data?: string[] }>;
+    };
+    const currentSeries = currentOption.series;
+    const currentXAxisData = currentOption.xAxis?.[0]?.data;
+
+    if (!currentSeries || !currentSeries.length || !currentXAxisData || !currentXAxisData.length) {
+      return;
+    }
+
+    // Fully zoomed out: revert to automatic scaling.
+    if (startPercent <= 0 && endPercent >= 100) {
+      chart.setOption({ yAxis: { min: null, max: null } }, false);
+      return;
+    }
+
+    const totalDataLength = currentXAxisData.length;
+    const startIndex = Math.floor((startPercent / 100) * totalDataLength);
+    const endIndex = Math.min(Math.ceil((endPercent / 100) * totalDataLength), totalDataLength - 1);
+
+    let visibleMax = -Infinity;
+    for (const series of currentSeries) {
+      if (!series.data) continue;
+      for (let i = startIndex; i <= endIndex && i < series.data.length; i++) {
+        const value = series.data[i];
+        if (value != null && !isNaN(value)) {
+          visibleMax = Math.max(visibleMax, value);
+        }
+      }
+    }
+
+    if (visibleMax !== -Infinity) {
+      chart.setOption({ yAxis: { min: 0, max: visibleMax * 1.1 } }, false);
+    }
+  }, []);
+
   const buildChartOptions = useCallback((data: OrderTimelinePoint[], capacityData: CapacityPoint[]) => {
     const foregroundColor = getComputedStyle(document.documentElement)
       .getPropertyValue('--foreground')
@@ -58,9 +98,16 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
     const scatterData = categories.map(ts => dotByTs.get(ts)?.requested_hash_days ?? null);
 
     // A dot within this window of the pointer wins the tooltip over the
-    // capacity line: 2% of the visible span (at least a minute per side).
+    // capacity line: 2% of the *visible* span (at least a minute per side).
+    // Computed live in the formatter so it shrinks when zoomed in.
     const span = categories.length > 1 ? categories[categories.length - 1] - categories[0] : 0;
-    const dotHoverWindow = Math.max(span * 0.02, 60_000);
+    const dotHoverWindow = () => {
+      const zoom = (chartInstanceRef.current?.getOption() as {
+        dataZoom?: Array<{ start?: number; end?: number }>;
+      } | undefined)?.dataZoom?.[0];
+      const visibleSpan = span * (((zoom?.end ?? 100) - (zoom?.start ?? 0)) / 100);
+      return Math.max(visibleSpan * 0.02, 60_000);
+    };
 
     return {
       backgroundColor: 'transparent',
@@ -95,7 +142,7 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
               nearest = p;
             }
           }
-          if (nearest && nearestDist <= dotHoverWindow) {
+          if (nearest && nearestDist <= dotHoverWindow()) {
             return `<span style="color:${dotColor}">●</span> Order ${nearest.id}<br/>` +
               `Created: ${formatRelativeTime(nearest.created_at)}<br/>` +
               `Requested: ${formatHashDays(nearest.requested_hash_days)}<br/>` +
@@ -123,9 +170,53 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
       grid: {
         left: '0.5%',
         right: '0.5%',
-        bottom: '8%',
+        top: 25,
+        bottom: 65,
         containLabel: true,
       },
+      // Same zoom slider as the other charts; filterMode 'none' keeps
+      // tooltip dataIndex aligned with the full categories array.
+      dataZoom: [
+        {
+          type: 'slider',
+          xAxisIndex: [0],
+          filterMode: 'none',
+          bottom: 8,
+          height: 24,
+          backgroundColor: secondaryColor,
+          fillerColor: 'rgba(0, 0, 0, 0.1)',
+          borderColor: borderColor,
+          handleStyle: {
+            color: foregroundColor,
+            borderColor: borderColor,
+            borderWidth: 1,
+          },
+          textStyle: {
+            color: foregroundColor,
+            fontFamily: '"Courier New", Courier, monospace',
+          },
+          selectedDataBackground: {
+            lineStyle: {
+              color: foregroundColor,
+              opacity: 0.3,
+            },
+            areaStyle: {
+              color: 'rgba(0, 0, 0, 0.1)',
+            },
+          },
+          emphasis: {
+            handleStyle: {
+              borderColor: foregroundColor,
+              color: foregroundColor,
+            },
+          },
+          moveHandleStyle: {
+            color: foregroundColor,
+            borderColor: borderColor,
+          },
+          showDetail: false,
+        },
+      ],
       xAxis: {
         type: 'category',
         boundaryGap: false,
@@ -220,13 +311,33 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
     if (!chartRef.current || isEmpty) return;
 
     let chart = chartInstanceRef.current;
-    if (!chart || chart.isDisposed()) {
+    const isNewChart = !chart || chart.isDisposed();
+    if (isNewChart) {
       chart = echarts.init(chartRef.current);
       chartInstanceRef.current = chart;
+
+      // Auto-scale the y-axis on zoom; read the range from the option
+      // (handles batch events).
+      chart.on('datazoom', () => {
+        const zoomOption = chart!.getOption() as {
+          dataZoom?: Array<{ start?: number; end?: number }>;
+        };
+        applyYAxisScale(chart!, zoomOption.dataZoom?.[0]?.start ?? 0, zoomOption.dataZoom?.[0]?.end ?? 100);
+      });
     }
 
-    chart.setOption(buildChartOptions(points, capacity), { replaceMerge: ['series'] });
-  }, [buildChartOptions, points, capacity, isEmpty]);
+    // replaceMerge drops the stale series/yAxis but merges everything else, so
+    // dataZoom keeps its range and the zoom survives refreshes.
+    chart!.setOption(buildChartOptions(points, capacity), { replaceMerge: ['series', 'yAxis'] });
+
+    // Re-apply the y-axis fit, which the rebuild reset.
+    if (!isNewChart) {
+      const zoomOption = chart!.getOption() as {
+        dataZoom?: Array<{ start?: number; end?: number }>;
+      };
+      applyYAxisScale(chart!, zoomOption.dataZoom?.[0]?.start ?? 0, zoomOption.dataZoom?.[0]?.end ?? 100);
+    }
+  }, [applyYAxisScale, buildChartOptions, points, capacity, isEmpty]);
 
   // The chart div unmounts when there is nothing to show; dispose the instance
   // so it doesn't linger on a detached node.
@@ -264,7 +375,7 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
   return (
     <>
       {loading && isEmpty && <p className="text-center">Loading data...</p>}
-      <div ref={chartRef} style={{ width: '100%', height: '300px' }}></div>
+      <div ref={chartRef} style={{ width: '100%', height: '360px' }}></div>
     </>
   );
 }

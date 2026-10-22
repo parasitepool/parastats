@@ -67,7 +67,7 @@ export default function Board<T extends { id: number; rank?: number }>({
 
   return (
     <div className="bg-background p-6 shadow-md border border-border">
-      <div className="flex justify-between items-center mb-4 gap-4">
+      <div className="flex flex-wrap justify-between items-center mb-4 gap-x-4 gap-y-2">
         <h2 className="text-2xl font-semibold whitespace-nowrap">{title}</h2>
         {roundToggle && (
           <div className="flex space-x-1">

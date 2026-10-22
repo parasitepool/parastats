@@ -28,7 +28,8 @@ function formatChance(p: number): { value: string; unit: string } | null {
   const percent = p * 100;
   if (percent >= 99.995) return { value: '~100', unit: '%' };
   if (percent >= 0.01) return { value: percent.toFixed(2), unit: '%' };
-  return { value: `1 in ${Math.round(1 / p).toLocaleString()}`, unit: '' };
+  // Tiny probabilities: two significant figures, still a percentage.
+  return { value: parseFloat(percent.toPrecision(2)).toString(), unit: '%' };
 }
 
 function formatLongDuration(seconds: number): { value: string; unit: string } | null {
@@ -89,7 +90,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
 
   // Default the cost to the current hashprice once on load (and on reset via
   // remount), unless the user has already typed something. Never auto-updates
-  // afterwards, so the triangle stays consistent.
+  // afterwards; the "Apply hashprice" button refreshes it on demand.
   const costEdited = useRef(false);
   const costInitialized = useRef(false);
   useEffect(() => {
@@ -154,50 +155,39 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
     setCost(costUnit === 'BTC' ? formatBtc(costSats) : String(Math.round(costSats)));
   };
 
-  // Scale the cost with the work so the implied hashprice stays constant.
-  const scaledCost = (costSats: number, oldWork: number, newWork: number): number =>
-    costSats > 0 && oldWork > 0 && newWork > 0 ? costSats * (newWork / oldWork) : costSats;
-
-  // Editing hashrate or duration recomputes the work (and the cost scales).
+  // Editing hashrate or duration recomputes the work; the cost is left alone
+  // and the implied hashprice moves instead.
   const handleRateEdit = (hps: number, secs: number) => {
     const workDiff1 = (hps * secs) / HASHES_PER_DIFF_1;
-    const costSats = scaledCost(canon.costSats, canon.workDiff1, workDiff1);
-    setCanon({ ...canon, hashrateHps: hps, durationSecs: secs, workDiff1, costSats });
+    setCanon({ ...canon, hashrateHps: hps, durationSecs: secs, workDiff1 });
     writeWorkDisplay(workDiff1);
-    const costChanged = costSats !== canon.costSats;
-    if (costChanged) writeCostDisplay(costSats);
-    flash(['hashwork', 'hashdays', 'chance', 'expected', ...(costChanged ? ['cost'] : [])]);
+    flash(['hashwork', 'hashdays', 'chance', 'expected', 'hashprice']);
   };
 
   // Editing a work field syncs the other work field and back-solves the
-  // hashrate for the current duration (and the cost scales). Returns whether
-  // the cost changed.
-  const handleWorkEdit = (workDiff1: number): boolean => {
-    const costSats = scaledCost(canon.costSats, canon.workDiff1, workDiff1);
+  // hashrate for the current duration.
+  const handleWorkEdit = (workDiff1: number) => {
     const hashrateHps = canon.durationSecs > 0
       ? (workDiff1 * HASHES_PER_DIFF_1) / canon.durationSecs
       : canon.hashrateHps;
-    setCanon({ ...canon, workDiff1, hashrateHps, costSats });
+    setCanon({ ...canon, workDiff1, hashrateHps });
     if (canon.durationSecs > 0) writeHashrateDisplay(hashrateHps);
-    const costChanged = costSats !== canon.costSats;
-    if (costChanged) writeCostDisplay(costSats);
-    return costChanged;
   };
 
   const handleHashworkChange = (v: string) => {
     setHashwork(v);
     const workDiff1 = parseInput(v) * workFactor;
     setHashdays(trimValue((workDiff1 * HASHES_PER_DIFF_1) / SECONDS_PER_DAY / daysFactor));
-    const costChanged = handleWorkEdit(workDiff1);
-    flash(['hashdays', 'hashrate', 'chance', 'expected', ...(costChanged ? ['cost'] : [])]);
+    handleWorkEdit(workDiff1);
+    flash(['hashdays', 'hashrate', 'chance', 'expected', 'hashprice']);
   };
 
   const handleHashdaysChange = (v: string) => {
     setHashdays(v);
     const workDiff1 = (parseInput(v) * daysFactor * SECONDS_PER_DAY) / HASHES_PER_DIFF_1;
     setHashwork(trimValue(workDiff1 / workFactor));
-    const costChanged = handleWorkEdit(workDiff1);
-    flash(['hashwork', 'hashrate', 'chance', 'expected', ...(costChanged ? ['cost'] : [])]);
+    handleWorkEdit(workDiff1);
+    flash(['hashwork', 'hashrate', 'chance', 'expected', 'hashprice']);
   };
 
   // Unit switches (except Cost's sats/BTC) do not convert the displayed
@@ -214,6 +204,34 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
     setDurationUnit(next);
     handleRateEdit(canon.hashrateHps, parseInput(duration) * nextFactor);
   };
+
+  // Price the current work (hashrate * duration) at the live refinery
+  // hashprice and write it into the cost field.
+  const applyCurrentHashprice = () => {
+    if (hashPrice == null || canon.workDiff1 <= 0) return;
+    const workPhd = (canon.workDiff1 * HASHES_PER_DIFF_1) / SECONDS_PER_DAY / 1e15;
+    const costSats = workPhd * hashPrice;
+    costEdited.current = true;
+    setCanon(c => ({ ...c, costSats }));
+    writeCostDisplay(costSats);
+    flash(['cost', 'hashprice']);
+  };
+
+  // Same width and height as the input boxes (w-28, py-1 with a 20px line
+  // box); the smaller font is what fits the label in 112px. Next to the Cost
+  // input on wide screens, beneath it on small screens.
+  const applyDisabled = hashPrice == null || canon.workDiff1 <= 0;
+  const applyHashpriceButton = (className: string) => (
+    <button
+      type="button"
+      onClick={applyCurrentHashprice}
+      disabled={applyDisabled}
+      title="Price the current hashrate and duration at the live refinery hashprice"
+      className={`w-28 px-1 py-1 text-[11px] leading-5 whitespace-nowrap text-center border ${applyDisabled ? 'text-foreground/30 border-border cursor-not-allowed' : 'text-foreground/60 hover:text-foreground border-border hover:border-foreground'} ${className}`}
+    >
+      Apply hashprice
+    </button>
+  );
 
   const handleCostUnitChange = (next: string) => {
     if (next === costUnit) return;
@@ -238,8 +256,8 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
     setHashworkUnit(next);
     const workDiff1 = parseInput(hashwork) * nextFactor;
     setHashdays(trimValue((workDiff1 * HASHES_PER_DIFF_1) / SECONDS_PER_DAY / daysFactor));
-    const costChanged = handleWorkEdit(workDiff1);
-    flash(['hashdays', 'hashrate', 'chance', 'expected', ...(costChanged ? ['cost'] : [])]);
+    handleWorkEdit(workDiff1);
+    flash(['hashdays', 'hashrate', 'chance', 'expected', 'hashprice']);
   };
 
   const handleHashdaysUnitChange = (next: string) => {
@@ -247,8 +265,8 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
     setHashdaysUnit(next);
     const workDiff1 = (parseInput(hashdays) * nextFactor * SECONDS_PER_DAY) / HASHES_PER_DIFF_1;
     setHashwork(trimValue(workDiff1 / workFactor));
-    const costChanged = handleWorkEdit(workDiff1);
-    flash(['hashwork', 'hashrate', 'chance', 'expected', ...(costChanged ? ['cost'] : [])]);
+    handleWorkEdit(workDiff1);
+    flash(['hashwork', 'hashrate', 'chance', 'expected', 'hashprice']);
   };
 
   // ---- Math (canon only, full precision) ----
@@ -279,7 +297,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
   const chanceFormatted = formatChance(chance);
 
   return (
-    <div className="text-sm grid grid-cols-1 lg:grid-cols-3 gap-x-8 gap-y-4">
+    <div className="text-sm grid grid-cols-1 xl:grid-cols-3 gap-x-8 gap-y-4">
       <div className="space-y-2">
         <UnitField
           label="Hashrate"
@@ -316,11 +334,14 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
           units={COST_UNITS.map(u => u.label)}
           unit={costUnit}
           onUnitChange={handleCostUnitChange}
+          action={applyHashpriceButton('max-xl:hidden')}
           flash={flashFields.has('cost')}
         />
+        {/* Aligned under the input box (offset by the unit select). */}
+        <div className="xl:hidden flex justify-end pr-[5.5rem]">{applyHashpriceButton('')}</div>
       </div>
 
-      <div className="space-y-2 max-lg:border-t max-lg:border-border max-lg:pt-4 lg:border-l lg:border-border lg:pl-8">
+      <div className="space-y-2 max-xl:border-t max-xl:border-border max-xl:pt-4 xl:border-l xl:border-border xl:pl-8">
         <UnitField
           label={
             <>
@@ -359,7 +380,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
         />
       </div>
 
-      <div className="space-y-2 max-lg:border-t max-lg:border-border max-lg:pt-4 lg:border-l lg:border-border lg:pl-8">
+      <div className="space-y-2 max-xl:border-t max-xl:border-border max-xl:pt-4 xl:border-l xl:border-border xl:pl-8">
         <ResultField
           label="Hashprice"
           value={price > 0 ? Math.round(price).toLocaleString() : '—'}

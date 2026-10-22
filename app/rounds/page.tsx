@@ -316,7 +316,7 @@ export default function RoundsPage() {
                   ) : (
                     <>
                       {/* Mobile: tabs */}
-                      <div className="flex space-x-2 mb-4 md:hidden">
+                      <div className="flex flex-wrap gap-2 mb-4 md:hidden">
                         {LEADERBOARDS.map(lb => (
                           <button
                             key={lb.type}

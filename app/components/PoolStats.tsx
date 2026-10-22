@@ -64,7 +64,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
     {
       title: "Highest Diff Since Last Block",
       value: poolStats?.highestDifficulty && hashrate?.currentDifficulty ? (
-        <span className='flex gap-1'>
+        <div className="flex flex-col">
           {poolStats.highestDifficulty}
           <span
             className="relative inline-block"
@@ -80,7 +80,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
               </span>
             )}
           </span>
-        </span>
+        </div>
       ) : '-',
       icon: <TrendingUpIcon />,
     },
@@ -92,25 +92,23 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
     {
       title: "Minimum Needed Diff",
       value: (
-        <div className="flex items-baseline">
+        <div className="flex flex-col">
           {formatDifficulty(hashrate?.currentDifficulty)}
           {expectedDifficulty &&
             difficultyAdjustment?.difficultyChange !== undefined && (
-              <span className="text-sm">
-                <span className="ml-1 text-accent-2 flex items-center">
-                  → {formatDifficulty(expectedDifficulty)}
-                  <span 
-                    className="relative inline-block ml-1 cursor-help"
-                    onMouseEnter={() => setTooltipVisible(true)}
-                    onMouseLeave={() => setTooltipVisible(false)}
-                  >
-                    <InfoIcon className="h-4 w-4 text-accent-3 p-0.5" />
-                    {tooltipVisible && (
-                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-48 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
-                        Expected difficulty at next adjustment based on current hashrate
-                      </div>
-                    )}
-                  </span>
+              <span className="text-sm text-accent-2 flex items-center">
+                → {formatDifficulty(expectedDifficulty)}
+                <span
+                  className="relative inline-block ml-1 cursor-help"
+                  onMouseEnter={() => setTooltipVisible(true)}
+                  onMouseLeave={() => setTooltipVisible(false)}
+                >
+                  <InfoIcon className="h-4 w-4 text-accent-3 p-0.5" />
+                  {tooltipVisible && (
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-48 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
+                      Expected difficulty at next adjustment based on current hashrate
+                    </div>
+                  )}
                 </span>
               </span>
             )}

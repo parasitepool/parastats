@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 // Hashrate units in H/s; work is priced per PHd (1 PH/s over 1 day).
@@ -81,6 +82,63 @@ const inputClassName =
 // Fixed-width column so the units line up across rows.
 const unitClassName = 'w-20 text-sm text-foreground/60 text-left';
 
+/** Custom unit dropdown: the native <select> popup renders detached from the
+ *  field (and can land outside the viewport) under mobile viewport emulation,
+ *  so the option list is anchored in-page instead. */
+function UnitSelect({ units, unit, onChange }: { units: readonly string[]; unit: string; onChange: (unit: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className={`${unitClassName} relative`}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center justify-between gap-1 bg-background outline-none cursor-pointer"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span>{unit}</span>
+        <svg className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div role="listbox" className="absolute right-0 top-full z-20 mt-1 w-full border border-border bg-background shadow-lg">
+          {units.map(u => (
+            <button
+              key={u}
+              type="button"
+              role="option"
+              aria-selected={u === unit}
+              onClick={() => { onChange(u); setOpen(false); }}
+              className={`block w-full px-2 py-1 text-left whitespace-nowrap hover:bg-foreground/10 ${u === unit ? 'text-foreground' : ''}`}
+            >
+              {u}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface UnitFieldProps {
   label: ReactNode;
   value: string;
@@ -108,13 +166,7 @@ export function UnitField({ label, value, onChange, units, unit, onUnitChange, a
           className={`${inputClassName}${flash ? ' bg-foreground/10 border-foreground' : ''}`}
           placeholder="0"
         />
-        <select
-          value={unit}
-          onChange={(e) => onUnitChange(e.target.value)}
-          className={`${unitClassName} bg-background outline-none cursor-pointer`}
-        >
-          {units.map(u => <option key={u} value={u}>{u}</option>)}
-        </select>
+        <UnitSelect units={units} unit={unit} onChange={onUnitChange} />
       </span>
     </div>
   );
