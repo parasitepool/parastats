@@ -5,7 +5,7 @@ import type { CapacityPoint } from '../../types';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-// Serves the locally collected used-capacity time series (last 3 days).
+// Serves the locally collected used-capacity time series (last 24 hours).
 export async function GET() {
   try {
     const cutoff = Math.floor(Date.now() / 1000) - ROUTER_CAPACITY_RETENTION_SECONDS;

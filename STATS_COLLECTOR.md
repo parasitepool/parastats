@@ -74,7 +74,7 @@ Example: `/api/pool-stats/historical?period=24h&interval=15m`
 
 ## Router Capacity Collector
 
-The same jobs process also samples the refinery router's used capacity (`used_capacity_hash_days`) every minute into the `router_capacity` table (`timestamp` PRIMARY KEY, `used_hash_days` REAL). This powers the used-capacity line on the refinery page's Demand chart, served via `/api/router/capacity/historical`. Rows older than 3 days are removed by the daily purge job. The collector is disabled when `ROUTER_API_URL` is unset.
+The same jobs process also samples the refinery router's used capacity (`used_capacity_hash_days`) every minute into the `router_capacity` table (`timestamp` PRIMARY KEY, `used_hash_days` REAL). This powers the used-capacity line on the refinery page's Demand chart, served via `/api/router/capacity/historical` (last 24 hours only). Rows older than 24 hours are removed by the daily purge job. The collector is disabled when `ROUTER_API_URL` is unset.
 
 ## Development Notes
 

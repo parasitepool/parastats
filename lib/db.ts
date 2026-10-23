@@ -288,7 +288,7 @@ function initializeTables() {
 }
 
 /** How long used-capacity samples are kept in the router_capacity table. */
-export const ROUTER_CAPACITY_RETENTION_SECONDS = 3 * 24 * 60 * 60;
+export const ROUTER_CAPACITY_RETENTION_SECONDS = 24 * 60 * 60;
 
 export function checkpointWal() {
   try {

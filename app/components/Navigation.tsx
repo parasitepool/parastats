@@ -35,7 +35,8 @@ export default function Navigation({
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const menuOpenRef = useRef(false);
   const router = useRouter();
   const pathname = usePathname();
   const { address: walletAddress, isConnected, disconnect } = useWallet();
@@ -97,28 +98,143 @@ export default function Navigation({
     };
   }, [searchOpen]);
 
-  // Close the menu on outside click/tap or Escape
+  // Close the menu on Escape
   useEffect(() => {
     if (!menuOpen) return;
 
-    const handleClickOutside = (e: Event) => {
-      const target = e.target as Node;
-      if (menuRef.current?.contains(target) || menuButtonRef.current?.contains(target)) return;
-      setMenuOpen(false);
-    };
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') setMenuOpen(false);
     };
 
-    document.addEventListener('mousedown', handleClickOutside, true);
-    document.addEventListener('touchstart', handleClickOutside, true);
     document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [menuOpen]);
+
+  // Lock body scroll while the drawer is open
+  useEffect(() => {
+    if (!menuOpen) return;
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside, true);
-      document.removeEventListener('touchstart', handleClickOutside, true);
-      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
     };
   }, [menuOpen]);
+
+  // Close the drawer when growing past the mobile breakpoint (e.g. rotating
+  // a tablet), so scroll never stays locked on a hidden drawer.
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      if (e.matches) setMenuOpen(false);
+    };
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
+
+  // Drag gestures for the drawer: drag left from the right screen edge to
+  // open it, drag right on the open drawer or backdrop to close it. On
+  // Android the edge drag can race the system back gesture.
+  useEffect(() => {
+    menuOpenRef.current = menuOpen;
+  }, [menuOpen]);
+
+  useEffect(() => {
+    const EDGE_PX = 24;
+    const DRAWER_WIDTH_PX = 256; // w-64
+    let startX = 0;
+    let startY = 0;
+    let tracking = false;
+    let dragging = false;
+    let snapTimer: number | undefined;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      // The drawer only exists below the lg breakpoint.
+      if (window.matchMedia('(min-width: 1024px)').matches) return;
+      const touch = e.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      dragging = false;
+      if (menuOpenRef.current) {
+        const target = e.target as Node;
+        tracking = !!(menuRef.current?.contains(target) || backdropRef.current?.contains(target));
+      } else {
+        tracking = startX >= window.innerWidth - EDGE_PX;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!tracking) return;
+      const drawer = menuRef.current;
+      const backdrop = backdropRef.current;
+      if (!drawer || !backdrop) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (!dragging) {
+        // Wait for meaningful movement, then require horizontal intent in
+        // the right direction (left to open, right to close).
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        if (Math.abs(dy) > Math.abs(dx) || (menuOpenRef.current ? dx <= 0 : dx >= 0)) {
+          tracking = false;
+          return;
+        }
+        dragging = true;
+        // 1:1 finger tracking: no transitions mid-drag, and the closed
+        // drawer (invisible class) must be force-shown.
+        drawer.style.transition = 'none';
+        backdrop.style.transition = 'none';
+        drawer.style.visibility = 'visible';
+      }
+      // Stop the page from scrolling while the drawer follows the finger.
+      e.preventDefault();
+      const offset = menuOpenRef.current
+        ? Math.min(Math.max(dx, 0), DRAWER_WIDTH_PX)
+        : Math.min(Math.max(DRAWER_WIDTH_PX + dx, 0), DRAWER_WIDTH_PX);
+      drawer.style.translate = `${offset}px 0`;
+      backdrop.style.opacity = String(1 - offset / DRAWER_WIDTH_PX);
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (!tracking) return;
+      tracking = false;
+      if (!dragging) return;
+      dragging = false;
+      const drawer = menuRef.current;
+      const backdrop = backdropRef.current;
+      if (!drawer || !backdrop) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      // Commit when dragged past half the drawer width.
+      const open = menuOpenRef.current
+        ? dx < DRAWER_WIDTH_PX / 2
+        : dx < -DRAWER_WIDTH_PX / 2;
+      // Re-enable the class transitions and snap to the final position.
+      drawer.style.transition = '';
+      backdrop.style.transition = '';
+      drawer.style.translate = open ? '0px 0' : `${DRAWER_WIDTH_PX}px 0`;
+      backdrop.style.opacity = open ? '1' : '0';
+      // Sync React state once the snap animation finished, then drop the
+      // inline overrides so the classes take over (same visual state).
+      snapTimer = window.setTimeout(() => {
+        if (open) setSearchOpen(false);
+        setMenuOpen(open);
+        drawer.style.translate = '';
+        drawer.style.visibility = '';
+        backdrop.style.opacity = '';
+      }, 200);
+    };
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    // Not passive: preventDefault stops the page scrolling mid-drag.
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    document.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('touchcancel', handleTouchEnd);
+      window.clearTimeout(snapTimer);
+    };
+  }, []);
 
   const openSearch = () => {
     setSearchOpen(true);
@@ -145,9 +261,9 @@ export default function Navigation({
 
   return (
     <header className="relative bg-background text-foreground py-5">
-      <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 sm:gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-6 -mx-2">
         {/* Left: Logo (hidden on small screens while the search is open) */}
-        <Link href="/" className={`flex-shrink-0 ${searchOpen ? 'hidden lg:flex' : 'flex'}`}>
+        <Link href="/" onClick={() => setMenuOpen(false)} className={`flex-shrink-0 ${searchOpen ? 'hidden lg:flex' : 'flex'}`}>
           <Image
             src={parasiteLogo}
             alt="Parasite Logo"
@@ -217,20 +333,23 @@ export default function Navigation({
                 </Link>
                 <AuctionButton />
               </div>
+              {/* z-50 keeps the X above the drawer (z-40) and backdrop
+                  (z-30); the logo stays behind them. */}
               <button
-                ref={menuButtonRef}
                 onClick={toggleMenu}
-                className="lg:hidden flex-shrink-0 h-10 flex items-center justify-center px-3 bg-secondary border border-border hover:bg-secondary/80"
+                className="lg:hidden relative z-50 flex-shrink-0 h-10 flex items-center justify-center px-3 bg-secondary border border-border hover:bg-secondary/80"
                 aria-label="Menu"
                 aria-expanded={menuOpen}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  {menuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
+                {/* Hamburger morphs into an X via crossfade + rotation */}
+                <span className="relative block h-5 w-5">
+                  <svg xmlns="http://www.w3.org/2000/svg" className={`absolute inset-0 h-5 w-5 transition-all duration-200 ${menuOpen ? 'opacity-0 rotate-90' : 'opacity-100 rotate-0'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
-                </svg>
+                  </svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" className={`absolute inset-0 h-5 w-5 transition-all duration-200 ${menuOpen ? 'opacity-100 rotate-0' : 'opacity-0 -rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </span>
               </button>
             </>
           )}
@@ -240,11 +359,32 @@ export default function Navigation({
         </div>
       </div>
 
-      {/* Mobile nav menu. Kept mounted while hidden so the ConnectButton
-          instance (and any modal it opens) survives the menu closing. */}
+      {/* Backdrop for the mobile drawer; tap to close */}
+      <div
+        ref={backdropRef}
+        onClick={() => setMenuOpen(false)}
+        aria-hidden="true"
+        className={`lg:hidden fixed inset-0 z-30 bg-black/50 transition-opacity duration-200 ${
+          menuOpen && !searchOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+      />
+
+      {/* Mobile nav drawer, sliding in from the right. Kept mounted while
+          hidden so the ConnectButton instance (and any modal it opens)
+          survives the menu closing. The top padding matches the header
+          height (py-5 + h-10 logo, h-12 at sm) so the items start below
+          the header and the X sits in the panel's empty header area. No
+          translate in the open state: a translated ancestor becomes the
+          containing block for fixed descendants, which would trap modals
+          (e.g. wallet connect) inside the drawer. */}
       <div
         ref={menuRef}
-        className={`lg:hidden absolute top-full left-0 w-full bg-background border-x border-b border-border shadow-lg z-50 ${menuOpen && !searchOpen ? '' : 'hidden'}`}
+        aria-hidden={!(menuOpen && !searchOpen)}
+        className={`lg:hidden fixed inset-y-0 right-0 z-40 w-64 overflow-y-auto bg-background border-l border-border shadow-lg pt-20 sm:pt-[88px] transition-[translate,visibility] duration-200 ease-out ${
+          menuOpen && !searchOpen
+            ? 'visible'
+            : 'translate-x-full invisible pointer-events-none'
+        }`}
       >
         <button
           onClick={openSearch}

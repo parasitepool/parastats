@@ -3,7 +3,7 @@ import { getDb, ROUTER_CAPACITY_RETENTION_SECONDS } from './db';
 import { fetch } from './http-client';
 
 // Samples the refinery router's used capacity every minute so the Demand
-// chart can plot it as a time series. Rows older than 3 days are purged.
+// chart can plot it as a time series. Rows older than 24 hours are purged.
 let isRunning = false;
 
 async function collectRouterCapacity() {
