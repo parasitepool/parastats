@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { fetch } from '@/lib/http-client';
 import { cachedJson } from '@/lib/route-cache';
-import type { OrderDetail, OrderSummary, OrderTimelinePoint } from '../../types';
+import { fetchAllRouterOrders, routerAuthHeaders } from '@/lib/router-orders';
+import type { OrderDetail, OrderTimelinePoint } from '../../types';
 
 export const dynamic = 'force-dynamic';
 
-// Assembling the timeline costs one orders-list call plus detail fetches for
-// new orders; cache so polling clients share one assembly per window.
+// Assembling the timeline costs one or more orders-list pages plus detail
+// fetches for new orders; cache so polling clients share one assembly per
+// window.
 const TTL_MS = 30_000;
 
 // The orders list API does not return creation times, so each bucket order's
@@ -15,22 +17,14 @@ const TTL_MS = 30_000;
 // the router no longer reports are pruned so the cache can't grow forever.
 const orderCache = new Map<number, { created_at: number; requested_hash_days: number }>();
 
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
-  if (process.env.ROUTER_API_TOKEN) {
-    headers['Authorization'] = `Bearer ${process.env.ROUTER_API_TOKEN}`;
-  }
-  return headers;
-}
-
 async function fetchTimeline(routerBase: string): Promise<OrderTimelinePoint[]> {
-  const url = new URL(`${routerBase}/api/router/orders`);
-  // Match the refinery page's Orders table: only live bucket orders.
-  url.searchParams.set('status', 'active,in_mempool');
-  const res = await fetch(url, { cache: 'no-store', headers: authHeaders() });
-  if (!res.ok) throw new Error(`Router orders failed (${res.status})`);
+  // The list endpoint is paginated: fetch every active bucket order, not just
+  // the newest page, so the demand chart accounts for the whole book.
+  const orders = await fetchAllRouterOrders(routerBase, {
+    status: 'active,in_mempool',
+    kind: 'bucket',
+  });
 
-  const orders: OrderSummary[] = await res.json();
   // Bucket orders have a fixed work target; sink orders (no target) are excluded.
   const bucketOrders = orders.filter(
     o => o.requested_hash_days != null && o.requested_hash_days > 0,
@@ -47,7 +41,7 @@ async function fetchTimeline(routerBase: string): Promise<OrderTimelinePoint[]> 
     missing.map(async order => {
       const res = await fetch(`${routerBase}/api/router/order/${order.id}`, {
         cache: 'no-store',
-        headers: authHeaders(),
+        headers: routerAuthHeaders(),
       });
       if (!res.ok) throw new Error(`Order ${order.id} failed (${res.status})`);
       return (await res.json()) as OrderDetail;

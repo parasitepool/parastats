@@ -32,6 +32,8 @@ export default function RefineryPage() {
   const fetchAll = useCallback(async () => {
     const ordersUrl = new URL('/api/router/orders', window.location.origin);
     ordersUrl.searchParams.set('status', ACTIVE_STATUSES);
+    // Sink orders have no work target and would inflate the order count.
+    ordersUrl.searchParams.set('kind', 'bucket');
 
     // No status filter: the connected user's full history, like the account page.
     let myOrdersUrl: URL | null = null;
