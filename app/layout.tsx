@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import NavigationWrapper from "./components/NavigationWrapper";
+import XverseAutoConnect from "./components/XverseAutoConnect";
 import Footer from "./components/Footer";
 import { WalletProvider } from "./hooks/useWallet";
 
@@ -46,6 +47,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`antialiased`}>
         <WalletProvider>
+          <XverseAutoConnect />
           <div className="min-h-screen flex flex-col container mx-auto px-4">
             <NavigationWrapper />
             {children}

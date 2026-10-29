@@ -1,8 +1,9 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
-import { AddressPurpose, MessageSigningProtocols, RpcErrorCode, request } from '@sats-connect/core';
+import { AddressPurpose, MessageSigningProtocols, RpcErrorCode, isProviderInstalled, request } from '@sats-connect/core';
 import { isValidBitcoinAddress, normalizeBitcoinAddress } from '@/app/utils/validators';
+import { getXverseBrowserUrl, isMobileDevice, XVERSE_PROVIDER_ID } from '@/app/utils/xverse';
 import ManualSignModal, { ManualSignRequest } from '@/app/components/modals/ManualSignModal';
 
 export type WalletType = 'xverse' | 'manual';
@@ -337,6 +338,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [addAddressToMonitoring]);
 
   const connectWithLightning = useCallback(async (): Promise<{ address: string; token: string } | null> => {
+    // Mobile wallets only expose sats-connect inside their own browser. Hand
+    // off with a marker so the page can reconnect automatically.
+    if (!isProviderInstalled(XVERSE_PROVIDER_ID) && isMobileDevice()) {
+      window.location.href = getXverseBrowserUrl(window.location.href, true);
+      return null;
+    }
+
     try {
       const response = await request('getAccounts', {
         purposes: [AddressPurpose.Payment],

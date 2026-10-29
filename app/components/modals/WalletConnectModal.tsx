@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation';
 import { isProviderInstalled } from '@sats-connect/core';
 import { useWallet } from '@/app/hooks/useWallet';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
+import { isMobileDevice, XVERSE_PROVIDER_ID } from '@/app/utils/xverse';
 import { SettingsIcon, XverseLogo } from '@/app/components/icons';
-
-const XVERSE_PROVIDER_ID = 'XverseProviders.BitcoinProvider';
 
 export type WalletConnectView = 'choice' | 'manual';
 
@@ -31,11 +30,13 @@ export default function WalletConnectModal({
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasXverse, setHasXverse] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setView(initialView);
       setHasXverse(isProviderInstalled(XVERSE_PROVIDER_ID));
+      setIsMobile(isMobileDevice());
     } else {
       setManualAddress('');
       setIsConnecting(false);
@@ -122,31 +123,38 @@ export default function WalletConnectModal({
         </div>
 
         {view === 'choice' ? (
-          <div className="grid grid-cols-2 gap-5 py-4">
-            <div className="relative group">
+          <div className="space-y-3 py-4">
+            <div className="grid grid-cols-2 gap-5">
+              <div className="relative group">
+                <button
+                  onClick={handleXverse}
+                  disabled={!hasXverse && !isMobile}
+                  aria-label={isMobile && !hasXverse ? 'Open in Xverse app' : 'Connect with Xverse'}
+                  className="w-full aspect-square flex flex-col items-center justify-center gap-2 border border-border hover:bg-secondary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                >
+                  <XverseLogo className="w-12 h-12" />
+                  <span className="text-sm font-medium">Xverse</span>
+                </button>
+                {!hasXverse && !isMobile && (
+                  <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block w-max p-2 bg-background border border-border shadow-lg text-xs z-10">
+                    Xverse extension not detected
+                  </div>
+                )}
+              </div>
               <button
-                onClick={handleXverse}
-                disabled={!hasXverse}
-                aria-label="Connect with Xverse"
-                className="w-full aspect-square flex flex-col items-center justify-center gap-2 border border-border hover:bg-secondary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                onClick={() => setView('manual')}
+                aria-label="Connect manually"
+                className="aspect-square flex flex-col items-center justify-center gap-2 border border-border hover:bg-secondary-hover transition-colors"
               >
-                <XverseLogo className="w-12 h-12" />
-                <span className="text-sm font-medium">Xverse</span>
+                <SettingsIcon className="w-12 h-12" />
+                <span className="text-sm font-medium">Manual</span>
               </button>
-              {!hasXverse && (
-                <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block w-max p-2 bg-background border border-border shadow-lg text-xs z-10">
-                  Xverse extension not detected
-                </div>
-              )}
             </div>
-            <button
-              onClick={() => setView('manual')}
-              aria-label="Connect manually"
-              className="aspect-square flex flex-col items-center justify-center gap-2 border border-border hover:bg-secondary-hover transition-colors"
-            >
-              <SettingsIcon className="w-12 h-12" />
-              <span className="text-sm font-medium">Manual</span>
-            </button>
+            {isMobile && !hasXverse && (
+              <p className="text-center text-xs text-foreground/60">
+                Xverse will open this page in its in-app browser and ask you to connect.
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
