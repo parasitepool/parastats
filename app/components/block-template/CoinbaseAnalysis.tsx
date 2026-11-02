@@ -214,6 +214,9 @@ export default function CoinbaseAnalysis({
             {coinbaseData.asciiTag ||
               "No readable ASCII found in script signature"}
           </div>
+          <div className="text-xs text-accent-3">
+            Printable runs after the pool extranonces
+          </div>
         </InfoCard>
 
         {coinbaseData.txDetails.witnessCommitmentNonce && (
@@ -253,7 +256,7 @@ export default function CoinbaseAnalysis({
           </InfoCard>
 
           <InfoCard
-            label="Number of Recipients"
+            label="Number of Outputs"
             value={coinbaseData.outputs.length.toString()}
           >
             <div className="text-base mb-1">
@@ -263,7 +266,7 @@ export default function CoinbaseAnalysis({
             <div className="text-xs text-accent-3">
               {addressOutputs.length} address
               {addressOutputs.length !== 1 ? "es" : ""}, {dataOutputs.length}{" "}
-              data output{dataOutputs.length !== 1 ? "s" : ""}
+              OP_RETURN{dataOutputs.length !== 1 ? "s" : ""}
             </div>
           </InfoCard>
 
@@ -312,8 +315,6 @@ function OutputCard({
   output: CoinbaseOutput;
   index: number;
 }) {
-  const isOpReturn = output.type === "nulldata";
-
   return (
     <div className="p-3 bg-foreground/5 border border-border">
       {/* Header with output info and value in one line */}
@@ -332,17 +333,15 @@ function OutputCard({
             {output.type === "address"
               ? "Address"
               : output.type === "nulldata"
-              ? "Data"
+              ? "OP_RETURN"
               : "Unknown"}
           </span>
         </div>
 
-        {!isOpReturn && (
-          <div className="font-mono text-sm font-semibold">
-            {(output.value / 100000000).toFixed(8)}{" "}
-            <span className="text-xs text-accent-2">BTC</span>
-          </div>
-        )}
+        <div className="font-mono text-sm font-semibold">
+          {(output.value / 100000000).toFixed(8)}{" "}
+          <span className="text-xs text-accent-2">BTC</span>
+        </div>
       </div>
 
       {/* Address/Script - more compact */}
@@ -350,7 +349,7 @@ function OutputCard({
         <div className="mb-2">
           {output.address === "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa" ? (
             <div className="font-mono text-xs bg-foreground/10 p-1.5 rounded break-all text-accent-3">
-              Block Miner&apos;s Address
+              Block Winner&apos;s Address
             </div>
           ) : output.address === "bc1qkgef7pl8vdrtuc4wk8fssycz366xp5ukzsm8gp" ? (
             <div className="space-y-1">

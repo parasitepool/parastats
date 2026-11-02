@@ -1,6 +1,43 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { computeCoinbaseOutputValue } from '@/app/utils/bitcoinUtils';
 import type { RoundRow } from './types';
+
+const MAX_TEMPLATE_AGE_SECONDS = 60;
+
+function getCurrentTemplateReward(db: ReturnType<typeof getDb>): number | null {
+  try {
+    const row = db.prepare(`
+      SELECT coinbase1, coinbase2, extranonce1, extranonce2_size, timestamp
+      FROM stratum_notifications
+      WHERE pool = 'Parasite'
+      ORDER BY id DESC
+      LIMIT 1
+    `).get() as {
+      coinbase1: string;
+      coinbase2: string;
+      extranonce1: string | null;
+      extranonce2_size: number | null;
+      timestamp: number;
+    } | undefined;
+
+    if (!row) return null;
+
+    const ageSeconds = Math.floor(Date.now() / 1000) - row.timestamp;
+    if (ageSeconds > MAX_TEMPLATE_AGE_SECONDS) return null;
+
+    const extranonce1 = row.extranonce1 || '00000000';
+    const extranonce2Size = row.extranonce2_size ?? 4;
+    const coinbaseRaw =
+      row.coinbase1 + extranonce1 + '00'.repeat(extranonce2Size) + row.coinbase2;
+    const value = computeCoinbaseOutputValue(coinbaseRaw);
+
+    return value > 0 ? value : null;
+  } catch (error) {
+    console.error('Error computing current template reward:', error);
+    return null;
+  }
+}
 
 export async function GET() {
   try {
@@ -47,7 +84,7 @@ export async function GET() {
       rounds.unshift({
         block_height: 0,
         block_hash: null,
-        coinbase_value: null,
+        coinbase_value: getCurrentTemplateReward(db),
         winner_diff: bestDiffRow.best_diff,
         winner_username: null,
         participant_status: 'complete',

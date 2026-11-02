@@ -13,6 +13,7 @@ export interface RoundParticipantRow {
 export interface RoundRow {
   block_height: number;
   block_hash: string | null;
+  // For block_height 0 this is the current template's potential reward.
   coinbase_value: number | null;
   winner_diff: number | null;
   winner_username: string | null;

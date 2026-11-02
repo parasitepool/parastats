@@ -2,6 +2,12 @@ import net from 'net';
 import { getDb } from './db';
 import { triggerDelayedCollection, getCurrentBlockHeight } from './highest-diff-collector';
 import { triggerRoundsSync } from './rounds-collector';
+import { getStratumReconnectDelay } from './stratum-reconnect';
+import {
+  STRATUM_HEARTBEAT_INTERVAL_SECONDS,
+  writeStratumStatus,
+  type StratumCollectorState,
+} from './stratum-status';
 
 interface StratumMessage {
   id?: number;
@@ -32,83 +38,258 @@ interface StratumNotificationData {
 
 class StratumCollector {
   private socket: net.Socket | null = null;
-  private messageId: number = 1;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
+  private connectTimer: NodeJS.Timeout | null = null;
+  private handshakeTimer: NodeJS.Timeout | null = null;
+  private messageId: number = 1;
+  private subscribeRequestId: number | null = null;
+  private authorizeRequestId: number | null = null;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 10;
   private isConnecting: boolean = false;
   private isDestroyed: boolean = false;
+  private started: boolean = false;
   private messageBuffer: string = '';
   private extranonce1: string | null = null;
   private extranonce2Size: number | null = null;
   private notificationCount: number = 0;
+  private state: StratumCollectorState = 'connecting';
+  private connectedAt: number | null = null;
+  private lastAttemptAt: number | null = null;
+  private nextRetryAt: number | null = null;
+  private lastError: string | null = null;
+  private lastResolvedAddress: string | null = null;
+  private lastNotificationAt: number | null = null;
+
+  private readonly CONNECT_TIMEOUT_MS = 10_000;
+  private readonly HANDSHAKE_TIMEOUT_MS = 15_000;
+  private readonly IDLE_TIMEOUT_MS = 60_000;
+  private readonly NOTIFICATION_WATCHDOG_SECONDS = 120;
   private readonly CLEANUP_INTERVAL = 50; // Run cleanup every 50 notifications
   private readonly MAX_NOTIFICATIONS = 100; // Keep only latest 100 notifications
   private readonly MAX_BUFFER_SIZE = 1024 * 1024; // 1MB max buffer size
 
   constructor(
-    private host: string = 'parasite.wtf',
-    private port: number = 42069
+    private host: string = process.env.STRATUM_HOST || 'parasite.wtf',
+    private port: number = Number(process.env.STRATUM_PORT || 42069),
   ) {}
 
-  async connect(): Promise<void> {
-    if (this.isConnecting || this.isDestroyed) return;
+  public start(): void {
+    if (this.started) return;
 
+    this.started = true;
+    this.startHeartbeat();
+    this.connect();
+  }
+
+  private connect(): void {
+    if (this.isDestroyed || this.isConnecting) return;
+
+    this.clearReconnectTimer();
     this.isConnecting = true;
-    console.log(`Attempting to connect to ${this.host}:${this.port}...`);
+    this.state = 'connecting';
+    this.lastAttemptAt = Math.floor(Date.now() / 1000);
+    this.nextRetryAt = null;
+    this.lastError = null;
+    this.connectedAt = null;
+    this.messageBuffer = '';
+    this.messageId = 1;
+    this.subscribeRequestId = null;
+    this.authorizeRequestId = null;
+    this.extranonce1 = null;
+    this.extranonce2Size = null;
+    this.lastResolvedAddress = null;
+    this.lastNotificationAt = null;
+    this.writeStatus();
+
+    const socket = new net.Socket();
+    this.socket = socket;
+
+    socket.setKeepAlive(true, 30_000);
+    socket.setNoDelay(true);
+    socket.setTimeout(this.IDLE_TIMEOUT_MS, () => {
+      if (this.socket !== socket) return;
+      this.lastError = 'Stratum connection idle timeout';
+      this.disconnect(socket, 'idle timeout');
+    });
+
+    socket.once('connect', () => {
+      if (this.socket !== socket) return;
+
+      this.isConnecting = false;
+      this.clearConnectTimer();
+      if (socket.remoteAddress) {
+        this.lastResolvedAddress = socket.remoteAddress.replace(/^::ffff:/, '');
+      }
+      this.writeStatus();
+      this.startHandshakeTimeout(socket);
+      this.subscribe();
+    });
+
+    socket.once('error', (error) => {
+      if (this.socket !== socket) return;
+      console.error('Stratum socket error:', error);
+      this.lastError = StratumCollector.errorMessage(error);
+      this.disconnect(socket, 'socket error');
+    });
+
+    socket.once('close', () => {
+      if (this.socket !== socket) return;
+      this.disconnect(socket, 'connection closed');
+    });
+
+    socket.once('end', () => {
+      if (this.socket !== socket) return;
+      this.disconnect(socket, 'connection ended');
+    });
+
+    socket.on('data', (data) => {
+      if (this.socket !== socket) return;
+      this.handleData(data);
+    });
+
+    socket.on('lookup', (error, address, family) => {
+      if (this.socket !== socket) return;
+      if (error) {
+        console.error('Stratum DNS lookup failed:', error);
+        return;
+      }
+      if (address) {
+        this.lastResolvedAddress = family === 6 ? `[${address}]` : address;
+        this.writeStatus();
+      }
+    });
+
+    this.connectTimer = setTimeout(() => {
+      if (this.socket !== socket) return;
+      this.lastError = 'Stratum connection timed out';
+      this.disconnect(socket, 'connect timeout');
+    }, this.CONNECT_TIMEOUT_MS);
 
     try {
-      this.socket = new net.Socket();
-      
-      // Set up socket event handlers
-      this.socket.on('connect', () => {
-        console.log('Connected to Parasite stratum pool');
-        this.isConnecting = false;
-        this.reconnectAttempts = 0;
-        this.subscribe();
-      });
-
-      this.socket.on('data', (data) => {
-        this.handleData(data);
-      });
-
-      this.socket.on('error', (error) => {
-        console.error('Stratum socket error:', error);
-        this.handleDisconnect();
-      });
-
-      this.socket.on('close', () => {
-        console.log('Stratum connection closed');
-        this.handleDisconnect();
-      });
-
-      this.socket.on('end', () => {
-        console.log('Stratum connection ended');
-        this.handleDisconnect();
-      });
-
-      // Connect with timeout
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Connection timeout'));
-        }, 10000);
-
-        this.socket!.connect(this.port, this.host, () => {
-          clearTimeout(timeout);
-          resolve();
-        });
-
-        this.socket!.on('error', (error) => {
-          clearTimeout(timeout);
-          reject(error);
-        });
-      });
-
+      socket.connect({ host: this.host, port: this.port });
     } catch (error) {
-      console.error('Failed to connect to stratum pool:', error);
-      this.isConnecting = false;
-      this.handleDisconnect();
-      throw error;
+      this.lastError = StratumCollector.errorMessage(error);
+      this.disconnect(socket, 'connect error');
+    }
+  }
+
+  private startHandshakeTimeout(socket: net.Socket): void {
+    this.clearHandshakeTimer();
+    this.handshakeTimer = setTimeout(() => {
+      if (this.socket !== socket) return;
+      this.lastError = 'Stratum handshake timed out';
+      this.disconnect(socket, 'handshake timeout');
+    }, this.HANDSHAKE_TIMEOUT_MS);
+  }
+
+  private startHeartbeat(): void {
+    if (this.heartbeatTimer) return;
+
+    this.heartbeatTimer = setInterval(() => {
+      this.writeStatus();
+      this.checkNotificationWatchdog();
+    }, STRATUM_HEARTBEAT_INTERVAL_SECONDS * 1000);
+  }
+
+  private checkNotificationWatchdog(): void {
+    if (this.state !== 'connected' || !this.socket) return;
+
+    const lastTemplateAt = this.lastNotificationAt ?? this.connectedAt;
+    if (lastTemplateAt === null) return;
+
+    const ageSeconds = Math.floor(Date.now() / 1000) - lastTemplateAt;
+    if (ageSeconds > this.NOTIFICATION_WATCHDOG_SECONDS) {
+      this.lastError = `No block template received for ${ageSeconds}s`;
+      this.disconnect(this.socket, 'notification timeout');
+    }
+  }
+
+  private writeStatus(): void {
+    writeStratumStatus({
+      state: this.state,
+      host: this.host,
+      port: this.port,
+      connectedAt: this.connectedAt,
+      lastAttemptAt: this.lastAttemptAt,
+      nextRetryAt: this.nextRetryAt,
+      reconnectAttempts: this.reconnectAttempts,
+      lastError: this.lastError,
+      resolvedAddress: this.lastResolvedAddress,
+      updatedAt: Math.floor(Date.now() / 1000),
+    });
+  }
+
+  private disconnect(socket: net.Socket, reason: string): void {
+    if (this.socket !== socket) {
+      socket.removeAllListeners();
+      socket.destroy();
+      return;
+    }
+
+    this.clearConnectTimer();
+    this.clearHandshakeTimer();
+    this.socket = null;
+    this.isConnecting = false;
+    this.messageBuffer = '';
+    this.subscribeRequestId = null;
+    this.authorizeRequestId = null;
+    this.extranonce1 = null;
+    this.extranonce2Size = null;
+    this.connectedAt = null;
+    socket.removeAllListeners();
+    socket.destroy();
+
+    if (this.isDestroyed) return;
+
+    if (!this.lastError) {
+      this.lastError = reason === 'connection closed' || reason === 'connection ended'
+        ? 'Connection closed by upstream'
+        : reason;
+    }
+
+    this.scheduleReconnect();
+  }
+
+  private scheduleReconnect(): void {
+    if (this.isDestroyed) return;
+
+    this.clearReconnectTimer();
+    const delay = getStratumReconnectDelay(this.reconnectAttempts);
+    this.state = 'reconnecting';
+    this.nextRetryAt = Math.floor(Date.now() / 1000) + Math.ceil(delay / 1000);
+    this.writeStatus();
+
+    console.log(
+      `Reconnecting to ${this.host}:${this.port} in ${delay}ms ` +
+      `(attempt ${this.reconnectAttempts + 1})`,
+    );
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.reconnectAttempts++;
+      this.connect();
+    }, delay);
+  }
+
+  private clearConnectTimer(): void {
+    if (this.connectTimer) {
+      clearTimeout(this.connectTimer);
+      this.connectTimer = null;
+    }
+  }
+
+  private clearHandshakeTimer(): void {
+    if (this.handshakeTimer) {
+      clearTimeout(this.handshakeTimer);
+      this.handshakeTimer = null;
+    }
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
   }
 
@@ -126,10 +307,10 @@ class StratumCollector {
 
       // Process complete messages (separated by newlines)
       const lines = this.messageBuffer.split('\n');
-      
+
       // Keep the last incomplete line in the buffer
       this.messageBuffer = lines.pop() || '';
-      
+
       // Process each complete line
       for (const line of lines) {
         if (line.trim()) {
@@ -149,30 +330,74 @@ class StratumCollector {
   private handleMessage(message: StratumMessage): void {
     if (message.method === 'mining.notify') {
       this.processNotification(message);
-    } else if (message.method === 'mining.set_difficulty') {
+      return;
+    }
+
+    if (message.method === 'mining.set_difficulty') {
       // Keep difficulty changes quiet unless there's an issue
-    } else if (message.id && message.result !== undefined) {
-      // Handle method responses
-      
-      // If this is the subscription response (ID 1), capture extranonce values
-      if (message.id === 1 && message.result) {
-        console.log('📋 Connected and subscribed to Parasite stratum pool');
-        
-        // Extract extranonce1 and extranonce2_size from subscription result
-        // Result format: [[["mining.set_difficulty", "subscription_id"], ["mining.notify", "subscription_id"]], "extranonce1", extranonce2_size]
-        if (Array.isArray(message.result) && message.result.length >= 3) {
-          this.extranonce1 = message.result[1];
-          this.extranonce2Size = message.result[2];
-          console.log(`🔧 Extranonce1: ${this.extranonce1}, Extranonce2 size: ${this.extranonce2Size}`);
-        }
-        
-        this.handleSubscriptionResponse();
-      } else if (message.id === 2 && message.result === true) {
-        console.log('🔐 Authorization successful - receiving mining notifications');
-      }
-    } else if (message.error) {
+      return;
+    }
+
+    if (typeof message.id === 'number' && message.id === this.subscribeRequestId) {
+      this.handleSubscribeResponse(message);
+      return;
+    }
+
+    if (typeof message.id === 'number' && message.id === this.authorizeRequestId) {
+      this.handleAuthorizeResponse(message);
+      return;
+    }
+
+    if (message.error) {
       console.error('❌ Stratum error:', message.error);
     }
+  }
+
+  private handleSubscribeResponse(message: StratumMessage): void {
+    this.subscribeRequestId = null;
+
+    if (message.error) {
+      this.lastError = `mining.subscribe failed: ${JSON.stringify(message.error)}`.slice(0, 500);
+      if (this.socket) this.disconnect(this.socket, 'subscribe error');
+      return;
+    }
+
+    // Result format: [[["mining.set_difficulty", "subscription_id"], ...], "extranonce1", extranonce2_size]
+    if (Array.isArray(message.result) && message.result.length >= 3) {
+      this.extranonce1 = typeof message.result[1] === 'string' ? message.result[1] : null;
+      this.extranonce2Size = typeof message.result[2] === 'number' ? message.result[2] : null;
+      console.log(`🔧 Extranonce1: ${this.extranonce1}, Extranonce2 size: ${this.extranonce2Size}`);
+    }
+
+    this.clearHandshakeTimer();
+    this.state = 'connected';
+    this.connectedAt = Math.floor(Date.now() / 1000);
+    this.nextRetryAt = null;
+    this.lastError = null;
+    this.writeStatus();
+    console.log(`📋 Connected and subscribed to ${this.host}:${this.port}`);
+
+    this.sendAuthorization();
+  }
+
+  private handleAuthorizeResponse(message: StratumMessage): void {
+    this.authorizeRequestId = null;
+
+    if (message.error) {
+      console.error('❌ Stratum authorization failed:', message.error);
+      this.lastError = `mining.authorize failed: ${JSON.stringify(message.error)}`.slice(0, 500);
+      this.writeStatus();
+      return;
+    }
+
+    if (message.result !== true) {
+      console.error('❌ Stratum authorization was not accepted:', message.result);
+      this.lastError = 'mining.authorize was not accepted';
+      this.writeStatus();
+      return;
+    }
+
+    console.log('🔐 Authorization successful - receiving mining notifications');
   }
 
   private processNotification(message: StratumMessage): void {
@@ -196,6 +421,11 @@ class StratumCollector {
 
       const now = Math.floor(Date.now() / 1000);
       const notificationId = `${now}_${String(jobId)}`;
+      this.lastNotificationAt = now;
+      // A delivered template proves the connection is healthy; only then
+      // reset the reconnect backoff. Subscribing alone is not enough because
+      // an unhealthy upstream can accept, subscribe, and immediately close.
+      this.reconnectAttempts = 0;
 
       const notification: StratumNotificationData = {
         notification_id: notificationId,
@@ -220,7 +450,7 @@ class StratumCollector {
       // Log only on clean job notifications (new blocks) to reduce noise
       if (cleanJobs) {
         console.log(`🎯 New block template: Job ${jobId} (${new Date(now * 1000).toISOString()})`);
-        
+
         // Trigger highest diff collection for the previous block
         // The new block means the previous block is now complete
         this.triggerHighestDiffCollection();
@@ -237,7 +467,7 @@ class StratumCollector {
   private storeNotification(notification: StratumNotificationData): void {
     try {
       const db = getDb();
-      
+
       const stmt = db.prepare(`
         INSERT OR REPLACE INTO stratum_notifications (
           notification_id, timestamp, pool, job_id, prev_block_hash,
@@ -279,12 +509,12 @@ class StratumCollector {
   private cleanupOldNotifications(): void {
     try {
       const db = getDb();
-      
+
       // Delete all notifications except the latest number defined in MAX_NOTIFICATIONS
       const result = db.prepare(`
-        DELETE FROM stratum_notifications 
+        DELETE FROM stratum_notifications
         WHERE id <= (
-          SELECT COALESCE(MAX(id) - ?, 0) 
+          SELECT COALESCE(MAX(id) - ?, 0)
           FROM stratum_notifications
         )
       `).run(this.MAX_NOTIFICATIONS);
@@ -300,26 +530,25 @@ class StratumCollector {
   private subscribe(): void {
     if (!this.socket) return;
 
-    // Send mining.subscribe with more standard parameters
-    const subscribeMsg = {
-      id: this.messageId++,
-      method: "mining.subscribe",
-      params: ["parastats-collector/1.0"]
-    };
-
-    this.sendMessage(subscribeMsg);
-    // Wait for subscription response before trying to authorize
+    const id = this.messageId++;
+    this.subscribeRequestId = id;
+    this.sendMessage({
+      id,
+      method: 'mining.subscribe',
+      params: ['parastats-collector/1.0'],
+    });
   }
 
-  private handleSubscriptionResponse(): void {
-    // Use proper Parasite pool credentials: Bitcoin address + "x" password
-    const authorizeMsg = {
-      id: this.messageId++,
-      method: "mining.authorize",
-      params: ["1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", "x"]  // Using Satoshi's address as example
-    };
-    
-    this.sendMessage(authorizeMsg);
+  private sendAuthorization(): void {
+    if (!this.socket) return;
+
+    const id = this.messageId++;
+    this.authorizeRequestId = id;
+    this.sendMessage({
+      id,
+      method: 'mining.authorize',
+      params: ['1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa', 'x'],
+    });
   }
 
   private sendMessage(message: Record<string, unknown>): void {
@@ -333,57 +562,31 @@ class StratumCollector {
     }
   }
 
-  private handleDisconnect(): void {
+  public destroy(): void {
     if (this.isDestroyed) return;
 
-    this.isConnecting = false;
-    this.messageBuffer = ''; // Clear message buffer on disconnect
-    this.notificationCount = 0; // Reset notification counter on disconnect
-    
-    if (this.socket) {
-      this.socket.removeAllListeners();
-      if (!this.socket.destroyed) {
-        this.socket.destroy();
-      }
-      this.socket = null;
-    }
-
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-    }
-
-    // Implement exponential backoff for reconnection
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-      console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts})`);
-      
-      this.reconnectTimer = setTimeout(() => {
-        this.reconnectAttempts++;
-        this.connect().catch(error => {
-          console.error('Reconnection failed:', error);
-        });
-      }, delay);
-    } else {
-      console.error('Max reconnection attempts reached. Giving up.');
-    }
-  }
-
-  public destroy(): void {
     this.isDestroyed = true;
-    this.messageBuffer = ''; // Clear message buffer
-    
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+    this.clearReconnectTimer();
+    this.clearConnectTimer();
+    this.clearHandshakeTimer();
+
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
 
     if (this.socket) {
-      this.socket.removeAllListeners();
-      if (!this.socket.destroyed) {
-        this.socket.destroy();
-      }
+      const socket = this.socket;
       this.socket = null;
+      socket.removeAllListeners();
+      socket.destroy();
     }
+
+    this.state = 'stopped';
+    this.connectedAt = null;
+    this.nextRetryAt = null;
+    this.lastError = null;
+    this.writeStatus();
   }
 
   /**
@@ -402,6 +605,11 @@ class StratumCollector {
         console.error('Error getting block height for highest diff collection:', error);
       });
   }
+
+  private static errorMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.slice(0, 500);
+  }
 }
 
 // Singleton instance
@@ -413,10 +621,7 @@ export function startStratumCollector(): StratumCollector {
   }
 
   stratumCollector = new StratumCollector();
-  
-  stratumCollector.connect().catch(error => {
-    console.error('Failed to start stratum collector:', error);
-  });
+  stratumCollector.start();
 
   return stratumCollector;
 }
@@ -427,4 +632,3 @@ export function stopStratumCollector(): void {
     stratumCollector = null;
   }
 }
-

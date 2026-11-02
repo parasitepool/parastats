@@ -5,6 +5,7 @@ import {
   decodeCoinbaseScriptSigInfo,
   getTransaction
 } from "../../utils/bitcoinUtils";
+import { formatDifficulty } from "../../utils/formatters";
 import InfoCard from "./InfoCard";
 import { useMemo } from "react";
 
@@ -14,6 +15,9 @@ interface BlockHeaderProps {
 
 export default function BlockHeader({ notification }: BlockHeaderProps) {
   const blockData = useMemo(() => {
+    const previousBlockHash = stratumPrevHashToBlockHash(notification.prevBlockHash);
+    const previousBlockHashIsValid = isBlockHash(previousBlockHash);
+
     try {
       // Use actual extranonce values from stratum notification, with fallbacks
       const extranonce1 = notification.extranonce1 || '00000000';
@@ -36,6 +40,8 @@ export default function BlockHeader({ notification }: BlockHeaderProps) {
         blockHeight: scriptSigInfo.height,
         difficulty,
         readableTimestamp,
+        previousBlockHash,
+        previousBlockHashIsValid,
         success: true
       };
     } catch (error) {
@@ -44,68 +50,62 @@ export default function BlockHeader({ notification }: BlockHeaderProps) {
         blockHeight: null,
         difficulty: 0,
         readableTimestamp: 'Invalid',
+        previousBlockHash,
+        previousBlockHashIsValid,
         success: false
       };
     }
-  }, [notification.coinbase1, notification.coinbase2, notification.extranonce1, notification.extranonce2Size, notification.nBits, notification.nTime]);
+  }, [notification.coinbase1, notification.coinbase2, notification.extranonce1, notification.extranonce2Size, notification.nBits, notification.nTime, notification.prevBlockHash]);
 
   return (
     <div className="space-y-6">
-      {/* Block Info Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <InfoCard 
-          label="Pool" 
-          value={notification.pool} 
-          className="md:col-span-1"
+      {/* Top cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <InfoCard
+          label="Block Height"
+          value={blockData.blockHeight?.toLocaleString() ?? "Unknown"}
         />
-        {blockData.blockHeight && (
-          <InfoCard 
-            label="Block Height" 
-            value={blockData.blockHeight.toLocaleString()} 
-            className="md:col-span-1 lg:col-span-1"
-          />
-        )}
-        <InfoCard 
-            label="Job type" 
-            value={notification.cleanJobs ? 
-              'New template (clean job)' : 
-              'Existing template update'
-            }
-            className="md:col-span-1 lg:col-span-1"
-          />
-      </div>
-
-      {/* Technical Details Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <InfoCard 
-          label="Job ID" 
-          value={notification.jobId} 
-          isMono 
+        <InfoCard
+          label="Job ID"
+          value={notification.jobId}
+          isMono
         />
-        <InfoCard 
-          label="Version" 
-          value={notification.version} 
-          isMono 
+        <InfoCard
+          label="nBits (Network difficulty)"
+          value={`${notification.nBits} (${formatDifficulty(blockData.difficulty)})`}
+          isMono
         />
-        <InfoCard 
-          label="nBits (Target difficulty)" 
-          value={`${notification.nBits} (${blockData.difficulty.toFixed(2)})`} 
-          isMono 
+        <InfoCard
+          label="Version"
+          value={notification.version}
+          isMono
         />
-        <InfoCard 
-          label="nTime (Timestamp)" 
-          value={`${notification.nTime} (${blockData.readableTimestamp})`} 
-          isMono 
+        <InfoCard
+          label="nTime (Timestamp)"
+          value={`${notification.nTime} (${blockData.readableTimestamp})`}
+          isMono
         />
-      </div>
-
-      {/* Large Data Fields */}
-      <div className="space-y-4">
-        <InfoCard 
-          label="Previous Block Hash" 
-          value={notification.prevBlockHash} 
-          isMono 
-        />
+        <InfoCard
+          label="Previous Block Hash"
+          value={blockData.previousBlockHash}
+          isMono
+        >
+          {blockData.previousBlockHashIsValid ? (
+            <a
+              href={`https://mempool.space/block/${blockData.previousBlockHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-sm break-all text-accent-2 hover:text-white underline transition-colors"
+              title="Open previous block on mempool.space"
+            >
+              {blockData.previousBlockHash}
+            </a>
+          ) : (
+            <span className="font-mono text-sm break-all">
+              {blockData.previousBlockHash}
+            </span>
+          )}
+        </InfoCard>
       </div>
     </div>
   );
@@ -142,6 +142,18 @@ function calculateDifficultyFromNBits(nBits: string): number {
     console.error('Error calculating difficulty from nBits:', error);
     return 0;
   }
+}
+
+function isBlockHash(value: string): boolean {
+  return /^[0-9a-f]{64}$/.test(value);
+}
+
+// Stratum sends the previous block hash with its 4-byte words reversed.
+function stratumPrevHashToBlockHash(prevHash: string): string {
+  const normalized = prevHash.toLowerCase();
+  if (!isBlockHash(normalized)) return normalized;
+
+  return normalized.match(/.{8}/g)?.reverse().join("") ?? normalized;
 }
 
 // Format hex timestamp to readable date

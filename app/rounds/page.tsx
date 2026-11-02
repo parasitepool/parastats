@@ -282,6 +282,17 @@ export default function RoundsPage() {
                         {round.winner_username}
                       </Link>
                     </div>
+                  ) : round.block_height === 0 ? (
+                    <div className="col-span-2 sm:col-span-1 min-w-0">
+                      <div className="text-xs text-foreground/40">Template</div>
+                      <Link
+                        href="/template"
+                        className="text-base text-foreground/80 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        View current template
+                      </Link>
+                    </div>
                   ) : <div className="hidden sm:block" />}
                   {round.winner_diff !== null ? (
                     <StatCell
@@ -290,13 +301,16 @@ export default function RoundsPage() {
                     />
                   ) : <div className="hidden sm:block" />}
                   {networkDiff !== null ? (
-                    <StatCell label="Net" value={formatDifficulty(networkDiff)} />
+                    <StatCell label="Network Difficulty" value={formatDifficulty(networkDiff)} />
                   ) : <div className="hidden sm:block" />}
                   {round.total_work > 0 ? (
                     <StatCell label="Work" value={formatDifficulty(round.total_work)} />
                   ) : <div className="hidden sm:block" />}
                   {round.coinbase_value !== null ? (
-                    <StatCell label="Reward" value={`${(round.coinbase_value / 1e8).toFixed(8)} BTC`} />
+                    <StatCell
+                      label={round.block_height === 0 ? 'Potential Reward' : 'Reward'}
+                      value={`${(round.coinbase_value / 1e8).toFixed(8)} BTC`}
+                    />
                   ) : <div className="hidden sm:block" />}
                 </div>
 

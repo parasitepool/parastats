@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../lib/db';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export interface StratumNotification {
   id: string;
   timestamp: number;
@@ -44,9 +47,9 @@ export async function GET() {
     
     // Get the most recent notification (or latest 10)
     const rows = db.prepare(`
-      SELECT * FROM stratum_notifications 
-      WHERE pool = 'Parasite' 
-      ORDER BY created_at DESC 
+      SELECT * FROM stratum_notifications
+      WHERE pool = 'Parasite'
+      ORDER BY id DESC
       LIMIT 10
     `).all() as StratumNotificationRow[];
     

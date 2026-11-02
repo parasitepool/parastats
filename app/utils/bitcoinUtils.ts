@@ -188,6 +188,11 @@ function identifyProtocol(dataHex: string): string {
     }
   }
   
+  // BIP141 witness commitment: OP_RETURN aa21a9ed <32-byte root>
+  if (dataHex.startsWith('aa21a9ed')) {
+    return 'Witness Commitment';
+  }
+
   // Check for other known protocol patterns
   if (dataHex.startsWith('434f5245')) { // "CORE" in ASCII
     return 'CoreDAO';
@@ -203,6 +208,8 @@ function identifyProtocol(dataHex: string): string {
 // Decode protocol-specific data
 function decodeProtocolData(dataHex: string, protocol: string): Record<string, unknown> | undefined {
   switch (protocol) {
+    case 'Witness Commitment':
+      return { witnessMerkleRoot: dataHex.substring(8) };
     case 'CoreDAO':
       return decodeCoreDAOData(dataHex);
     case 'RSK':
@@ -347,6 +354,14 @@ function parseScriptToReadableFormat(scriptHex: string): string | undefined {
 // AuxPOW magic bytes for detection
 const AUXPOW_MAGIC_BYTES = Buffer.from([0xfa, 0xbe, 0x6d, 0x6d]);
 
+// CompactSize prefix length (Bitcoin varint encoding).
+function compactSizeLength(value: number): number {
+  if (value < 0xfd) return 1;
+  if (value <= 0xffff) return 3;
+  if (value <= 0xffffffff) return 5;
+  return 9;
+}
+
 // Get formatted coinbase ASCII tag
 export function getFormattedCoinbaseAsciiTag(
   coinbase1: string,
@@ -354,19 +369,34 @@ export function getFormattedCoinbaseAsciiTag(
   extranonce2Length: number,
   coinbase2: string
 ): string {
-  if (coinbaseScriptAsciiCache.has(coinbase1 + extranonce1 + coinbase2)) {
-    return coinbaseScriptAsciiCache.get(coinbase1 + extranonce1 + coinbase2)!;
+  const cacheKey = `${coinbase1}:${extranonce1}:${extranonce2Length}:${coinbase2}`;
+  if (coinbaseScriptAsciiCache.has(cacheKey)) {
+    return coinbaseScriptAsciiCache.get(cacheKey)!;
   }
-  
+
   try {
     const cbRaw = coinbase1 + extranonce1 + ('00'.repeat(extranonce2Length)) + coinbase2;
-    const { remainingScriptHex } = decodeCoinbaseScriptSigInfo(Buffer.from(getTransaction(cbRaw).ins[0].script));
-    
-    const formatted = formatScriptAsAscii(remainingScriptHex);
-    
-    coinbaseScriptAsciiCache.set(coinbase1 + extranonce1 + coinbase2, formatted);
+    const tx = getTransaction(cbRaw);
+    const scriptSig = Buffer.from(tx.ins[0].script);
+
+    // `coinbase1` ends immediately before the extranonce bytes. Locate the
+    // scriptSig inside the raw transaction, then skip the extranonce so the
+    // display is the pool tag rather than nonce noise.
+    const scriptSigStart =
+      4 + compactSizeLength(tx.ins.length) + 36 + compactSizeLength(scriptSig.length);
+    const extranonceOffset = coinbase1.length / 2 - scriptSigStart;
+    const extranonce1Length = Buffer.from(extranonce1, 'hex').length;
+    const tagOffset = extranonceOffset + extranonce1Length + extranonce2Length;
+    const tagScript =
+      extranonceOffset >= 0 && tagOffset <= scriptSig.length
+        ? scriptSig.subarray(tagOffset)
+        : scriptSig;
+
+    const formatted = formatScriptAsAscii(tagScript.toString('hex'));
+
+    coinbaseScriptAsciiCache.set(cacheKey, formatted);
     manageCacheSize(coinbaseScriptAsciiCache);
-    
+
     return formatted;
   } catch (error) {
     console.error('Error getting formatted coinbase ASCII:', error);
@@ -374,30 +404,32 @@ export function getFormattedCoinbaseAsciiTag(
   }
 }
 
-// Format script as ASCII with readable characters - Enhanced version
+// Extract printable runs (>= 3 chars) like `para probe`'s
+// extract_coinbase_text, joined with spaces.
 function formatScriptAsAscii(scriptHex: string): string {
   if (!scriptHex) return '';
-  
+
   try {
-    // Convert hex to buffer first
     const buffer = Buffer.from(scriptHex, 'hex');
-    
-    // Convert to ASCII string
-    const ascii = buffer.toString('ascii');
-    
-    // Filter out non-printable characters (keep only space ' ' to tilde '~')
-    const printable = ascii
-      .split("")
-      .filter((ch) => ch >= " " && ch <= "~")
-      .join("");
-    
-    // Limit length and add ellipsis if needed
+    const parts: string[] = [];
+    let current = '';
+
+    for (const byte of buffer) {
+      if (byte >= 0x20 && byte <= 0x7e) {
+        current += String.fromCharCode(byte);
+      } else if (current) {
+        if (current.length >= 3) parts.push(current);
+        current = '';
+      }
+    }
+
+    if (current.length >= 3) parts.push(current);
+
+    const result = parts.join(' ');
     const maxLength = 80;
-    const result = printable.length > maxLength 
-      ? printable.substring(0, maxLength) + "…" 
-      : printable;
-    
-    return result || '';
+    return result.length > maxLength
+      ? result.substring(0, maxLength) + '…'
+      : result;
   } catch (err) {
     console.error("Error formatting script hex to ASCII:", err);
     return '';

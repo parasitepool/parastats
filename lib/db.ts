@@ -153,6 +153,25 @@ function initializeTables() {
     CREATE INDEX IF NOT EXISTS idx_stratum_pool ON stratum_notifications(pool);
   `);
 
+  // Single-row health snapshot written by the stratum collector. The web app
+  // reads `updated_at` as a heartbeat to distinguish an upstream outage from a
+  // dead collector process.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS stratum_collector_status (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      state TEXT NOT NULL,
+      host TEXT NOT NULL,
+      port INTEGER NOT NULL,
+      connected_at INTEGER,
+      last_attempt_at INTEGER,
+      next_retry_at INTEGER,
+      reconnect_attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      resolved_address TEXT,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+
   // Create block highest diff table (pool-wide winner per block)
   // block_timestamp is the actual Bitcoin block timestamp from mempool.space
   db.exec(`

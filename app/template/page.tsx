@@ -2,79 +2,180 @@
 
 import { useEffect, useState } from "react";
 import NotificationDetails from "../components/block-template/NotificationDetails";
+import StratumStatusBanner from "../components/block-template/StratumStatusBanner";
+import RelativeTime from "../components/RelativeTime";
 import type { StratumNotification } from "../api/stratum/route";
+import type { StratumStatus } from "@/lib/stratum-status";
+
+const POLL_INTERVAL_MS = 5000;
+const REQUEST_TIMEOUT_MS = 12_000;
+
+async function fetchJson<T>(url: string, signal: AbortSignal): Promise<T> {
+  const response = await fetch(url, { signal, cache: "no-store" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error ?? `Request failed (${response.status})`);
+  }
+  return response.json() as Promise<T>;
+}
+
+function toErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "Request timed out";
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
+
+function getStatusPresentation(
+  status: StratumStatus | null,
+  statusError: string | null,
+  dataError: string | null,
+) {
+  if (statusError) {
+    return {
+      text: "Status unavailable",
+      color: "text-red-400",
+      dot: "bg-red-400",
+    };
+  }
+
+  if (!status) {
+    return dataError
+      ? {
+          text: "Template refresh failed",
+          color: "text-yellow-400",
+          dot: "bg-yellow-400",
+        }
+      : {
+          text: "Loading...",
+          color: "text-gray-400",
+          dot: "bg-gray-400",
+        };
+  }
+
+  switch (status.state) {
+    case "connected":
+      if (status.isStale || dataError || status.lastError) {
+        return {
+          text: status.isStale
+            ? "No new template"
+            : dataError
+            ? "Template refresh failed"
+            : "Upstream warning",
+          color: "text-yellow-400",
+          dot: "bg-yellow-400",
+        };
+      }
+      return {
+        text: "Connected",
+        color: "text-green-400",
+        dot: "bg-green-400",
+      };
+    case "reconnecting":
+      return {
+        text: "Reconnecting...",
+        color: "text-yellow-400",
+        dot: "bg-yellow-400 animate-pulse",
+      };
+    case "connecting":
+      return {
+        text: "Connecting...",
+        color: "text-yellow-400",
+        dot: "bg-yellow-400 animate-pulse",
+      };
+    case "offline":
+      return {
+        text: "Collector offline",
+        color: "text-red-400",
+        dot: "bg-red-400",
+      };
+    case "stopped":
+      return {
+        text: "Collector stopped",
+        color: "text-red-400",
+        dot: "bg-red-400",
+      };
+    default:
+      return {
+        text: "Unknown",
+        color: "text-gray-400",
+        dot: "bg-gray-400",
+      };
+  }
+}
 
 export default function BlockTemplatePage() {
-  const [notification, setNotification] = useState<StratumNotification | null>(
-    null
-  );
+  const [notification, setNotification] = useState<StratumNotification | null>(null);
+  const [status, setStatus] = useState<StratumStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<
-    "connecting" | "connected" | "error"
-  >("connecting");
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchStratumData() {
-      try {
-        const response = await fetch("/api/stratum");
-        if (!response.ok) {
-          throw new Error("Failed to fetch stratum data");
-        }
-        const data = await response.json();
+    let cancelled = false;
+    let controller: AbortController | null = null;
+    let nextTimer: ReturnType<typeof setTimeout> | null = null;
 
-        if (data.length > 0) {
-          setNotification(data[0]); // Get the most recent notification
-          setConnectionStatus("connected");
-          setError(null);
-        } else {
-          setNotification(null);
-          setError("No real stratum data available yet");
-          setConnectionStatus("connecting"); // Show as connecting since we're waiting for real data
+    async function refresh() {
+      controller?.abort();
+      const currentController = new AbortController();
+      controller = currentController;
+
+      const timeout = setTimeout(
+        () => currentController.abort(),
+        REQUEST_TIMEOUT_MS,
+      );
+
+      const [dataResult, statusResult] = await Promise.allSettled([
+        fetchJson<StratumNotification[]>("/api/stratum", currentController.signal),
+        fetchJson<StratumStatus>("/api/stratum/status", currentController.signal),
+      ]);
+
+      clearTimeout(timeout);
+      if (cancelled) return;
+
+      if (dataResult.status === "fulfilled") {
+        if (dataResult.value.length > 0) {
+          setNotification(dataResult.value[0]);
         }
-      } catch (error) {
-        console.error("Error fetching stratum data:", error);
-        setError(error instanceof Error ? error.message : "Unknown error");
-        setConnectionStatus("error");
-      } finally {
-        setLoading(false);
+        setDataError(null);
+      } else {
+        setDataError(toErrorMessage(dataResult.reason, "Failed to fetch stratum data"));
       }
+
+      if (statusResult.status === "fulfilled") {
+        setStatus(statusResult.value);
+        setStatusError(null);
+      } else {
+        setStatusError(toErrorMessage(statusResult.reason, "Failed to fetch stratum status"));
+      }
+
+      setLoading(false);
+      nextTimer = setTimeout(refresh, POLL_INTERVAL_MS);
     }
 
-    fetchStratumData();
+    void refresh();
 
-    // Set up interval to refresh data every 5 seconds for real-time updates
-    const intervalId = setInterval(fetchStratumData, 5000);
-
-    // Clean up the interval when component unmounts
-    return () => clearInterval(intervalId);
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      if (nextTimer) clearTimeout(nextTimer);
+    };
   }, []);
 
-  const getStatusColor = () => {
-    switch (connectionStatus) {
-      case "connected":
-        return "text-green-400";
-      case "connecting":
-        return "text-yellow-400";
-      case "error":
-        return "text-red-400";
-      default:
-        return "text-gray-400";
-    }
-  };
-
-  const getStatusText = () => {
-    switch (connectionStatus) {
-      case "connected":
-        return "Connected";
-      case "connecting":
-        return "Connecting...";
-      case "error":
-        return "Connection Error";
-      default:
-        return "Unknown";
-    }
-  };
+  const lastNotificationAt =
+    Math.max(
+      status?.lastNotificationAt ?? 0,
+      notification?.timestamp ?? 0,
+    ) || null;
+  const presentation = getStatusPresentation(status, statusError, dataError);
+  const isWaiting =
+    status?.state === "connecting" ||
+    status?.state === "reconnecting" ||
+    status?.state === "connected";
 
   if (loading) {
     return (
@@ -95,84 +196,53 @@ export default function BlockTemplatePage() {
     );
   }
 
-  if (error && !notification) {
-    return (
-      <main className="flex min-h-screen flex-col items-center p-8">
-        <div className="w-full max-w-7xl">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Block Template</h1>
-            <p className="text-accent-2 mb-4">
-              Waiting for Stratum V1 messages for pool: Parasite...
-            </p>
-          </div>
-          <div className="text-center py-12">
-            <p className="text-red-400 text-lg mb-2">{error}</p>
-            <p className="text-sm text-accent-3">
-              No mining.notify messages received yet
-            </p>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="flex min-h-screen flex-col items-center p-1 sm:p-4">
       <div className="w-full max-w-7xl">
         <div className="mb-4">
           <div className="flex items-center gap-4">
             <h1 className="text-3xl font-bold">
-              Parasite Block Template
+              Block Template
             </h1>
             <div className="flex items-center gap-2">
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  connectionStatus === "connected"
-                    ? "bg-green-400"
-                    : connectionStatus === "connecting"
-                    ? "bg-yellow-400 animate-pulse"
-                    : "bg-red-400"
-                }`}
-              ></div>
-              <span className={`text-sm ${getStatusColor()}`}>
-                {getStatusText()}
+              <div className={`w-2 h-2 rounded-full ${presentation.dot}`}></div>
+              <span className={`text-sm ${presentation.color}`}>
+                {presentation.text}
               </span>
             </div>
           </div>
           <div className="text-sm text-accent-3">
-              Inspired by{" "}
-              <a
-                href="https://stratum.work"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent-2 hover:text-white underline transition-colors"
-              >
-                stratum.work
-              </a>
-            </div>
-          {/* {error && notification && (
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-3 my-4">
-              <p className="text-yellow-400 text-sm">Warning: {error}</p>
-            </div>
-          )} */}
+            Last: <RelativeTime timestamp={lastNotificationAt} fallback="never" />
+          </div>
         </div>
+
+        <StratumStatusBanner
+          status={status}
+          statusError={statusError}
+          dataError={dataError}
+          lastNotificationAt={lastNotificationAt}
+        />
 
         {notification ? (
           <NotificationDetails notification={notification} />
         ) : (
           <div className="text-center py-12">
             <div className="mb-4">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-3 mx-auto mb-4"></div>
+              {isWaiting && (
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-3 mx-auto mb-4"></div>
+              )}
               <p className="text-accent-2 text-lg">
-                Waiting for real Stratum V1 messages...
+                {status?.state === "connected"
+                  ? "Waiting for the first block template..."
+                  : "No live block template data."}
               </p>
               <p className="text-sm text-accent-3 mt-2">
-                Connected to parasite.wtf:42069 but no mining.notify messages
-                received yet
+                {status?.host
+                  ? `Upstream: ${status.host}:${status.port}`
+                  : "Waiting for the stats collector."}
               </p>
               <p className="text-xs text-accent-3 mt-2">
-                This is normal - block templates are only sent when new blocks
-                are found
+                The pool sends new templates periodically and when a new block is found.
               </p>
             </div>
           </div>

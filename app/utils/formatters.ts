@@ -87,6 +87,33 @@ export function formatRelativeTime(timestamp: number): string {
 }
 
 /**
+ * Relative time with a seconds component for the first hour. Used by the
+ * live template counter so the age visibly ticks every second.
+ */
+export function formatPreciseRelativeTime(
+  timestamp: number,
+  nowMs: number = Date.now(),
+): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return 'Never';
+
+  const totalSeconds = Math.max(0, Math.floor((nowMs - timestamp * 1000) / 1000));
+
+  if (totalSeconds < 1) return 'just now';
+  if (totalSeconds < 60) return `${totalSeconds}s ago`;
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${seconds}s ago`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours < 24) return `${hours}h ${remainingMinutes}m ago`;
+
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h ago`;
+}
+
+/**
  * Calculates and formats the estimated time to find a block based on pool hashrate and network difficulty
  * Formula: Time = (Difficulty × 2^32) / Hashrate
  * @param poolHashrate - Pool's hashrate in H/s
