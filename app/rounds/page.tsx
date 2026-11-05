@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { formatDifficulty, formatAddress } from '@/app/utils/formatters';
+import { formatDifficulty, formatHashWork } from '@/app/utils/hashmath';
+import { formatAddress } from '@/app/utils/formatters';
 import { getHashrate } from '@/app/utils/api';
 import Board, { BoardColumn } from '@/app/components/tables/Board';
 
@@ -50,7 +51,7 @@ const workColumns: BoardColumn<ParticipantRow>[] = [
     key: 'total_work',
     header: 'Work',
     align: 'right',
-    render: (value) => formatDifficulty(value as number)
+    render: (value) => formatHashWork(value as number)
   }
 ];
 
@@ -296,15 +297,15 @@ export default function RoundsPage() {
                   ) : <div className="hidden sm:block" />}
                   {round.winner_diff !== null ? (
                     <StatCell
-                      label={round.block_height === 0 ? 'Best diff' : 'Diff'}
+                      label="Best diff"
                       value={formatDifficulty(round.winner_diff)}
                     />
                   ) : <div className="hidden sm:block" />}
                   {networkDiff !== null ? (
-                    <StatCell label="Network Difficulty" value={formatDifficulty(networkDiff)} />
+                    <StatCell label="Network Diff" value={formatDifficulty(networkDiff)} />
                   ) : <div className="hidden sm:block" />}
                   {round.total_work > 0 ? (
-                    <StatCell label="Work" value={formatDifficulty(round.total_work)} />
+                    <StatCell label="Work" value={formatHashWork(round.total_work)} />
                   ) : <div className="hidden sm:block" />}
                   {round.coinbase_value !== null ? (
                     <StatCell

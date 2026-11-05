@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { type PoolStats } from '../../utils/api';
-import { formatDifficulty, parseHashrate } from '../../utils/formatters';
+import { formatDifficulty, parseHashrate } from '../../utils/hashmath';
 import { fetch, HttpError } from '@/lib/http-client';
 import { fetchWithCache } from '@/lib/aggregator-cache';
 import { getDb } from '@/lib/db';

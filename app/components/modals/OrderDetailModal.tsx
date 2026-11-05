@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/formatters';
+import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/hashmath';
 import { ReviewBadge, statusColor } from '@/app/components/refinery/OrdersTable';
-import type { OrderDetail } from '@/app/api/router/types';
+import type { OrderDetail } from '@/app/api/refinery/types';
 
 interface OrderDetailModalProps {
   orderId: number | null;
@@ -26,7 +26,7 @@ export default function OrderDetailModal({ orderId, onClose }: OrderDetailModalP
     setLoading(true);
     setError(null);
 
-    fetch(`/api/router/order/${orderId}`, { cache: 'no-store' })
+    fetch(`/api/refinery/order/${orderId}`, { cache: 'no-store' })
       .then(async res => {
         if (!res.ok) throw new Error(`Failed to load order (${res.status})`);
         return res.json();
@@ -155,6 +155,27 @@ export default function OrderDetailModal({ orderId, onClose }: OrderDetailModalP
                   ) : '—'}
                 </p>
               </div>
+              <div className="bg-secondary p-3 border border-border sm:col-span-2">
+                <p className="text-sm text-foreground/60">Payment Amount</p>
+                <p className="text-foreground font-medium">
+                  {detail.payment_amount != null ? `${detail.payment_amount.toLocaleString()} sats` : '—'}
+                </p>
+              </div>
+              <div className="bg-secondary p-3 border border-border sm:col-span-2">
+                <p className="text-sm text-foreground/60">Payment Address</p>
+                <p className="text-foreground font-medium break-all">
+                  {detail.payment_address ? (
+                    <a
+                      href={`https://mempool.space/address/${detail.payment_address}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-accent-3 hover:underline"
+                    >
+                      {detail.payment_address}
+                    </a>
+                  ) : '—'}
+                </p>
+              </div>
             </div>
 
             {detail.txids?.length > 0 && (
@@ -162,7 +183,15 @@ export default function OrderDetailModal({ orderId, onClose }: OrderDetailModalP
                 <p className="text-sm text-foreground/60 mb-2">Transactions</p>
                 <div className="space-y-1">
                   {detail.txids.map(txid => (
-                    <p key={txid} className="text-foreground text-sm font-mono break-all">{txid}</p>
+                    <a
+                      key={txid}
+                      href={`https://mempool.space/tx/${txid}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-foreground text-sm font-mono break-all hover:text-accent-3 hover:underline"
+                    >
+                      {txid}
+                    </a>
                   ))}
                 </div>
               </div>

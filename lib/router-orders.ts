@@ -1,5 +1,5 @@
 import { fetch } from './http-client';
-import type { OrderSummary } from '@/app/api/router/types';
+import type { OrderSummary } from '@/app/api/refinery/types';
 
 /**
  * The router caps list pages at 500 entries. Request the maximum so most
@@ -26,15 +26,23 @@ interface RouterOrdersPage {
   nextCursor: string | null;
 }
 
+export function buildRouterOrdersUrl(
+  routerBase: string,
+  params: RouterOrderParams = {},
+): URL {
+  const url = new URL(`${routerBase}/api/router/orders`);
+  for (const [key, value] of Object.entries(params)) {
+    if (value) url.searchParams.set(key, value);
+  }
+  return url;
+}
+
 async function fetchRouterOrdersPage(
   routerBase: string,
   params: RouterOrderParams,
   cursor: string | null,
 ): Promise<RouterOrdersPage> {
-  const url = new URL(`${routerBase}/api/router/orders`);
-  for (const [key, value] of Object.entries(params)) {
-    if (value) url.searchParams.set(key, value);
-  }
+  const url = buildRouterOrdersUrl(routerBase, params);
   url.searchParams.set('limit', String(PAGE_SIZE));
   if (cursor) url.searchParams.set('cursor', cursor);
 

@@ -3,11 +3,13 @@
 import { useEffect, useRef, useCallback } from 'react';
 import * as echarts from 'echarts';
 import { CallbackDataParams } from 'echarts/types/dist/shared';
-import { formatHashDays, formatHashrate, formatDifficulty, formatRelativeTime } from '@/app/utils/formatters';
-import type { CapacityPoint, OrderTimelinePoint } from '@/app/api/router/types';
+import { formatHashDays, formatHashrate, formatDifficulty } from '@/app/utils/hashmath';
+import { formatRelativeTime } from '@/app/utils/formatters';
+import type { CapacityPoint, OrderTimelinePoint } from '@/app/api/refinery/types';
 
-// Fallback for Tailwind v4's green-500 (the "active" status color).
-const DOT_COLOR_FALLBACK = '#00c951';
+// Fallbacks for the Orders table's active and in_mempool status colors.
+const ACTIVE_DOT_COLOR_FALLBACK = '#00c951';
+const IN_MEMPOOL_DOT_COLOR_FALLBACK = '#f0b100';
 
 interface DemandChartProps {
   points: OrderTimelinePoint[];
@@ -69,10 +71,15 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
     const secondaryColor = getComputedStyle(document.documentElement)
       .getPropertyValue('--secondary')
       .trim();
-    // Match the Orders table's "active" status color (Tailwind's green-500).
-    const dotColor = getComputedStyle(document.documentElement)
+    // Match the Orders table's active and in_mempool status colors.
+    const activeDotColor = getComputedStyle(document.documentElement)
       .getPropertyValue('--color-green-500')
-      .trim() || DOT_COLOR_FALLBACK;
+      .trim() || ACTIVE_DOT_COLOR_FALLBACK;
+    const inMempoolDotColor = getComputedStyle(document.documentElement)
+      .getPropertyValue('--color-yellow-500')
+      .trim() || IN_MEMPOOL_DOT_COLOR_FALLBACK;
+    const dotColorFor = (status: OrderTimelinePoint['status']) =>
+      status === 'in_mempool' ? inMempoolDotColor : activeDotColor;
 
     // Merge both series onto one shared category axis (same pattern as the
     // HashrateChart): category axes automatically skip labels that don't
@@ -95,7 +102,14 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
     const capacityByTs = new Map(capacityData.map(p => [p.timestamp * 1000, p.used_hash_days]));
     const dotByTs = new Map(data.map(p => [p.created_at * 1000, p]));
     const lineData = categories.map(ts => capacityByTs.get(ts) ?? null);
-    const scatterData = categories.map(ts => dotByTs.get(ts)?.requested_hash_days ?? null);
+    const activeScatterData = categories.map(ts => {
+      const point = dotByTs.get(ts);
+      return point && point.status !== 'in_mempool' ? point.requested_hash_days : null;
+    });
+    const inMempoolScatterData = categories.map(ts => {
+      const point = dotByTs.get(ts);
+      return point?.status === 'in_mempool' ? point.requested_hash_days : null;
+    });
 
     // A dot within this window of the pointer wins the tooltip over the
     // capacity line: 2% of the *visible* span (at least a minute per side).
@@ -108,6 +122,25 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
       const visibleSpan = span * (((zoom?.end ?? 100) - (zoom?.start ?? 0)) / 100);
       return Math.max(visibleSpan * 0.02, 60_000);
     };
+
+    const orderSeries = (name: string, seriesData: (number | null)[], color: string) => ({
+      name,
+      type: 'scatter' as const,
+      data: seriesData,
+      symbol: 'circle',
+      symbolSize: 12,
+      itemStyle: {
+        color,
+        shadowBlur: 8,
+        shadowColor: color,
+      },
+      // Any emphasis makes the dot vanish on hover (animation is disabled
+      // chart-wide); the tooltip card is the hover feedback instead.
+      emphasis: {
+        disabled: true,
+      },
+      z: 2,
+    });
 
     return {
       backgroundColor: 'transparent',
@@ -143,7 +176,7 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
             }
           }
           if (nearest && nearestDist <= dotHoverWindow()) {
-            return `<span style="color:${dotColor}">●</span> Order ${nearest.id}<br/>` +
+            return `<span style="color:${dotColorFor(nearest.status)}">●</span> Order ${nearest.id}<br/>` +
               `Created: ${formatRelativeTime(nearest.created_at)}<br/>` +
               `Requested: ${formatHashDays(nearest.requested_hash_days)}<br/>` +
               `Hashrate: ${formatHashrate(nearest.hashrate)}<br/>` +
@@ -283,24 +316,8 @@ export default function DemandChart({ points, capacity = [], loading = false }: 
           },
           z: 1,
         },
-        {
-          name: 'Bucket orders',
-          type: 'scatter' as const,
-          data: scatterData,
-          symbol: 'circle',
-          symbolSize: 12,
-          itemStyle: {
-            color: dotColor,
-            shadowBlur: 8,
-            shadowColor: dotColor,
-          },
-          // Any emphasis makes the dot vanish on hover (animation is disabled
-          // chart-wide); the tooltip card is the hover feedback instead.
-          emphasis: {
-            disabled: true,
-          },
-          z: 2,
-        },
+        orderSeries('Active orders', activeScatterData, activeDotColor),
+        orderSeries('In mempool orders', inMempoolScatterData, inMempoolDotColor),
       ],
     };
   }, []);

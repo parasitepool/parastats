@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts';
-import { formatHashrate } from '../utils/formatters';
+import { formatHashrate } from '../utils/hashmath';
 
 interface HashrateGaugeProps {
   hashrate?: number; // in H/s

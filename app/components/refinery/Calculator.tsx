@@ -12,15 +12,20 @@ import {
   ResultField,
   UnitField,
 } from './calculator-shared';
+import {
+  HASHES_PER_DIFF_1,
+  HASH_DAYS_PER_PHD,
+  SECONDS_PER_DAY,
+  hashDaysToHashWork,
+  hashWorkFromRate,
+  hashWorkToHashDays,
+  orderTotal,
+  phdFromHashDays,
+  shareRate,
+} from '@/app/utils/hashmath';
 
-// Work is counted in difficulty-1 units (1 unit = 2^32 hashes), matching the
-// router's HashWork. HashDays = HashWork × 2^32 / 86400.
-const HASHES_PER_DIFF_1 = 2 ** 32;
-const SECONDS_PER_DAY = 86400;
-
-/** sats → BTC string, trimmed (e.g. 47391 → "0.00047"). */
 function formatBtc(sats: number): string {
-  return trimValue(sats / 1e8);
+  return (Math.round(sats) / 1e8).toFixed(8).replace(/\.?0+$/, '');
 }
 
 function formatChance(p: number): { value: string; unit: string } | null {
@@ -63,11 +68,11 @@ interface Canon {
   diffTarget: number;
 }
 
-// Default canon: 1 PH/s over 24 h (= 1 PHd ≈ 20.117G diff-1).
+// Default canon: 1 PH/s over 24 h (= 1 PHd ≈ 20.117G diff1).
 const DEFAULT_CANON: Canon = {
-  hashrateHps: 1e15,
+  hashrateHps: HASH_DAYS_PER_PHD,
   durationSecs: SECONDS_PER_DAY,
-  workDiff1: (1e15 * SECONDS_PER_DAY) / HASHES_PER_DIFF_1,
+  workDiff1: hashWorkFromRate(HASH_DAYS_PER_PHD, SECONDS_PER_DAY),
   costSats: 0,
   diffTarget: 0,
 };
@@ -146,7 +151,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
   // Display writes (rounded for presentation only).
   const writeWorkDisplay = (workDiff1: number) => {
     setHashwork(trimValue(workDiff1 / workFactor));
-    setHashdays(trimValue((workDiff1 * HASHES_PER_DIFF_1) / SECONDS_PER_DAY / daysFactor));
+    setHashdays(trimValue(hashWorkToHashDays(workDiff1) / daysFactor));
   };
   const writeHashrateDisplay = (hashrateHps: number) => {
     setHashrate(trimValue(hashrateHps / hsPerUnit));
@@ -158,7 +163,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
   // Editing hashrate or duration recomputes the work; the cost is left alone
   // and the implied hashprice moves instead.
   const handleRateEdit = (hps: number, secs: number) => {
-    const workDiff1 = (hps * secs) / HASHES_PER_DIFF_1;
+    const workDiff1 = hashWorkFromRate(hps, secs);
     setCanon({ ...canon, hashrateHps: hps, durationSecs: secs, workDiff1 });
     writeWorkDisplay(workDiff1);
     flash(['hashwork', 'hashdays', 'chance', 'expected', 'hashprice']);
@@ -177,14 +182,14 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
   const handleHashworkChange = (v: string) => {
     setHashwork(v);
     const workDiff1 = parseInput(v) * workFactor;
-    setHashdays(trimValue((workDiff1 * HASHES_PER_DIFF_1) / SECONDS_PER_DAY / daysFactor));
+    setHashdays(trimValue(hashWorkToHashDays(workDiff1) / daysFactor));
     handleWorkEdit(workDiff1);
     flash(['hashdays', 'hashrate', 'chance', 'expected', 'hashprice']);
   };
 
   const handleHashdaysChange = (v: string) => {
     setHashdays(v);
-    const workDiff1 = (parseInput(v) * daysFactor * SECONDS_PER_DAY) / HASHES_PER_DIFF_1;
+    const workDiff1 = hashDaysToHashWork(parseInput(v) * daysFactor);
     setHashwork(trimValue(workDiff1 / workFactor));
     handleWorkEdit(workDiff1);
     flash(['hashwork', 'hashrate', 'chance', 'expected', 'hashprice']);
@@ -209,8 +214,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
   // hashprice and write it into the cost field.
   const applyCurrentHashprice = () => {
     if (hashPrice == null || canon.workDiff1 <= 0) return;
-    const workPhd = (canon.workDiff1 * HASHES_PER_DIFF_1) / SECONDS_PER_DAY / 1e15;
-    const costSats = workPhd * hashPrice;
+    const costSats = orderTotal(hashPrice, hashWorkToHashDays(canon.workDiff1));
     costEdited.current = true;
     setCanon(c => ({ ...c, costSats }));
     writeCostDisplay(costSats);
@@ -235,11 +239,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
 
   const handleCostUnitChange = (next: string) => {
     if (next === costUnit) return;
-    const value = parseFloat(cost);
-    if (Number.isFinite(value) && value > 0) {
-      const inSats = value * satsPerUnit;
-      setCost(next === 'BTC' ? formatBtc(inSats) : String(Math.round(inSats)));
-    }
+    setCost(next === 'BTC' ? formatBtc(canon.costSats) : String(Math.round(canon.costSats)));
     setCostUnit(next);
   };
 
@@ -255,7 +255,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
     const nextFactor = DIFF_UNITS.find(u => u.label === next)?.factor ?? 1e9;
     setHashworkUnit(next);
     const workDiff1 = parseInput(hashwork) * nextFactor;
-    setHashdays(trimValue((workDiff1 * HASHES_PER_DIFF_1) / SECONDS_PER_DAY / daysFactor));
+    setHashdays(trimValue(hashWorkToHashDays(workDiff1) / daysFactor));
     handleWorkEdit(workDiff1);
     flash(['hashdays', 'hashrate', 'chance', 'expected', 'hashprice']);
   };
@@ -263,7 +263,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
   const handleHashdaysUnitChange = (next: string) => {
     const nextFactor = HASHDAYS_UNITS.find(u => u.label === next)?.factor ?? 1e15;
     setHashdaysUnit(next);
-    const workDiff1 = (parseInput(hashdays) * nextFactor * SECONDS_PER_DAY) / HASHES_PER_DIFF_1;
+    const workDiff1 = hashDaysToHashWork(parseInput(hashdays) * nextFactor);
     setHashwork(trimValue(workDiff1 / workFactor));
     handleWorkEdit(workDiff1);
     flash(['hashwork', 'hashrate', 'chance', 'expected', 'hashprice']);
@@ -272,7 +272,7 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
   // ---- Math (canon only, full precision) ----
 
   // 1 PHd = 1 PH/s (1e15 H/s) over 1 day.
-  const workPhd = (canon.workDiff1 * HASHES_PER_DIFF_1) / SECONDS_PER_DAY / 1e15;
+  const workPhd = phdFromHashDays(hashWorkToHashDays(canon.workDiff1));
   const price = canon.workDiff1 > 0 && canon.costSats > 0 ? canon.costSats / workPhd : 0;
 
   // Share arrivals are Poisson: each hash hits the target difficulty with
@@ -281,8 +281,8 @@ export default function Calculator({ hashPrice }: CalculatorProps) {
   let chance = 0;
   let expectedSeconds = 0;
   if (canon.diffTarget > 0 && canon.hashrateHps > 0) {
-    const expectedHits = (canon.hashrateHps * canon.durationSecs) / (canon.diffTarget * HASHES_PER_DIFF_1);
-    chance = 1 - Math.exp(-expectedHits);
+    const expectedHits = shareRate(canon.hashrateHps, canon.diffTarget) * canon.durationSecs;
+    chance = -Math.expm1(-expectedHits);
     expectedSeconds = (canon.diffTarget * HASHES_PER_DIFF_1) / canon.hashrateHps;
   }
 

@@ -149,7 +149,7 @@ export interface SessionDetail {
   username: string;
   enonce1: string;
   version_mask: string | null;
-  remote_address: string;
+  remote_address: null;
   stats: MiningStats;
 }
 
@@ -171,7 +171,7 @@ export interface OrderDetail {
   status: OrderStatus;
   review: Review;
   upstream_target: UpstreamTarget;
-  upstream_address: string | null;
+  upstream_address: null;
   upstream_disconnects_total: number;
   requested_hash_days: number | null;
   hash_price: number | null;
@@ -185,11 +185,20 @@ export interface OrderDetail {
   sessions: SessionDetail[];
 }
 
-/** A bucket order names its work (hash_days) and bid (hash_price, sats/PHd). */
+export interface RouterSessionDetail extends Omit<SessionDetail, 'remote_address'> {
+  remote_address: string;
+}
+
+/** Raw router detail, before the public order route redacts IP addresses. */
+export interface RouterOrderDetail extends Omit<OrderDetail, 'upstream_address' | 'sessions'> {
+  upstream_address: string | null;
+  sessions: RouterSessionDetail[];
+}
+
+/** A bucket order names its work; the server applies the current hashprice. */
 export interface OrderRequest {
   upstream_target: UpstreamTarget;
   hash_days: number;
-  hash_price: number;
 }
 
 export interface OrderResponse {

@@ -1,6 +1,7 @@
 'use client';
 
-import { formatDifficulty, formatAddress } from '../../utils/formatters';
+import { formatDifficulty } from '../../utils/hashmath';
+import { formatAddress } from '../../utils/formatters';
 import Board, { BoardColumn } from './Board';
 import { useRoundLeaderboard } from './useRoundLeaderboard';
 

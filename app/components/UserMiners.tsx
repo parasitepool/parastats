@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import type { MouseEvent } from 'react';
 import type { ProcessedWorkerData } from '@/app/api/user/[address]/route';
-import { formatDifficulty, formatHashrate, formatRelativeTime, parseHashrate } from '@/app/utils/formatters';
+import { formatDifficulty, formatHashrate, parseHashrate } from '@/app/utils/hashmath';
+import { formatRelativeTime } from '@/app/utils/formatters';
 import { PickaxeIcon } from '@/app/components/icons';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from './collapsible';
 import CardHeader from './CardHeader';

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { formatDifficulty } from "../utils/formatters";
+import { formatDifficulty } from "../utils/hashmath";
 import { type BlockTopDiff } from "../utils/api";
 
 interface ShadowBlockCardProps {

@@ -1,22 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { request, RpcErrorCode } from '@sats-connect/core';
 import QRCode from 'react-qr-code';
 import { useWallet } from '@/app/hooks/useWallet';
 import { InfoIcon, CopyIcon, CheckIcon } from '@/app/components/icons';
 import { getBitcoinPrice } from '@/app/utils/api';
-import { formatHashDays, formatPrice } from '@/app/utils/formatters';
-import type { OrderDetail, OrderResponse } from '@/app/api/router/types';
+import { formatHashDays } from '@/app/utils/hashmath';
+import { formatPrice } from '@/app/utils/formatters';
+import { fetchOrderQuote, orderQuoteNeedsConfirmation, type OrderQuote } from '@/app/utils/refinery-quote';
+import type { OrderDetail, OrderResponse } from '@/app/api/refinery/types';
 
 interface CreateOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: () => void | Promise<void>;
   address: string | null;
-  hashPrice: number;
-  halt: boolean;
 }
+
+const ORDER_CREATE_TIMEOUT_MS = 45_000;
+const ORDER_CREATE_UNKNOWN_ERROR = 'The order request timed out or lost connection. Check your orders before retrying; the order may have been created.';
 
 const MIN_PHD = 0.299;
 const MIN_SLIDER_PHD = 1;
@@ -32,7 +35,7 @@ const trimPhd = (phd: number) => String(Math.floor(phd * 100) / 100);
 
 type AmountUnit = 'sats' | 'btc';
 
-export default function CreateOrderModal({ isOpen, onClose, onCreated, address, hashPrice, halt }: CreateOrderModalProps) {
+export default function CreateOrderModal({ isOpen, onClose, onCreated, address }: CreateOrderModalProps) {
   const { address: walletAddress, isConnected, walletType } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [selectedPhd, setSelectedPhd] = useState(1);
@@ -47,7 +50,30 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
   const [paymentSent, setPaymentSent] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [bitcoinPrice, setBitcoinPrice] = useState<number | null>(null);
+  const [quote, setQuote] = useState<OrderQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(true);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const quoteRequestId = useRef(0);
 
+  const refreshQuote = useCallback(async () => {
+    const requestId = ++quoteRequestId.current;
+    setQuoteLoading(true);
+    setQuoteError(null);
+    try {
+      const next = await fetchOrderQuote();
+      if (requestId === quoteRequestId.current) setQuote(next);
+    } catch (err) {
+      if (requestId === quoteRequestId.current) {
+        setQuote(null);
+        setQuoteError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      if (requestId === quoteRequestId.current) setQuoteLoading(false);
+    }
+  }, []);
+
+  const hashPrice = quote?.price ?? 0;
+  const halt = quote?.halt ?? true;
   const minSats = Math.max(1, Math.ceil(MIN_PHD * hashPrice));
   const maxSats = Math.ceil(MAX_PHD * hashPrice);
   const chargeSats = clamp(Math.ceil(selectedPhd * hashPrice), minSats, maxSats);
@@ -58,6 +84,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
     : clamp(Math.round((chargeSats - firstSatsIncrement) / 1000) + 1, 0, maxSpendSliderPosition);
 
   useEffect(() => {
+    const quoteRequest = quoteRequestId;
     if (isOpen) {
       setError(null);
       setSelectedPhd(1);
@@ -72,8 +99,11 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
       setPaymentSent(false);
       setPaymentConfirmed(false);
       setBitcoinPrice(null);
+      setQuote(null);
+      void refreshQuote();
     }
-  }, [isOpen]);
+    return () => { quoteRequest.current++; };
+  }, [isOpen, refreshQuote]);
 
   useEffect(() => {
     if (!isOpen || view !== 'payment' || !orderData) return;
@@ -88,7 +118,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
       checking = true;
 
       try {
-        const response = await fetch(`/api/router/order/${orderData.order_id}`, { cache: 'no-store' });
+        const response = await fetch(`/api/refinery/order/${orderData.order_id}`, { cache: 'no-store' });
         if (!response.ok) return;
 
         const detail: OrderDetail = await response.json();
@@ -153,18 +183,18 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
   useEffect(() => {
     if (!isOpen) return;
     const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !submitting) onClose();
     };
     window.addEventListener('keydown', handleEscKey);
     return () => window.removeEventListener('keydown', handleEscKey);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, submitting]);
 
   if (!isOpen) return null;
 
   const isOwnProfile = isConnected && walletAddress === address;
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
+    if (e.target === e.currentTarget && !submitting) {
       onClose();
     }
   };
@@ -230,31 +260,55 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
     : bitcoinPrice === null ? 'Loading...' : '—';
 
   const handleCreate = async () => {
-    if (!address) return;
+    if (!address || !quote || submitting) return;
     setSubmitting(true);
     setError(null);
 
     try {
-      const res = await fetch('/api/router/order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          upstream_target: {
-            endpoint: 'parasite.wtf:42068',
-            username: `${address}.refinery`,
-            password: null,
-          },
-          hash_days: selectedPhd * 1e15,
-          hash_price: hashPrice,
-        }),
-      });
+      const latestQuote = await fetchOrderQuote(true);
+      if (orderQuoteNeedsConfirmation(quote, latestQuote)) {
+        setQuote(latestQuote);
+        setEditingField(null);
+        throw new Error('The refinery quote or availability changed. Review the updated order and click Create & Pay again to confirm.');
+      }
+
+      let res: Response;
+      try {
+        res = await fetch('/api/refinery/order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            upstream_target: {
+              endpoint: 'parasite.wtf:42068',
+              username: `${address}.refinery`,
+              password: null,
+            },
+            hash_days: selectedPhd * 1e15,
+          }),
+          signal: AbortSignal.timeout(ORDER_CREATE_TIMEOUT_MS),
+        });
+      } catch {
+        throw new Error(ORDER_CREATE_UNKNOWN_ERROR);
+      }
 
       if (!res.ok) {
         const json = await res.json().catch(() => null);
-        throw new Error(json?.error ?? `Failed to create order (${res.status})`);
+        const message = typeof json?.error === 'string' ? json.error : `Failed to create order (${res.status})`;
+        if (res.status === 422 && /(?:below|less than)\s+(?:the\s+)?minimum/i.test(message)) {
+          const updated = await fetchOrderQuote(true);
+          setQuote(updated);
+          setEditingField(null);
+          throw new Error(`${message} The quote has been refreshed; review the amount and try again.`);
+        }
+        throw new Error(message);
       }
 
-      const data: OrderResponse = await res.json();
+      let data: OrderResponse;
+      try {
+        data = await res.json() as OrderResponse;
+      } catch {
+        throw new Error(ORDER_CREATE_UNKNOWN_ERROR);
+      }
       setOrderData(data);
       setView('payment');
     } catch (err) {
@@ -302,15 +356,28 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
       >
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-2xl font-bold text-accent-3">{view === 'form' ? 'Create Order' : 'Payment Details'}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-500 focus:outline-none">
+          <button onClick={onClose} disabled={submitting} className="text-gray-400 hover:text-gray-500 focus:outline-none disabled:opacity-40">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {view === 'form' && (
-          <div className="space-y-4">
+        {view === 'form' && (!quote || quoteLoading) && (
+          <div className="space-y-3 text-sm">
+            <p className={quoteLoading ? 'text-foreground/60' : 'text-red-500'}>
+              {quoteLoading ? 'Refreshing the refinery quote…' : quoteError ?? 'Quote unavailable.'}
+            </p>
+            {!quoteLoading && (
+              <button type="button" onClick={refreshQuote} className="px-4 py-2 bg-foreground text-background hover:bg-foreground/80">
+                Retry
+              </button>
+            )}
+          </div>
+        )}
+
+        {view === 'form' && quote && !quoteLoading && (
+          <fieldset disabled={submitting} className="min-w-0 space-y-4">
             <div>
               <h3 className="text-sm font-medium text-accent-2 mb-2">Workername</h3>
               <div className="bg-secondary p-3 border border-border">
@@ -341,7 +408,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
                 <div
                   className="cursor-text"
                   onClick={() => {
-                    if (editingField !== 'phd') startPhdEdit();
+                    if (!submitting && editingField !== 'phd') startPhdEdit();
                   }}
                 >
                   <p className="text-foreground break-all">
@@ -389,7 +456,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
                 <div
                   className="cursor-text"
                   onClick={() => {
-                    if (editingField !== 'sats' && editingField !== 'btc') startAmountEdit('sats');
+                    if (!submitting && editingField !== 'sats' && editingField !== 'btc') startAmountEdit('sats');
                   }}
                 >
                   <p className="text-foreground break-all">
@@ -508,13 +575,13 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
               This order will deliver {formatPhd(selectedPhd)} of work. Delivery will start after 1 confirmation. Confirmation must happen within 6 blocks, otherwise the order will expire. Use a high fee rate.
             </div>
 
-            {halt && (
+            {(halt || !quote.walletSynced) && (
               <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
-                Order creation paused, come back later
+                {halt ? 'Order creation paused, come back later' : 'Refinery wallet syncing, come back later'}
               </div>
             )}
 
-            {error && !halt && (
+            {error && (
               <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
                 {error}
               </div>
@@ -524,8 +591,8 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
               <div className="flex justify-center mt-6">
                 <button
                   onClick={handleCreate}
-                  disabled={halt || submitting}
-                  className={`px-4 py-2 text-sm font-medium ${halt || submitting ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
+                  disabled={halt || !quote.walletSynced || submitting}
+                  className={`px-4 py-2 text-sm font-medium ${halt || !quote.walletSynced || submitting ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
                 >
                   {submitting ? 'Creating…' : 'Create & Pay'}
                 </button>
@@ -534,7 +601,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address, 
               <p className="text-sm text-accent-2 text-center mt-4">Connect your wallet to create an order</p>
             )}
 
-          </div>
+          </fieldset>
         )}
 
         {view === 'payment' && orderData && (

@@ -12,6 +12,7 @@ interface RetroProgressBarProps {
   label?: string;
   labelSize?: 'xs' | 'sm' | 'md' | 'lg';
   onlyCurrent?: boolean;
+  formatValue: (value: number) => string;
 }
 
 const RetroProgressBar: FC<RetroProgressBarProps> = ({
@@ -23,7 +24,8 @@ const RetroProgressBar: FC<RetroProgressBarProps> = ({
   className = '',
   label = '',
   labelSize = 'xs',
-  onlyCurrent = false,  
+  onlyCurrent = false,
+  formatValue,
 }) => {
   // Calculate percentage
   const percentage = Math.min(100, Math.max(0, (current / max) * 100));
@@ -98,7 +100,7 @@ const RetroProgressBar: FC<RetroProgressBarProps> = ({
       {(showLabel || label) && (
         <div className={`flex justify-between mb-1 text-${labelSize} text-foreground font-semibold`}>
           <span>{label || `${Math.round(percentage)}%`}</span>
-          {showLabel && !onlyCurrent ? <span>{current} {units} / {max} {units}</span> : <span>{Number(current.toFixed(4)).toString()}{units}</span>}
+          {showLabel && !onlyCurrent ? <span>{current} {units} / {max} {units}</span> : <span>{formatValue(current)}</span>}
         </div>
       )}
       <div className="relative">

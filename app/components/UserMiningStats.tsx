@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { ClockIcon, CalendarIcon, LightningIcon, CurrencyDollarIcon } from './icons';
+import { formatPercent } from '../utils/hashmath';
 
 interface UserMiningStatsProps {
   userHashrate: string; // In TH/s
@@ -68,7 +69,7 @@ export default function UserMiningStats({
   const formatProbability = (probability: number): string => {
     if (probability >= 0.01) {
       // Show as percentage if >= 1%
-      return `${(probability * 100).toFixed(2)}%`;
+      return formatPercent(probability * 100);
     } else {
       // Show as "1 in X" format for small probabilities
       const oneInX = Math.round(1 / probability);

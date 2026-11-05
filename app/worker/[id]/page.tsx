@@ -5,7 +5,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getUserData } from '@/app/utils/api';
 import { ProcessedWorkerData } from '@/app/api/user/[address]/route';
-import { formatHashrate, formatDifficulty, formatRelativeTime } from '@/app/utils/formatters';
+import { formatHashrate, formatDifficulty } from '@/app/utils/hashmath';
+import { formatRelativeTime } from '@/app/utils/formatters';
 import { TrendingUpIcon, CheckIcon, ClockIcon } from '@/app/components/icons';
 
 export default function WorkerDashboard() {

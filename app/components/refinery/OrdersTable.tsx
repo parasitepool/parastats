@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import SortableTable from '../SortableTable';
-import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/formatters';
-import type { OrderSummary, Review } from '@/app/api/router/types';
+import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/hashmath';
+import type { OrderSummary, Review } from '@/app/api/refinery/types';
 
 export interface OrderRow {
   id: number;
@@ -102,13 +101,28 @@ const columns = [
 
 interface OrdersTableProps {
   rows: OrderRow[];
+  page?: number;
   onOrderClick?: (id: number) => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void | Promise<void>;
+  onLoadPrevious?: () => void | Promise<void>;
+  total?: number | null;
 }
 
-export default function OrdersTable({ rows, onOrderClick }: OrdersTableProps) {
-  const [mobilePage, setMobilePage] = useState(0);
-  const totalMobilePages = Math.max(1, Math.ceil(rows.length / 10));
-  const clampedMobilePage = Math.min(mobilePage, totalMobilePages - 1);
+export default function OrdersTable({
+  rows,
+  page = 0,
+  onOrderClick,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
+  onLoadPrevious,
+  total = null,
+}: OrdersTableProps) {
+  const loadedThrough = page * 10 + rows.length;
+  const totalForDisplay = total != null ? Math.max(total, loadedThrough) : loadedThrough;
+  const rangeStart = page * 10 + 1;
 
   return (
     <>
@@ -119,18 +133,24 @@ export default function OrdersTable({ rows, onOrderClick }: OrdersTableProps) {
           defaultSortColumn="id"
           defaultSortDirection="desc"
           pageSize={10}
+          page={page}
           onRowClick={onOrderClick ? (row) => onOrderClick(row.id) : undefined}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          onLoadMore={onLoadMore}
+          onLoadPrevious={onLoadPrevious}
+          total={total}
         />
       </div>
 
       <div className="md:hidden space-y-4">
-        {rows.slice(clampedMobilePage * 10, (clampedMobilePage + 1) * 10).map(order => (
+        {rows.map(order => (
           <div
             key={order.id}
             className={`bg-background border border-border p-4 shadow-sm ${onOrderClick ? 'cursor-pointer hover:bg-foreground/5' : ''}`}
             onClick={onOrderClick ? () => onOrderClick(order.id) : undefined}
           >
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-4">
               <span className="text-accent-3 font-bold text-lg">
                 Order {order.id}
               </span>
@@ -139,7 +159,7 @@ export default function OrdersTable({ rows, onOrderClick }: OrdersTableProps) {
                 <ReviewBadge review={order.review} />
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="text-foreground/60">Requested</p>
                 <p className="font-medium">{formatRequested(order)}</p>
@@ -153,31 +173,31 @@ export default function OrdersTable({ rows, onOrderClick }: OrdersTableProps) {
                 <p className="font-medium">{order.best_share != null ? formatDifficulty(order.best_share) : '—'}</p>
               </div>
             </div>
-            <div className="mt-2 text-sm">
-              <p className="text-foreground/60 mb-1">Progress</p>
+            <div className="mt-4 text-sm">
+              <p className="text-foreground/60 mb-2">Progress</p>
               <OrderProgressBar progress={order.progress} requested={order.requested} />
             </div>
           </div>
         ))}
-        {rows.length > 10 && (
+        {(page > 0 || (rows.length > 0 && hasMore)) && (
           <div className="flex items-center justify-between pt-2">
             <span className="text-sm text-foreground/60">
-              {clampedMobilePage * 10 + 1}–{Math.min((clampedMobilePage + 1) * 10, rows.length)} of {rows.length}
+              {rows.length > 0 ? `${rangeStart}–${loadedThrough}` : '0–0'} of {totalForDisplay}{total == null && hasMore ? '+' : ''}
             </span>
             <div className="flex gap-2">
               <button
                 className="px-3 py-1 text-sm border border-border hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
-                disabled={clampedMobilePage === 0}
-                onClick={() => setMobilePage(clampedMobilePage - 1)}
+                disabled={page === 0 || loadingMore || !onLoadPrevious}
+                onClick={onLoadPrevious}
               >
                 Prev
               </button>
               <button
                 className="px-3 py-1 text-sm border border-border hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
-                disabled={(clampedMobilePage + 1) * 10 >= rows.length}
-                onClick={() => setMobilePage(clampedMobilePage + 1)}
+                disabled={!hasMore || loadingMore || !onLoadMore}
+                onClick={onLoadMore}
               >
-                Next
+                {loadingMore ? 'Loading…' : 'Next'}
               </button>
             </div>
           </div>

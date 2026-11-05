@@ -1,38 +1,60 @@
 'use client';
 
-import { formatHashDays } from '@/app/utils/formatters';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { formatHashDays, formatPercent } from '@/app/utils/hashmath';
 import { RefineryIcon } from '@/app/components/icons';
-import type { RouterStatus } from '@/app/api/router/types';
+import type { RouterStatus } from '@/app/api/refinery/types';
 
 interface RouterStatsProps {
   status: RouterStatus | null;
+  unavailable?: boolean;
 }
 
-function SkeletonCard() {
+function SkeletonCard({ unavailable }: { unavailable: boolean }) {
   return (
     <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center gap-2">
-      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/3"></div>
-      <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+      {unavailable ? (
+        <p className="text-sm text-foreground/60">Status unavailable</p>
+      ) : (
+        <>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/3"></div>
+          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-1/2"></div>
+        </>
+      )}
     </div>
   );
 }
 
 function TitleCard() {
+  const docsActive = usePathname() === '/refinery/docs';
+
   return (
-    <div className="bg-secondary border border-border p-3 min-h-[88px] flex items-center justify-center gap-2">
-      <RefineryIcon className="h-8 w-8" />
-      <h1 className="text-xl font-semibold">Refinery</h1>
+    <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-wrap items-center justify-center gap-2">
+      <div className="flex items-center gap-2">
+        <RefineryIcon className="h-8 w-8 shrink-0" />
+        <h1 className="text-xl font-semibold">Refinery</h1>
+      </div>
+      <Link
+        href={docsActive ? '/refinery' : '/refinery/docs'}
+        aria-label={docsActive ? 'Close docs and return to Refinery' : 'Open docs'}
+        className={`shrink-0 border px-2 py-1 text-xs font-medium transition-colors duration-200 ${docsActive
+          ? 'border-foreground bg-foreground text-background'
+          : 'border-foreground/40 text-foreground hover:border-foreground hover:bg-foreground/10'}`}
+      >
+        Docs
+      </Link>
     </div>
   );
 }
 
-export default function RouterStats({ status }: RouterStatsProps) {
+export default function RouterStats({ status, unavailable = false }: RouterStatsProps) {
   if (!status) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <TitleCard />
-        <SkeletonCard />
-        <SkeletonCard />
+        <SkeletonCard unavailable={unavailable} />
+        <SkeletonCard unavailable={unavailable} />
       </div>
     );
   }
@@ -62,7 +84,7 @@ export default function RouterStats({ status }: RouterStatsProps) {
               style={{ width: `${usedPercent}%` }}
             />
           </div>
-          <span className="text-xs text-foreground/60">{usedPercent.toFixed(1)}%</span>
+          <span className="text-xs text-foreground/60">{formatPercent(usedPercent)}</span>
         </div>
       </div>
     </div>

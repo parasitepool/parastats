@@ -1,8 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { fetch } from '@/lib/http-client';
 import { cachedJson } from '@/lib/route-cache';
+import { routerErrorResponse, routerJsonResponse } from '@/lib/refinery-proxy';
 import { fetchAllRouterOrders, routerAuthHeaders } from '@/lib/router-orders';
-import type { OrderDetail, OrderTimelinePoint } from '../../types';
+import { rateLimitResponse } from '../../rate-limit';
+import type { OrderTimelinePoint, RouterOrderDetail } from '../../types';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,7 +46,7 @@ async function fetchTimeline(routerBase: string): Promise<OrderTimelinePoint[]> 
         headers: routerAuthHeaders(),
       });
       if (!res.ok) throw new Error(`Order ${order.id} failed (${res.status})`);
-      return (await res.json()) as OrderDetail;
+      return (await res.json()) as RouterOrderDetail;
     }),
   );
 
@@ -73,16 +75,17 @@ async function fetchTimeline(routerBase: string): Promise<OrderTimelinePoint[]> 
   });
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const routerBase = process.env.ROUTER_API_URL;
-  if (!routerBase) {
-    return NextResponse.json([], { status: 200 });
-  }
+  if (!routerBase) return routerErrorResponse('Router not configured', 503);
+
+  const limited = rateLimitResponse(request, 30, 'orders-timeline');
+  if (limited) return limited;
 
   try {
     const points = await cachedJson('router:orders:timeline', TTL_MS, () => fetchTimeline(routerBase));
-    return NextResponse.json(points);
+    return routerJsonResponse({ status: 200, body: points });
   } catch {
-    return NextResponse.json({ error: 'Router unavailable' }, { status: 502 });
+    return routerErrorResponse('Router unavailable', 502);
   }
 }

@@ -5,7 +5,7 @@ import * as echarts from "echarts";
 import { CallbackDataParams } from "echarts/types/dist/shared";
 import CardHeader from "@/app/components/CardHeader";
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
-import { formatDifficulty, formatHashrate } from "../utils/formatters";
+import { formatDifficulty, formatHashrate } from "../utils/hashmath";
 
 // Constants
 const MAX_TIMESTAMP_DISTANCE_MS = 30 * 60 * 1000; // 30 minutes tolerance for matching timestamps

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { formatDifficulty, parseHashrate } from '@/app/utils/formatters';
+import { formatDifficulty, parseHashrate } from '@/app/utils/hashmath';
 import { formatRelativeTime } from '@/app/utils/formatters';
 import { fetch, HttpError } from '@/lib/http-client';
 import { fetchWithCache } from '@/lib/aggregator-cache';

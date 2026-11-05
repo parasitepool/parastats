@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { parseHashrate } from '../../../../utils/formatters';
+import { parseHashrate } from '../../../../utils/hashmath';
 import { getDb } from '../../../../../lib/db';
 import { parseHistoricalParams } from '@/app/api/lib/historical';
 

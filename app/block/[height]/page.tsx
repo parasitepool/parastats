@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { formatDifficulty } from '@/app/utils/formatters';
+import { formatDifficulty, formatPercent } from '@/app/utils/hashmath';
 import * as echarts from 'echarts';
 
 // Constants
@@ -417,7 +417,7 @@ export default function BlockLeaderboard() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-sm text-accent-2 font-mono">
-                            {percentOfTop.toFixed(1)}%
+                            {formatPercent(percentOfTop)}
                           </span>
                         </td>
                       </tr>
@@ -451,7 +451,7 @@ export default function BlockLeaderboard() {
                       {user.address}
                     </span>
                     <div className="mt-2 text-xs text-accent-3 font-mono">
-                      {percentOfTop.toFixed(1)}% of top
+                      {formatPercent(percentOfTop)} of top
                     </div>
                   </div>
                 );

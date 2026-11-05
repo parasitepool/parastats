@@ -10,8 +10,7 @@ import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
 import { Hashrate } from '@mempool/mempool.js/lib/interfaces/bitcoin/difficulty';
 import SortableTable from '../../components/SortableTable';
-import { formatDifficulty, formatHashrate } from '@/app/utils/formatters';
-import { parseHashrate } from '@/app/utils/formatters';
+import { formatDifficulty, formatHashWork, formatHashrate, formatPercent, parseHashrate } from '@/app/utils/hashmath';
 import LightningBalance from '@/app/components/LightningBalance';
 import StratumInfo from '@/app/components/StratumInfo';
 import AnimatedCounter from '@/app/components/AnimatedCounter';
@@ -594,7 +593,7 @@ export default function UserDashboard() {
                 onMouseLeave={() => setTooltipVisible(false)}
             >
             <span className="text-sm text-muted-foreground cursor-help">
-              ({Number(((parseHashrate(userData.bestDifficulty) / hashrate.currentDifficulty) * 100).toFixed(2))}%)
+              ({formatPercent((parseHashrate(userData.bestDifficulty) / hashrate.currentDifficulty) * 100)})
             </span>
               {tooltipVisible && (
                   <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-48 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
@@ -612,7 +611,7 @@ export default function UserDashboard() {
     },
     {
       title: 'Total Work',
-      value: accountData?.total_diff ? <AnimatedCounter value={accountData.total_diff} compact /> : <span className="text-gray-400">-</span>,
+      value: accountData?.total_diff ? <AnimatedCounter value={accountData.total_diff} format={formatHashWork} /> : <span className="text-gray-400">-</span>,
       icon: (
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11.707 4.707a1 1 0 00-1.414-1.414L10 9.586 8.707 8.293a1 1 0 00-1.414 0l-2 2a1 1 0 101.414 1.414L8 10.414l1.293 1.293a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -919,7 +918,7 @@ export default function UserDashboard() {
                             {
                               key: 'total_work',
                               header: 'Work',
-                              render: (value) => formatDifficulty(value as number),
+                              render: (value) => formatHashWork(value as number),
                             },
                             {
                               key: 'blocks_rank',
@@ -971,7 +970,7 @@ export default function UserDashboard() {
                               </div>
                               <div>
                                 <p className="text-foreground/60">Work</p>
-                                <p className="font-medium">{formatDifficulty(round.total_work)}</p>
+                                <p className="font-medium">{formatHashWork(round.total_work)}</p>
                               </div>
                               <div>
                                 <p className="text-foreground/60">Blocks Rank</p>

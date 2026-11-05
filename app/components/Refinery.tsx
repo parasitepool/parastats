@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, useRef, type MouseEvent } from 'react';
+import { useState, useMemo, useCallback, type MouseEvent } from 'react';
 import CardHeader from './CardHeader';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from './collapsible';
-import { formatHashDays } from '@/app/utils/formatters';
+import { formatHashDays } from '@/app/utils/hashmath';
 import CreateOrderModal from './modals/CreateOrderModal';
 import OrderDetailModal from './modals/OrderDetailModal';
 import { RefineryIcon, InfoIcon } from '@/app/components/icons';
-import type { OrderSummary, RouterStatus } from '@/app/api/router/types';
+import type { RouterStatus } from '@/app/api/refinery/types';
 import OrdersTable, { ordersToRows } from './refinery/OrdersTable';
+import { useRefineryResource } from '@/app/hooks/useRefineryResource';
+import { usePaginatedRefineryOrders } from '@/app/hooks/usePaginatedRefineryOrders';
 
 interface RefineryProps {
   address: string;
@@ -18,15 +20,26 @@ interface RefineryProps {
 }
 
 export default function Refinery({ address, isLoading = false, collapsed = false, onToggle }: RefineryProps) {
-  const [status, setStatus] = useState<RouterStatus | null>(null);
-  const [orders, setOrders] = useState<OrderSummary[]>([]);
+  const { data: status, unavailable: statusUnavailable, loading: statusLoading } =
+    useRefineryResource<RouterStatus>('/api/refinery/status', !isLoading);
+  const ordersUrl = `/api/refinery/orders?address=${encodeURIComponent(address)}`;
+  const {
+    orders: ordersData,
+    page: ordersPage,
+    unavailable: ordersUnavailable,
+    loading: ordersLoading,
+    loadingMore,
+    hasMore,
+    refresh: refreshOrders,
+    loadMore,
+    loadPrevious,
+  } = usePaginatedRefineryOrders(ordersUrl, !isLoading);
+  const ordersCountUrl = `/api/refinery/orders/count?address=${encodeURIComponent(address)}`;
+  const { data: ordersCountData, refresh: refreshOrdersCount } =
+    useRefineryResource<{ count: number }>(ordersCountUrl, !isLoading);
+  const ordersTotal = ordersCountData?.count ?? null;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
   const containerClassName = getCollapsibleContainerClassName(
     'w-full bg-background border border-border p-4 sm:p-6 shadow-sm',
     collapsed,
@@ -41,47 +54,15 @@ export default function Refinery({ address, isLoading = false, collapsed = false
     onToggle();
   };
 
-  const fetchOrders = useCallback(async () => {
-    const ordersUrl = new URL('/api/router/orders', window.location.origin);
-    ordersUrl.searchParams.set('address', address);
-    const res = await fetch(ordersUrl, { cache: 'no-store' }).catch(() => null);
-    if (!mountedRef.current) return;
-    if (res?.ok) setOrders(await res.json());
-  }, [address]);
-
-  useEffect(() => {
-    if (isLoading) return;
-
-    const fetchAll = async () => {
-      const ordersUrl = new URL('/api/router/orders', window.location.origin);
-      ordersUrl.searchParams.set('address', address);
-
-      const [statusRes, ordersRes] = await Promise.all([
-        fetch('/api/router/status', { cache: 'no-store' }).catch(() => null),
-        fetch(ordersUrl, { cache: 'no-store' }).catch(() => null),
-      ]);
-
-      if (!mountedRef.current) return;
-
-      if (statusRes?.ok) setStatus(await statusRes.json());
-      if (ordersRes?.ok) setOrders(await ordersRes.json());
-    };
-
-    fetchAll();
-    const intervalId = setInterval(fetchAll, 30000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [address, isLoading]);
-
   const capacity = status?.total_capacity_hash_days ?? 0;
   const used = status?.used_capacity_hash_days ?? 0;
-
-  const rows = useMemo(() => ordersToRows(orders), [orders]);
+  const rows = useMemo(() => ordersToRows(ordersData), [ordersData]);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
+  const handleOrdersCreated = useCallback(async () => {
+    await Promise.all([refreshOrders(), refreshOrdersCount()]);
+  }, [refreshOrders, refreshOrdersCount]);
 
-  if (isLoading) {
+  if (isLoading || statusLoading || (!status && !statusUnavailable)) {
     return (
       <div className={containerClassName} onClick={handleClick}>
         <CardHeader
@@ -110,7 +91,14 @@ export default function Refinery({ address, isLoading = false, collapsed = false
     );
   }
 
-  if (!status) return null;
+  if (!status) {
+    return (
+      <div className={containerClassName} onClick={handleClick}>
+        <CardHeader title="Refinery" icon={<RefineryIcon />} />
+        {!collapsed && <p className="text-sm text-foreground/60 mt-4">Refinery status unavailable; retrying…</p>}
+      </div>
+    );
+  }
 
   return (
     <div className={containerClassName} onClick={handleClick}>
@@ -121,10 +109,9 @@ export default function Refinery({ address, isLoading = false, collapsed = false
         action={collapsed ? null : (
           <button
             onClick={() => setIsModalOpen(true)}
-            disabled={status.halt}
-            className={`px-4 py-2 text-sm font-medium ${status.halt ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
+            className="px-4 py-2 text-sm font-medium bg-foreground text-background hover:bg-foreground/80"
           >
-            {status.halt ? 'Paused' : 'Create Order'}
+            {statusUnavailable || status.halt ? 'Check availability' : 'Create Order'}
           </button>
         )}
       />
@@ -154,11 +141,25 @@ export default function Refinery({ address, isLoading = false, collapsed = false
             </div>
           </div>
 
-          <OrdersTable rows={rows} onOrderClick={setSelectedOrderId} />
+          {ordersUnavailable && <p className="text-sm text-amber-400 mb-3">{rows.length ? 'Orders delayed; showing the last update.' : 'Orders unavailable.'}</p>}
+          {ordersLoading && rows.length === 0 ? (
+            <p className="text-sm text-foreground/60 mt-4">Loading orders…</p>
+          ) : (
+            <OrdersTable
+              rows={rows}
+              page={ordersPage}
+              onOrderClick={setSelectedOrderId}
+              hasMore={hasMore}
+              loadingMore={loadingMore}
+              onLoadMore={loadMore}
+              onLoadPrevious={loadPrevious}
+              total={ordersTotal}
+            />
+          )}
         </>
       )}
 
-      <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} onCreated={fetchOrders} address={address} hashPrice={status.hash_price} halt={status.halt} />
+      {isModalOpen && <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} onCreated={handleOrdersCreated} address={address} />}
       <OrderDetailModal orderId={selectedOrderId} onClose={() => setSelectedOrderId(null)} />
     </div>
   );

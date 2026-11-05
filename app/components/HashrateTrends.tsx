@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import StatCard from "./StatCard";
-import { formatHashrate } from "../utils/formatters";
+import { formatHashrate, formatPercent } from "../utils/hashmath";
 import type { HistoricalPoolStats } from "../api/pool-stats/historical/route";
 
 interface HashrateWithChange {
@@ -100,7 +100,7 @@ export default function HashrateTrends({
       <span className="ml-2 text-accent-2 flex items-baseline">
         <span className="text-sm mr-1">
           {isPositive ? "+" : ""}
-          {change.toFixed(2)}%
+          {formatPercent(change)}
         </span>
         {isPositive ? (
           <svg

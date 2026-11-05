@@ -1,37 +1,4 @@
-// Two decimals max, trailing zeros dropped: 12.00 -> "12", 2.50 -> "2.5".
-const trimTrailingZeros = (value: number) => String(parseFloat(value.toFixed(2)));
-
-export function formatDifficulty(value: number | string | undefined): string {
-  if (!value) return '0';
-
-  const numValue = typeof value === 'string' ? parseFloat(value) : value;
-  if (numValue < 1) return '0';
-
-  const units = ['', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
-  const unitIndex = Math.min(Math.floor(Math.log10(numValue) / 3), units.length - 1);
-
-  const scaledValue = numValue / Math.pow(1000, unitIndex);
-  const truncated = Math.floor(scaledValue * 100) / 100;
-
-  return `${trimTrailingZeros(truncated)}${units[unitIndex]}`;
-}
-
-function formatScaled(value: number | string | undefined, units: string[]): string {
-  if (!value) return `0 ${units[0]}`;
-
-  const numValue = typeof value === 'string' ? parseFloat(value) : value;
-  if (numValue < 1) return `0 ${units[0]}`;
-
-  const unitIndex = Math.min(Math.floor(Math.log10(numValue) / 3), units.length - 1);
-  const scaledValue = numValue / Math.pow(1000, unitIndex);
-  const truncated = Math.floor(scaledValue * 100) / 100;
-
-  return `${trimTrailingZeros(truncated)} ${units[unitIndex]}`;
-}
-
-export function formatHashrate(value: number | string | undefined): string {
-  return formatScaled(value, ['H/s', 'KH/s', 'MH/s', 'GH/s', 'TH/s', 'PH/s', 'EH/s', 'ZH/s', 'YH/s']);
-}
+import { HASHES_PER_DIFF_1 } from './hashmath';
 
 export function formatPrice(price: number | null): string {
   if (price === null) return "Loading...";
@@ -130,7 +97,7 @@ export function formatExpectedBlockTime(poolHashrate: number | string | undefine
   
   // Calculate seconds to find a block
   // Time = (Difficulty × 2^32) / Hashrate
-  const secondsToBlock = (difficulty * Math.pow(2, 32)) / hashrate;
+  const secondsToBlock = (difficulty * HASHES_PER_DIFF_1) / hashrate;
   
   // Convert to appropriate time unit
   const SECONDS_IN_YEAR = 31536000; // 365 days
@@ -156,60 +123,3 @@ export function formatExpectedBlockTime(poolHashrate: number | string | undefine
     return `${Math.round(secondsToBlock)}s`;
   }
 }
-
-/**
- * Formats a large number with compact SI suffixes (K, M, G, T)
- * e.g. 1234 -> 1.23K, 1234567890 -> 1.23G
- * Uses the same SI unit family as formatDifficulty so accumulated work/share
- * values stay consistent with difficulty and hashrate displays.
- * Supports bigint for very large numbers
- */
-export function formatCompactNumber(value: bigint | number): string {
-  const num = typeof value === 'bigint' ? Number(value) : value;
-  if (num === 0) return '0';
-
-  const suffixes = ['', 'K', 'M', 'G', 'T', 'P'];
-  const absNum = Math.abs(num);
-
-  if (absNum < 1000) {
-    return num.toLocaleString();
-  }
-
-  const floor = Math.floor(Math.log10(absNum) / 3);
-  const suffixIndex = Math.min(floor, suffixes.length - 1);
-
-  const scaledValue = num / Math.pow(1000, suffixIndex);
-
-  // Two decimals max, trailing zeros dropped
-  return `${trimTrailingZeros(scaledValue)}${suffixes[suffixIndex]}`;
-}
-
-export function formatHashDays(value: number | string | undefined): string {
-  return formatScaled(value, ['Hd', 'KHd', 'MHd', 'GHd', 'THd', 'PHd', 'EHd', 'ZHd', 'YHd']);
-}
-
-/**
- * Converts a hashrate string with unit suffix back to its numerical value
- * e.g. '1.23KH/s' -> 1230, '1.23MH/s' -> 1230000
- */
-export function parseHashrate(value: string | number | null | undefined): number {
-  if (value === null || value === undefined) return 0;
-  if (typeof value === 'number') return value;
-  
-  const units: { [key: string]: number } = {
-    'Y': 24, 'Z': 21, 'E': 18, 'P': 15, 'T': 12, 'G': 9, 'M': 6, 'K': 3
-  };
-  
-  // Remove '/s' suffix if present and trim
-  const cleanValue = value.replace('/s', '').trim();
-  
-  // Extract the number and unit
-  const match = cleanValue.match(/^([\d.]+)([YZEPMGTK])?$/);
-  if (!match) return parseFloat(cleanValue);
-  
-  const [, numStr, unit] = match;
-  const baseValue = parseFloat(numStr);
-  
-  if (!unit) return baseValue;
-  return baseValue * Math.pow(10, units[unit]);
-} 

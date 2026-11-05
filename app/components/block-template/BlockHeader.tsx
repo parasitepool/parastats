@@ -5,7 +5,7 @@ import {
   decodeCoinbaseScriptSigInfo,
   getTransaction
 } from "../../utils/bitcoinUtils";
-import { formatDifficulty } from "../../utils/formatters";
+import { formatDifficulty } from "../../utils/hashmath";
 import InfoCard from "./InfoCard";
 import { useMemo } from "react";
 

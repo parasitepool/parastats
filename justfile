@@ -13,11 +13,14 @@ build: install
 lint:
   pnpm lint
 
+test:
+  pnpm test
+
 audit:
   pnpm audit --prod
   pnpm audit --dev --audit-level=high
 
-ci: install lint audit
+ci: install lint test audit
 
 # Seed the local badge cache with demo users at various counts to preview the badge UI.
 # Prints the profile URLs to visit. Undo with: just demo_badges_clear

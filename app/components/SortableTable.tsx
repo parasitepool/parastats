@@ -18,6 +18,12 @@ interface SortableTableProps<T> {
   rowClassName?: (item: T) => string;
   className?: string;
   pageSize?: number;
+  page?: number;
+  hasMore?: boolean;
+  loadingMore?: boolean;
+  onLoadMore?: () => void | Promise<void>;
+  onLoadPrevious?: () => void | Promise<void>;
+  total?: number | null;
 }
 
 export default function SortableTable<T>({
@@ -29,6 +35,12 @@ export default function SortableTable<T>({
   rowClassName,
   className = '',
   pageSize,
+  page: controlledPage,
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
+  onLoadPrevious,
+  total = null,
 }: SortableTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<keyof T | undefined>(defaultSortColumn);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
@@ -59,9 +71,49 @@ export default function SortableTable<T>({
 
   const totalPages = pageSize ? Math.ceil(sortedData.length / pageSize) : 1;
   const clampedPage = Math.min(currentPage, Math.max(0, totalPages - 1));
-  const displayData = pageSize ? sortedData.slice(clampedPage * pageSize, (clampedPage + 1) * pageSize) : sortedData;
+  const controlled = controlledPage !== undefined;
+  const displayPage = controlledPage ?? clampedPage;
+  const displayData = pageSize && !controlled
+    ? sortedData.slice(clampedPage * pageSize, (clampedPage + 1) * pageSize)
+    : sortedData;
+  const atLastPage = controlled || clampedPage >= totalPages - 1;
+  const canLoadMore = Boolean(atLastPage && hasMore && onLoadMore);
+  const nextDisabled = loadingMore || (atLastPage && !canLoadMore);
+  const loadedThrough = controlled && pageSize
+    ? displayPage * pageSize + sortedData.length
+    : sortedData.length;
+  const totalForDisplay = total != null ? Math.max(total, loadedThrough) : loadedThrough;
 
   if (clampedPage !== currentPage) setCurrentPage(clampedPage);
+
+  const handleNextPage = async () => {
+    if (controlled) {
+      await onLoadMore?.();
+      return;
+    }
+    if (atLastPage && canLoadMore) {
+      await onLoadMore?.();
+    }
+    setCurrentPage(clampedPage + 1);
+  };
+
+  const handlePreviousPage = async () => {
+    if (controlled) {
+      await onLoadPrevious?.();
+      return;
+    }
+    setCurrentPage(clampedPage - 1);
+  };
+
+  const showPagination = pageSize && (
+    controlled
+      ? displayPage > 0 || (sortedData.length > 0 && hasMore)
+      : sortedData.length > 0 && (totalPages > 1 || hasMore)
+  );
+  const rangeStart = displayData.length > 0 ? displayPage * (pageSize ?? sortedData.length) + 1 : 0;
+  const rangeEnd = displayData.length > 0
+    ? displayPage * (pageSize ?? sortedData.length) + displayData.length
+    : 0;
 
   return (
     <div className={`overflow-x-auto w-full ${className}`}>
@@ -105,25 +157,25 @@ export default function SortableTable<T>({
           ))}
         </tbody>
       </table>
-      {pageSize && totalPages > 1 && (
+      {showPagination && (
         <div className="flex items-center justify-between px-6 py-3 border-t border-border">
           <span className="text-sm text-foreground/60">
-            {clampedPage * pageSize + 1}–{Math.min((clampedPage + 1) * pageSize, sortedData.length)} of {sortedData.length}
+            {rangeStart}–{rangeEnd} of {totalForDisplay}{total == null && hasMore ? '+' : ''}
           </span>
           <div className="flex gap-2">
             <button
               className="px-3 py-1 text-sm border border-border hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
-              disabled={clampedPage === 0}
-              onClick={() => setCurrentPage(clampedPage - 1)}
+              disabled={displayPage === 0 || loadingMore || (controlled && !onLoadPrevious)}
+              onClick={handlePreviousPage}
             >
               Prev
             </button>
             <button
               className="px-3 py-1 text-sm border border-border hover:bg-foreground/5 disabled:opacity-30 disabled:cursor-not-allowed"
-              disabled={clampedPage >= totalPages - 1}
-              onClick={() => setCurrentPage(clampedPage + 1)}
+              disabled={nextDisabled}
+              onClick={handleNextPage}
             >
-              Next
+              {loadingMore ? 'Loading…' : 'Next'}
             </button>
           </div>
         </div>

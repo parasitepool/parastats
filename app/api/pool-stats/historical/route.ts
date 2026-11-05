@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../../lib/db';
-import { parseHashrate } from '../../../utils/formatters';
+import { parseHashrate } from '../../../utils/hashmath';
 import { parseHistoricalParams } from '@/app/api/lib/historical';
 
 export const dynamic = 'force-dynamic';

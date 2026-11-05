@@ -6,6 +6,7 @@ import PoolStats from "./components/PoolStats";
 import RecentBlocks from "./components/RecentBlocks";
 import HashrateGauge from "./components/HashrateGauge";
 import RetroProgressBar from "./components/RetroProgressBar";
+import { formatPercent } from "./utils/hashmath";
 import LoyaltyBoard from "./components/tables/BoardLoyalty";
 import UsersWorkersChart from "./components/UsersWorkersChart";
 import HashrateTrends from "./components/HashrateTrends";
@@ -140,7 +141,7 @@ export default function Dashboard() {
           showLabel={true}
           label="Parasite Power"
           labelSize="md"
-          units="%"
+          formatValue={formatPercent}
           height={40}
           onlyCurrent={true}
         />

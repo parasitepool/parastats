@@ -1,7 +1,8 @@
 "use client";
 
 import {useEffect, useState} from "react";
-import {formatDifficulty, formatExpectedBlockTime, formatPrice, parseHashrate} from "../utils/formatters";
+import {formatDifficulty, formatHashWork, formatPercent, parseHashrate} from "../utils/hashmath";
+import {formatExpectedBlockTime, formatPrice} from "../utils/formatters";
 import StatCard from "./StatCard";
 import {getBitcoinPrice, getDifficultyAdjustment, getHashrate, type PoolStats as PoolStatsType} from "../utils/api";
 import {Adjustment, Hashrate} from "@mempool/mempool.js/lib/interfaces/bitcoin/difficulty";
@@ -72,7 +73,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
             onMouseLeave={() => setHighestDiffTooltipVisible(false)}
           >
             <span className="text-sm text-muted-foreground cursor-help">
-              ({Number(((parseHashrate(poolStats.highestDifficulty) / hashrate.currentDifficulty) * 100).toFixed(2))}%)
+              ({formatPercent((parseHashrate(poolStats.highestDifficulty) / hashrate.currentDifficulty) * 100)})
             </span>
             {highestDiffTooltipVisible && (
               <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 -translate-y-2 w-48 p-2 bg-background border border-border rounded shadow-lg text-xs z-10">
@@ -86,7 +87,7 @@ export default function PoolStats({ poolStats, loading }: PoolStatsProps) {
     },
     {
       title: "Total Work Since Last Block",
-      value: formatDifficulty(poolStats?.workSinceLastBlock ?? undefined),
+      value: formatHashWork(poolStats?.workSinceLastBlock ?? undefined),
       icon: <PickaxeIcon />,
     },
     {
