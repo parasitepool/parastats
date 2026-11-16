@@ -5,12 +5,12 @@ import CardHeader from './CardHeader';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from './collapsible';
 import { formatHashDays } from '@/app/utils/hashmath';
 import CreateOrderModal from './modals/CreateOrderModal';
-import OrderDetailModal from './modals/OrderDetailModal';
 import { RefineryIcon, InfoIcon } from '@/app/components/icons';
 import type { RouterStatus } from '@/app/api/refinery/types';
 import OrdersTable, { ordersToRows } from './refinery/OrdersTable';
 import { useRefineryResource } from '@/app/hooks/useRefineryResource';
 import { usePaginatedRefineryOrders } from '@/app/hooks/usePaginatedRefineryOrders';
+import { useOrderNavigation } from '@/app/hooks/useOrderNavigation';
 
 interface RefineryProps {
   address: string;
@@ -20,6 +20,7 @@ interface RefineryProps {
 }
 
 export default function Refinery({ address, isLoading = false, collapsed = false, onToggle }: RefineryProps) {
+  const handleOrderClick = useOrderNavigation();
   const { data: status, unavailable: statusUnavailable, loading: statusLoading } =
     useRefineryResource<RouterStatus>('/api/refinery/status', !isLoading);
   const ordersUrl = `/api/refinery/orders?address=${encodeURIComponent(address)}`;
@@ -39,7 +40,6 @@ export default function Refinery({ address, isLoading = false, collapsed = false
     useRefineryResource<{ count: number }>(ordersCountUrl, !isLoading);
   const ordersTotal = ordersCountData?.count ?? null;
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const containerClassName = getCollapsibleContainerClassName(
     'w-full bg-background border border-border p-4 sm:p-6 shadow-sm',
     collapsed,
@@ -68,6 +68,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
         <CardHeader
           title="Refinery"
           icon={<RefineryIcon />}
+          href="/refinery"
           className={collapsed ? '' : 'mb-4'}
         />
 
@@ -94,7 +95,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
   if (!status) {
     return (
       <div className={containerClassName} onClick={handleClick}>
-        <CardHeader title="Refinery" icon={<RefineryIcon />} />
+        <CardHeader title="Refinery" icon={<RefineryIcon />} href="/refinery" />
         {!collapsed && <p className="text-sm text-foreground/60 mt-4">Refinery status unavailable; retrying…</p>}
       </div>
     );
@@ -105,6 +106,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
       <CardHeader
         title="Refinery"
         icon={<RefineryIcon />}
+        href="/refinery"
         className={collapsed ? '' : 'mb-4'}
         action={collapsed ? null : (
           <button
@@ -148,7 +150,7 @@ export default function Refinery({ address, isLoading = false, collapsed = false
             <OrdersTable
               rows={rows}
               page={ordersPage}
-              onOrderClick={setSelectedOrderId}
+              onOrderClick={handleOrderClick}
               hasMore={hasMore}
               loadingMore={loadingMore}
               onLoadMore={loadMore}
@@ -160,7 +162,6 @@ export default function Refinery({ address, isLoading = false, collapsed = false
       )}
 
       {isModalOpen && <CreateOrderModal isOpen={isModalOpen} onClose={closeModal} onCreated={handleOrdersCreated} address={address} />}
-      <OrderDetailModal orderId={selectedOrderId} onClose={() => setSelectedOrderId(null)} />
     </div>
   );
 }

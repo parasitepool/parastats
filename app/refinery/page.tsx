@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import CardHeader from '@/app/components/CardHeader';
 import CreateOrderModal from '@/app/components/modals/CreateOrderModal';
-import OrderDetailModal from '@/app/components/modals/OrderDetailModal';
 import DemandChart from '@/app/components/refinery/DemandChart';
 import OrdersTable, { ordersToRows } from '@/app/components/refinery/OrdersTable';
 import Calculator from '@/app/components/refinery/Calculator';
@@ -12,10 +11,12 @@ import type { CapacityPoint, OrderTimelinePoint } from '@/app/api/refinery/types
 import { useRefineryStatus } from './RefineryShell';
 import { useRefineryResource } from '@/app/hooks/useRefineryResource';
 import { usePaginatedRefineryOrders } from '@/app/hooks/usePaginatedRefineryOrders';
+import { useOrderNavigation } from '@/app/hooks/useOrderNavigation';
 
 const ACTIVE_STATUSES = 'active,in_mempool';
 
 export default function RefineryPage() {
+  const handleOrderClick = useOrderNavigation();
   const { address } = useWallet();
   const { status, unavailable: statusUnavailable } = useRefineryStatus();
   const {
@@ -53,7 +54,6 @@ export default function RefineryPage() {
     useRefineryResource<CapacityPoint[]>('/api/refinery/capacity/historical');
   const [orderFilter, setOrderFilter] = useState<'all' | 'mine'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [calculatorKey, setCalculatorKey] = useState(0);
 
   // Fall back to "Active" when the wallet disconnects.
@@ -152,7 +152,7 @@ export default function RefineryPage() {
             key={orderFilter}
             rows={displayedRows}
             page={displayedPage}
-            onOrderClick={setSelectedOrderId}
+            onOrderClick={handleOrderClick}
             hasMore={displayedHasMore}
             loadingMore={displayedLoadingMore}
             onLoadMore={displayedLoadMore}
@@ -193,7 +193,6 @@ export default function RefineryPage() {
           address={address}
         />
       )}
-      <OrderDetailModal orderId={selectedOrderId} onClose={() => setSelectedOrderId(null)} />
     </>
   );
 }

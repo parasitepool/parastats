@@ -11,9 +11,15 @@ interface RouterStatsProps {
   unavailable?: boolean;
 }
 
-function SkeletonCard({ unavailable }: { unavailable: boolean }) {
+function SkeletonCard({
+  unavailable,
+  className = 'flex',
+}: {
+  unavailable: boolean;
+  className?: string;
+}) {
   return (
-    <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center gap-2">
+    <div className={`bg-secondary border border-border p-3 min-h-[88px] ${className} flex-col justify-center gap-2`}>
       {unavailable ? (
         <p className="text-sm text-foreground/60">Status unavailable</p>
       ) : (
@@ -26,15 +32,13 @@ function SkeletonCard({ unavailable }: { unavailable: boolean }) {
   );
 }
 
-function TitleCard() {
-  const docsActive = usePathname() === '/refinery/docs';
-
+function TitleCard({ docsActive }: { docsActive: boolean }) {
   return (
     <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-wrap items-center justify-center gap-2">
-      <div className="flex items-center gap-2">
+      <Link href="/refinery" className="flex items-center gap-2 transition-colors hover:text-accent-3">
         <RefineryIcon className="h-8 w-8 shrink-0" />
         <h1 className="text-xl font-semibold">Refinery</h1>
-      </div>
+      </Link>
       <Link
         href={docsActive ? '/refinery' : '/refinery/docs'}
         aria-label={docsActive ? 'Close docs and return to Refinery' : 'Open docs'}
@@ -49,12 +53,20 @@ function TitleCard() {
 }
 
 export default function RouterStats({ status, unavailable = false }: RouterStatsProps) {
+  const pathname = usePathname();
+  // Order and docs pages need the vertical space on mobile; keep only the
+  // Refinery title card there.
+  const compactOnMobile =
+    pathname.startsWith('/refinery/order/') || pathname.startsWith('/refinery/docs');
+  const secondaryCardClass = compactOnMobile ? 'hidden sm:flex' : 'flex';
+  const docsActive = pathname === '/refinery/docs';
+
   if (!status) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <TitleCard />
-        <SkeletonCard unavailable={unavailable} />
-        <SkeletonCard unavailable={unavailable} />
+        <TitleCard docsActive={docsActive} />
+        <SkeletonCard unavailable={unavailable} className={secondaryCardClass} />
+        <SkeletonCard unavailable={unavailable} className={secondaryCardClass} />
       </div>
     );
   }
@@ -65,14 +77,14 @@ export default function RouterStats({ status, unavailable = false }: RouterStats
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <TitleCard />
+      <TitleCard docsActive={docsActive} />
 
-      <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
+      <div className={`bg-secondary border border-border p-3 min-h-[88px] ${secondaryCardClass} flex-col justify-center`}>
         <p className="text-sm text-foreground/60">Hashprice</p>
         <p className="text-lg font-semibold">{status.hash_price.toLocaleString()} sats/PHd</p>
       </div>
 
-      <div className="bg-secondary border border-border p-3 min-h-[88px] flex flex-col justify-center">
+      <div className={`bg-secondary border border-border p-3 min-h-[88px] ${secondaryCardClass} flex-col justify-center`}>
         <p className="text-sm text-foreground/60">Capacity</p>
         <p className="text-lg font-semibold">
           {formatHashDays(used)} <span className="text-foreground/60">/ {formatHashDays(capacity)}</span>

@@ -1,7 +1,11 @@
 'use client';
 
+import Link from 'next/link';
 import SortableTable from '../SortableTable';
 import { formatHashrate, formatHashDays, formatDifficulty } from '@/app/utils/hashmath';
+import { orderHref } from '@/app/utils/refinery-links';
+import OrderProgressBar, { orderProgress } from './OrderProgressBar';
+import { ReviewBadge, statusColor } from './order-status';
 import type { OrderSummary, Review } from '@/app/api/refinery/types';
 
 export interface OrderRow {
@@ -14,18 +18,6 @@ export interface OrderRow {
   progress: number;
 }
 
-export const statusColor: Record<string, string> = {
-  active: 'text-green-500',
-  pending: 'text-[#f7931a]',
-  in_mempool: 'text-yellow-500',
-};
-
-export function ReviewBadge({ review }: { review: Review }) {
-  if (review === 'flagged') return <span className="text-red-500 text-sm ml-1" title="Flagged for review">⚑</span>;
-  if (review === 'cleared') return <span className="text-foreground/40 text-sm ml-1" title="Cleared">✓</span>;
-  return null;
-}
-
 export function ordersToRows(orders: OrderSummary[]): OrderRow[] {
   return orders.map(o => ({
     id: o.id,
@@ -34,7 +26,7 @@ export function ordersToRows(orders: OrderSummary[]): OrderRow[] {
     requested: o.requested_hash_days,
     hashrate: o.hashrate,
     best_share: o.best_share,
-    progress: o.requested_hash_days ? Math.min(100, (o.delivered_hash_days / o.requested_hash_days) * 100) : 0,
+    progress: orderProgress(o.delivered_hash_days, o.requested_hash_days),
   }));
 }
 
@@ -43,26 +35,20 @@ function formatRequested(row: Pick<OrderRow, 'requested'>): string {
   return row.requested != null ? formatHashDays(row.requested) : 'Unlimited';
 }
 
-function OrderProgressBar({ progress, requested }: { progress: number; requested: number | null }) {
-  return (
-    <div className="flex items-center gap-2 min-w-[120px]">
-      <div className="flex-1 h-3 bg-secondary border border-border rounded-full overflow-hidden">
-        <div
-          className="h-full bg-[rgba(237,237,237,0.6)] rounded-full transition-all duration-300"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      <span className="text-xs text-foreground/60 w-10 text-right">
-        {requested ? `${Math.round(progress)}%` : '—'}
-      </span>
-    </div>
-  );
-}
-
 const columns = [
   {
     key: 'id' as keyof OrderRow,
     header: 'ID',
+    render: (value: OrderRow[keyof OrderRow]) => (
+      <Link
+        href={orderHref(Number(value))}
+        aria-label={`View order ${value}`}
+        className="hover:text-accent-3 hover:underline"
+        onClick={event => event.stopPropagation()}
+      >
+        {String(value)}
+      </Link>
+    ),
   },
   {
     key: 'status' as keyof OrderRow,
@@ -94,7 +80,11 @@ const columns = [
     key: 'progress' as keyof OrderRow,
     header: 'Progress',
     render: (_value: OrderRow[keyof OrderRow], row: OrderRow) => (
-      <OrderProgressBar progress={row.progress} requested={row.requested} />
+      <OrderProgressBar
+        progress={row.progress}
+        requested={row.requested}
+        label={`Order ${row.id} progress`}
+      />
     ),
   },
 ];
@@ -143,42 +133,60 @@ export default function OrdersTable({
         />
       </div>
 
-      <div className="md:hidden space-y-4">
-        {rows.map(order => (
-          <div
-            key={order.id}
-            className={`bg-background border border-border p-4 shadow-sm ${onOrderClick ? 'cursor-pointer hover:bg-foreground/5' : ''}`}
-            onClick={onOrderClick ? () => onOrderClick(order.id) : undefined}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-accent-3 font-bold text-lg">
-                Order {order.id}
-              </span>
-              <span className="inline-flex items-center">
-                <span className={`font-medium ${statusColor[order.status] ?? ''}`}>{order.status}</span>
-                <ReviewBadge review={order.review} />
-              </span>
-            </div>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-foreground/60">Requested</p>
-                <p className="font-medium">{formatRequested(order)}</p>
+      <div className="md:hidden space-y-3" data-collapse-ignore>
+        {rows.map(order => {
+          const cardClassName = 'bg-background border border-border p-4 shadow-sm';
+          const content = (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-accent-3 font-bold text-lg">
+                  Order {order.id}
+                </span>
+                <span className="inline-flex items-center">
+                  <span className={`font-medium ${statusColor[order.status] ?? ''}`}>{order.status}</span>
+                  <ReviewBadge review={order.review} />
+                </span>
               </div>
-              <div>
-                <p className="text-foreground/60">Hashrate</p>
-                <p className="font-medium">{formatHashrate(order.hashrate)}</p>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-foreground/60">Requested</p>
+                  <p className="font-medium">{formatRequested(order)}</p>
+                </div>
+                <div>
+                  <p className="text-foreground/60">Hashrate</p>
+                  <p className="font-medium">{formatHashrate(order.hashrate)}</p>
+                </div>
+                <div>
+                  <p className="text-foreground/60">Best Share</p>
+                  <p className="font-medium">{order.best_share != null ? formatDifficulty(order.best_share) : '—'}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-foreground/60">Best Share</p>
-                <p className="font-medium">{order.best_share != null ? formatDifficulty(order.best_share) : '—'}</p>
+              <div className="mt-4 text-sm">
+                <p className="text-foreground/60 mb-2">Progress</p>
+                <OrderProgressBar
+                  progress={order.progress}
+                  requested={order.requested}
+                  label={`Order ${order.id} progress`}
+                />
               </div>
+            </>
+          );
+
+          return onOrderClick ? (
+            <Link
+              key={order.id}
+              href={orderHref(order.id)}
+              aria-label={`View order ${order.id}`}
+              className={`block ${cardClassName} hover:bg-foreground/5`}
+            >
+              {content}
+            </Link>
+          ) : (
+            <div key={order.id} className={cardClassName}>
+              {content}
             </div>
-            <div className="mt-4 text-sm">
-              <p className="text-foreground/60 mb-2">Progress</p>
-              <OrderProgressBar progress={order.progress} requested={order.requested} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {(page > 0 || (rows.length > 0 && hasMore)) && (
           <div className="flex items-center justify-between pt-2">
             <span className="text-sm text-foreground/60">
