@@ -6,17 +6,20 @@ import PoolStats from "./components/PoolStats";
 import RecentBlocks from "./components/RecentBlocks";
 import HashrateGauge from "./components/HashrateGauge";
 import RetroProgressBar from "./components/RetroProgressBar";
+import ParasiteEffortBar from "./components/ParasiteEffortBar";
+import ShareStream from "./components/ShareStream";
 import { formatPercent } from "./utils/hashmath";
 import LoyaltyBoard from "./components/tables/BoardLoyalty";
 import UsersWorkersChart from "./components/UsersWorkersChart";
 import HashrateTrends from "./components/HashrateTrends";
 import HashrateChart from "./components/HashrateChart";
 import BoardCombined from "./components/tables/BoardCombined";
-import { getPoolStats, getHistoricalPoolStats, type PoolStats as PoolStatsType } from "./utils/api";
+import { getHashrate, getPoolStats, getHistoricalPoolStats, type PoolStats as PoolStatsType } from "./utils/api";
 import type { HistoricalPoolStats } from "./api/pool-stats/historical/route";
 
 export default function Dashboard() {
   const [poolStats, setPoolStats] = useState<PoolStatsType>();
+  const [currentDifficulty, setCurrentDifficulty] = useState<number>();
   const [loading, setLoading] = useState(true);
   const [historicalStats, setHistoricalStats] = useState<HistoricalPoolStats[]>([]);
   const [historicalLoading, setHistoricalLoading] = useState(true);
@@ -24,10 +27,22 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const poolStatsData = await getPoolStats();
-        setPoolStats(poolStatsData);
-      } catch (error) {
-        console.error("Error fetching pool stats:", error);
+        const [poolStatsResult, hashrateResult] = await Promise.allSettled([
+          getPoolStats(),
+          getHashrate(),
+        ]);
+
+        if (poolStatsResult.status === "fulfilled") {
+          setPoolStats(poolStatsResult.value);
+        } else {
+          console.error("Error fetching pool stats:", poolStatsResult.reason);
+        }
+
+        if (hashrateResult.status === "fulfilled") {
+          setCurrentDifficulty(hashrateResult.value.currentDifficulty);
+        } else {
+          console.error("Error fetching network difficulty:", hashrateResult.reason);
+        }
       } finally {
         setLoading(false);
       }
@@ -126,37 +141,41 @@ export default function Dashboard() {
   }, [historicalStats]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center pb-8">
-      <div className="w-full mb-6">
+    <main className="flex min-h-screen flex-col items-center gap-3 pb-8">
+      <div className="w-full">
         <RecentBlocks />
+        <ShareStream className="mt-2" />
       </div>
-      <div className="w-full mb-6">
-        <PoolStats poolStats={poolStats} loading={loading} />
-      </div>
-      <div className="w-full mb-6">
+      <PoolStats
+        poolStats={poolStats}
+        loading={loading}
+        currentDifficulty={currentDifficulty}
+      />
+      <div className="w-full space-y-3">
         {/* <RetroProgressBarExample /> */}
         <RetroProgressBar
           current={(poolStats?.hashrate || 0) / 1e17}
           max={100}
-          showLabel={true}
           label="Parasite Power"
-          labelSize="md"
           formatValue={formatPercent}
           height={40}
-          onlyCurrent={true}
+        />
+        <ParasiteEffortBar
+          workSinceLastBlock={poolStats?.workSinceLastBlock ?? null}
+          currentDifficulty={currentDifficulty}
         />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4 w-full">
         <HashrateGauge hashrate={poolStats?.hashrate || 0} />
         <div className="lg:col-span-2">
           <HashrateChart data={hashrateChartData} loading={historicalLoading} />
         </div>
         {/* <HashrateDistribution /> */}
       </div>
-      <div className="w-full mb-6">
+      <div className="w-full">
         <HashrateTrends historicalData={historicalStats} loading={historicalLoading} />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-4 w-full">
         <div className="lg:col-span-2">
           <UsersWorkersChart data={usersWorkersChartData} loading={historicalLoading} />
         </div>
@@ -165,7 +184,7 @@ export default function Dashboard() {
       {/* <div className="w-full mb-6">
         <OverviewChart />
       </div> */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4 w-full">
         <Leaderboard />
         <LoyaltyBoard />
       </div>

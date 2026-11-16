@@ -33,7 +33,7 @@ export default function StratumStatusBanner({
 
     return (
       <div
-        className="my-4 border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+        className="border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
         role="status"
       >
         <p className="font-medium">Stratum status unavailable</p>
@@ -106,7 +106,7 @@ export default function StratumStatusBanner({
   }
 
   return (
-    <div className={`my-4 border p-3 text-sm ${tone}`} role="status">
+    <div className={`border p-3 text-sm ${tone}`} role="status">
       <p className="font-medium">{title}</p>
       <p className="mt-1 opacity-90">{detail}</p>
       <p className="mt-1 text-xs opacity-80">{lastTemplateText}</p>

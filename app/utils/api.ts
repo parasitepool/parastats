@@ -1,13 +1,15 @@
 import mempoolJS from "@mempool/mempool.js";
 import { Hashrate, Adjustment } from "@mempool/mempool.js/lib/interfaces/bitcoin/difficulty";
 import { Block } from "@mempool/mempool.js/lib/interfaces/bitcoin/blocks";
+import { FeesRecommended } from "@mempool/mempool.js/lib/interfaces/bitcoin/fees";
 import { ProcessedUserData } from "../api/user/[address]/route";
 import { HistoricalPoolStats } from "../api/pool-stats/historical/route";
 import { HistoricalUserStats } from "../api/user/[address]/historical/route";
+import type { WinnerDiff } from "./winners";
 
 // Initialize mempoolJS
 const { bitcoin } = mempoolJS();
-const { difficulty, blocks } = bitcoin;
+const { difficulty, blocks, fees } = bitcoin;
 
 export type PoolStats = {
   uptime: string;
@@ -61,6 +63,15 @@ export async function getDifficultyAdjustment(): Promise<Adjustment> {
     return await withRetry(() => difficulty.getDifficultyAdjustment());
   } catch (error) {
     console.error("Error fetching difficulty adjustment:", error);
+    throw error;
+  }
+}
+
+export async function getRecommendedFees(): Promise<FeesRecommended> {
+  try {
+    return await withRetry(() => fees.getFeesRecommended());
+  } catch (error) {
+    console.error("Error fetching recommended fees:", error);
     throw error;
   }
 }
@@ -185,32 +196,20 @@ export async function updateAccountMetadata(
 }
 
 /**
- * PRIVACY: BlockTopDiff only contains truncated addresses.
+ * PRIVACY: Winner data only contains truncated addresses.
  * Full addresses are never exposed by the API to protect user privacy.
- * 
- * Note: Uses "top_diff" terminology instead of "winner" to avoid
- * implying users won anything - it's simply a difficulty watermark.
  */
-export interface BlockTopDiff {
-  block_height: number;
-  top_diff_address: string; // Truncated address only
-  claimed?: boolean;
-  difficulty: number;
-  block_timestamp: number | null;
-}
-
-// Recent block top diffs API
-export async function getRecentBlockTopDiffs(limit: number = 10): Promise<BlockTopDiff[]> {
+export async function getWinnerDiffs(): Promise<WinnerDiff[]> {
   try {
     return await withRetry(async () => {
-      const response = await fetch(`/api/highest-diff?limit=${limit}`);
+      const response = await fetch('/api/winners');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       return await response.json();
     });
   } catch (error) {
-    console.error("Error fetching recent block top diffs:", error);
+    console.error("Error fetching block winners:", error);
     throw error;
   }
 }

@@ -77,7 +77,7 @@ const participationColumns: BoardColumn<ParticipantRow>[] = [
 
 const LEADERBOARDS: { type: LeaderboardType; label: string; title: string; columns: BoardColumn<ParticipantRow>[] }[] = [
   { type: 'difficulty', label: 'Difficulty', title: 'Top Difficulties', columns: diffColumns },
-  { type: 'participation', label: 'Participation', title: 'Top Loyalty', columns: participationColumns },
+  { type: 'participation', label: 'Loyalty', title: 'Top Loyalty', columns: participationColumns },
   { type: 'work', label: 'Work', title: 'Most Work', columns: workColumns },
 ];
 
@@ -227,7 +227,7 @@ export default function RoundsPage() {
       {rounds.length === 0 ? (
         <div className="text-foreground/60">No completed blocks yet.</div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {rounds.map((round) => {
             const networkDiff = round.block_height === 0
               ? networkDifficulty

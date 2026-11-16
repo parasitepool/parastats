@@ -195,19 +195,17 @@ export default function UserMiningStats({
   ];
 
   return (
-    <div className="w-full mb-8">
-      <div className="flex flex-wrap -mx-2">
+    <div className="w-full">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4 lg:gap-4">
         {statCards.map((card, index) => (
-          <div key={index} className="w-1/2 md:w-1/4 p-1 lg:p-2">
-            <div className="bg-background p-4 shadow-md border border-border h-full">
-              <div className="flex items-center mb-2">
-                <div className="mr-2 text-accent-3">
-                  {card.icon}
-                </div>
-                <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
+          <div key={index} className="bg-background p-4 shadow-md border border-border h-full">
+            <div className="flex items-center mb-2">
+              <div className="mr-2 text-accent-3">
+                {card.icon}
               </div>
-              <p className="text-2xl font-semibold">{card.value}</p>
+              <h3 className="text-sm font-medium text-accent-2">{card.title}</h3>
             </div>
+            <p className="text-2xl font-semibold">{card.value}</p>
           </div>
         ))}
       </div>

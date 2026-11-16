@@ -261,7 +261,7 @@ export default function Navigation({
 
   return (
     <header className="relative bg-background text-foreground py-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-6 -mx-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-6">
         {/* Left: Logo (hidden on small screens while the search is open) */}
         <Link href="/" onClick={() => setMenuOpen(false)} className={`flex-shrink-0 ${searchOpen ? 'hidden lg:flex' : 'flex'}`}>
           <Image

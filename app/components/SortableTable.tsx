@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useState, useMemo } from 'react';
+import { sortTableData, type SortDirection } from '../utils/sort';
 
 interface Column<T> {
   key: keyof T;
@@ -13,9 +14,12 @@ interface SortableTableProps<T> {
   data: T[];
   columns: Column<T>[];
   defaultSortColumn?: keyof T;
-  defaultSortDirection?: 'asc' | 'desc';
+  defaultSortDirection?: SortDirection;
+  newColumnSortDirection?: SortDirection;
+  onSortChange?: (column: keyof T, direction: SortDirection) => void;
   onRowClick?: (item: T) => void;
   rowClassName?: (item: T) => string;
+  getRowId?: (item: T) => string;
   className?: string;
   pageSize?: number;
   page?: number;
@@ -31,8 +35,11 @@ export default function SortableTable<T>({
   columns,
   defaultSortColumn,
   defaultSortDirection = 'asc',
+  newColumnSortDirection = 'asc',
+  onSortChange,
   onRowClick,
   rowClassName,
+  getRowId,
   className = '',
   pageSize,
   page: controlledPage,
@@ -43,31 +50,23 @@ export default function SortableTable<T>({
   total = null,
 }: SortableTableProps<T>) {
   const [sortColumn, setSortColumn] = useState<keyof T | undefined>(defaultSortColumn);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(defaultSortDirection);
   const [currentPage, setCurrentPage] = useState(0);
 
   const handleSort = (column: keyof T) => {
-    if (sortColumn === column) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortColumn(column);
-      setSortDirection('asc');
-    }
+    const nextDirection: SortDirection = sortColumn === column
+      ? (sortDirection === 'asc' ? 'desc' : 'asc')
+      : newColumnSortDirection;
+
+    setSortColumn(column);
+    setSortDirection(nextDirection);
+    onSortChange?.(column, nextDirection);
   };
 
-  const sortedData = useMemo(() => [...data].sort((a, b) => {
-    if (!sortColumn) return 0;
-
-    const aValue = a[sortColumn];
-    const bValue = b[sortColumn];
-
-    if (aValue === bValue) return 0;
-    if (aValue === null || aValue === undefined) return 1;
-    if (bValue === null || bValue === undefined) return -1;
-
-    const comparison = String(aValue).localeCompare(String(bValue), undefined, { numeric: true });
-    return sortDirection === 'asc' ? comparison : -comparison;
-  }), [data, sortColumn, sortDirection]);
+  const sortedData = useMemo(
+    () => sortTableData(data, sortColumn, sortDirection),
+    [data, sortColumn, sortDirection],
+  );
 
   const totalPages = pageSize ? Math.ceil(sortedData.length / pageSize) : 1;
   const clampedPage = Math.min(currentPage, Math.max(0, totalPages - 1));
@@ -143,6 +142,7 @@ export default function SortableTable<T>({
           {displayData.map((item, index) => (
             <tr
               key={index}
+              id={getRowId?.(item)}
               className={`hover:bg-foreground/5 ${onRowClick ? 'cursor-pointer' : ''} ${rowClassName ? rowClassName(item) : ''}`}
               onClick={() => onRowClick?.(item)}
             >

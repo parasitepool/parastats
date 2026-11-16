@@ -65,6 +65,44 @@ body {
     animation: retroPulse 3s ease-in-out infinite;
   }
 
+  /* Left-to-right drift for homepage share stream packets */
+  @keyframes share-drift {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(var(--share-travel));
+    }
+  }
+
+  .share-packet {
+    animation-name: share-drift;
+    animation-timing-function: linear;
+    animation-duration: var(--share-duration);
+    animation-delay: var(--share-delay);
+    animation-iteration-count: infinite;
+  }
+
+  .share-packet:hover {
+    animation-play-state: paused;
+  }
+
+  /* Strong selected-row treatment for the shadow winners table */
+  .winner-selected-row > td {
+    background-color: rgba(204, 204, 204, 0.16);
+  }
+
+  .winner-selected-row > td:first-child {
+    box-shadow: inset 3px 0 0 var(--accent-1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .share-packet {
+      animation: none;
+      display: none;
+    }
+  }
+
   /* Soft pulse animation for pending block - synchronized with retroPulse */
   @keyframes pulse-soft {
     0%, 100% {

@@ -1,88 +1,68 @@
 'use client';
 
-import { FC, useRef, useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface RetroProgressBarProps {
   current: number;
   max: number;
-  showLabel?: boolean;
-  units?: string;
   height?: number;
   className?: string;
   label?: string;
-  labelSize?: 'xs' | 'sm' | 'md' | 'lg';
-  onlyCurrent?: boolean;
   formatValue: (value: number) => string;
 }
 
-const RetroProgressBar: FC<RetroProgressBarProps> = ({
+export default function RetroProgressBar({
   current,
   max,
-  showLabel = false,
-  units = '',
   height = 30,
   className = '',
   label = '',
-  labelSize = 'xs',
-  onlyCurrent = false,
   formatValue,
-}) => {
+}: RetroProgressBarProps) {
   // Calculate percentage
   const percentage = Math.min(100, Math.max(0, (current / max) * 100));
-  
+  const labelText = label || `${Math.round(percentage)}%`;
+
   // Container ref to measure width
   const containerRef = useRef<HTMLDivElement>(null);
-  const [barCount, setBarCount] = useState<number>(0); // Default, will be updated
+  const [barCount, setBarCount] = useState<number>(0);
 
-  // Update bar count based on container width (with debounce)
   const updateBarCount = useCallback(() => {
-    const debouncedUpdate = () => {
-      if (containerRef.current) {
-        // Each bar is 8px wide (w-2) + 2px margin (mx-px)
-        // So each bar takes approximately 3px of space
-        const width = containerRef.current.clientWidth;
-        // Calculate how many bars can fit, accounting for the margins
-        const estimatedBarCount = Math.floor(width / 8);
-        setBarCount(estimatedBarCount > 0 ? estimatedBarCount : 50);
-      }
-    };
-
-    const timeoutRef = { current: undefined as NodeJS.Timeout | undefined };
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(debouncedUpdate, 100);
+    // Each bar is 8px wide (w-2) plus margins, so estimate from the width.
+    const width = containerRef.current?.clientWidth ?? 0;
+    const estimatedBarCount = Math.floor(width / 8);
+    setBarCount(estimatedBarCount > 0 ? estimatedBarCount : 50);
   }, []);
 
   useEffect(() => {
-    // Update initially
     updateBarCount();
 
-    // Add resize listener
-    window.addEventListener('resize', updateBarCount);
-    
-    return () => {
-      window.removeEventListener('resize', updateBarCount);
-    };
-  }, [updateBarCount, height]);
-  
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver(updateBarCount);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [updateBarCount]);
+
   // Calculate filled bars based on percentage and total bar count
-  const filledBars = percentage === 100 
+  const filledBars = percentage === 100
     ? barCount // At 100%, fill all bars
     : Math.floor((percentage / 100) * barCount);
-  
+
   // Generate bars
   const bars = [];
   for (let i = 0; i < barCount; i++) {
-    // Calculate brightness based on position
-    // Bars will get lighter as they approach the right (100%)
-    const brightness = i < filledBars 
+    // Bars get lighter as they approach the right (100%)
+    const brightness = i < filledBars
       ? 0.2 + (0.8 * (i / barCount))
       : 0.1;
-    
+
     const backgroundColor = `rgba(237, 237, 237, ${brightness})`;
-    
+
     // Check if this is the last filled bar
     const isLastFilledBar = i === filledBars - 1 && filledBars > 0 && filledBars < barCount;
-    
+
     bars.push(
       <div
         key={i}
@@ -97,14 +77,8 @@ const RetroProgressBar: FC<RetroProgressBarProps> = ({
 
   return (
     <div className={`flex flex-col w-full ${className}`}>
-      {(showLabel || label) && (
-        <div className={`flex justify-between mb-1 text-${labelSize} text-foreground font-semibold`}>
-          <span>{label || `${Math.round(percentage)}%`}</span>
-          {showLabel && !onlyCurrent ? <span>{current} {units} / {max} {units}</span> : <span>{formatValue(current)}</span>}
-        </div>
-      )}
       <div className="relative">
-        <div 
+        <div
           ref={containerRef}
           className="flex items-center bg-secondary w-full border border-border overflow-hidden"
           style={{ height: `${height}px` }}
@@ -112,32 +86,32 @@ const RetroProgressBar: FC<RetroProgressBarProps> = ({
           {bars}
         </div>
         {/* Scanline effect - subtle horizontal lines */}
-        <div 
+        <div
           className="absolute top-0 left-0 w-full pointer-events-none"
-          style={{ 
+          style={{
             height: `${height}px`,
             background: 'repeating-linear-gradient(0deg, rgba(0,0,0,0.03), rgba(0,0,0,0.03) 1px, transparent 1px, transparent 2px)',
             opacity: 0.5
           }}
         />
         {/* CRT glow effect */}
-        <div 
+        <div
           className="absolute top-0 left-0 w-full pointer-events-none"
-          style={{ 
+          style={{
             height: `${height}px`,
             boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)',
             opacity: 0.7
           }}
         />
-      </div>
-      {/* Display percentage and current value below */}
-      {showLabel && !onlyCurrent && (
-        <div className="flex justify-end mt-1">
-          <span className="text-xs text-muted">[{Math.round(percentage)}%]</span>
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-between px-2">
+          <span className="bg-background/90 px-1.5 py-0.5 text-sm font-semibold leading-none text-foreground shadow-[0_0_8px_rgba(0,0,0,0.65)]">
+            {labelText}
+          </span>
+          <span className="bg-background/90 px-1.5 py-0.5 text-sm font-semibold leading-none text-foreground shadow-[0_0_8px_rgba(0,0,0,0.65)]">
+            {formatValue(current)}
+          </span>
         </div>
-      )}
+      </div>
     </div>
   );
-};
-
-export default RetroProgressBar;
+}

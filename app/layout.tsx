@@ -48,7 +48,7 @@ export default function RootLayout({
       <body className={`antialiased`}>
         <WalletProvider>
           <XverseAutoConnect />
-          <div className="min-h-screen flex flex-col container mx-auto px-4">
+          <div className="min-h-screen flex flex-col container mx-auto px-2 sm:px-4 lg:px-6">
             <NavigationWrapper />
             {children}
             <Footer />

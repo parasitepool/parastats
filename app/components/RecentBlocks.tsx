@@ -2,52 +2,27 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import BlockCard from "./BlockCard";
-import ShadowBlockCard from "./ShadowBlockCard";
 import { Block } from "@mempool/mempool.js/lib/interfaces/bitcoin/blocks";
-import { getPreference, setPreference } from "../../lib/localStorage";
-import { getBlocksTipHeight, getRecentBlocks, getRecentBlockTopDiffs, type BlockTopDiff } from "../utils/api";
-import { ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ChevronDownIcon } from "./icons";
+import { getBlocksTipHeight, getRecentBlocks, getRecommendedFees } from "../utils/api";
+import { ChevronLeftIcon, ChevronRightIcon } from "./icons";
 import Link from "next/link";
 
-// Expand/compact toggle, sized to match the shadow card row beside it
-function ExpandToggle({ isCompact, onToggle }: { isCompact: boolean; onToggle: () => void }) {
+function MiningCard({ nextHeight, feeRate }: { nextHeight: number | null; feeRate: number | null }) {
   return (
-    <button
-      onClick={onToggle}
-      className="w-full flex-1 min-h-6 flex items-center justify-center border border-border text-accent-2 hover:text-primary hover:bg-foreground/5 transition-all duration-300 ease-in-out"
-      aria-label={isCompact ? "Expand view" : "Compact view"}
-      title={isCompact ? "Expand view" : "Compact view"}
+    <Link
+      href="/template"
+      title="View current block template"
+      className="flex-shrink-0 w-28 h-24 border border-dashed border-gray-500/50 p-2 animate-pulse-soft flex flex-col"
     >
-      {isCompact ? <ChevronDownIcon className="h-4 w-4" /> : <ChevronUpIcon className="h-4 w-4" />}
-    </button>
-  );
-}
-
-// Combined Mining card that connects both chains
-function MiningCard({ nextHeight, isCompact, onToggle }: { nextHeight: number; isCompact: boolean; onToggle: () => void }) {
-  return (
-    <div className="flex-shrink-0 self-stretch flex flex-col items-center justify-start gap-1">
-      <Link
-        href="/template"
-        className={`border border-dashed border-gray-500/50 p-2 snap-start animate-pulse-soft flex flex-col items-center justify-center ${
-          isCompact ? 'w-28' : 'w-48'
-        }`}
-        style={{
-          height: isCompact ? '85px' : '200px',
-          transition: 'width 0.3s ease-in-out, height 0.3s ease-in-out',
-        }}
-      >
-        <div className="font-bold text-gray-400">{nextHeight}</div>
-        <div className="text-xs text-gray-400 mt-1">Mining...</div>
-        {!isCompact && (
-          <div className="flex items-center mt-2">
-            <div className="w-2 h-2 rounded-full bg-accent-1 animate-pulse mr-1.5"></div>
-            <span className="text-xs text-gray-400">In progress</span>
-          </div>
-        )}
-      </Link>
-      <ExpandToggle isCompact={isCompact} onToggle={onToggle} />
-    </div>
+      <div className="font-bold text-gray-400 leading-none">{nextHeight ?? "..."}</div>
+      <div className="flex flex-1 flex-col justify-between pt-1 text-xs leading-none text-gray-400">
+        <div title="Current recommended fee rate">
+          {feeRate !== null ? `~${feeRate.toFixed(1)} sat/vB` : "-"}
+        </div>
+        <div>In ~10 min</div>
+        <div>Mining...</div>
+      </div>
+    </Link>
   );
 }
 
@@ -57,9 +32,7 @@ export default function RecentBlocks() {
   const [currentTipHeight, setCurrentTipHeight] = useState<number>(0);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
-  const [isCompact, setIsCompact] = useState(true);
-  const [highestDiffs, setHighestDiffs] = useState<Map<number, BlockTopDiff>>(new Map());
-  const [initialBlockHeight, setInitialBlockHeight] = useState(0);
+  const [feeRate, setFeeRate] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const updateArrows = useCallback(() => {
@@ -74,29 +47,11 @@ export default function RecentBlocks() {
     }
   }, []);
 
-  // Load isCompact preference from localStorage on initial render
-  useEffect(() => {
-    // Use optional chaining to safely access localStorage (to handle SSR)
-    if (typeof window !== 'undefined') {
-      const savedIsCompact = getPreference('isCompact');
-      setIsCompact(savedIsCompact);
-    }
-  }, []);
-
-  // Update localStorage when isCompact changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setPreference('isCompact', isCompact);
-    }
-  }, [isCompact]);
-
   useEffect(() => {
     async function fetchBlocks() {
       try {
         setLoading(true);
         const blocksTipHeight = await getBlocksTipHeight();
-
-        setInitialBlockHeight((height) => height || blocksTipHeight);
 
         // Only update if the tip height has changed
         if (blocksTipHeight !== currentTipHeight) {
@@ -121,6 +76,21 @@ export default function RecentBlocks() {
     return () => clearInterval(intervalId);
   }, [currentTipHeight]);
 
+  useEffect(() => {
+    async function fetchFeeRate() {
+      try {
+        const recommendedFees = await getRecommendedFees();
+        setFeeRate(recommendedFees.halfHourFee);
+      } catch (error) {
+        console.error("Error fetching recommended fee rate:", error);
+      }
+    }
+
+    fetchFeeRate();
+    const intervalId = setInterval(fetchFeeRate, 60000);
+    return () => clearInterval(intervalId);
+  }, []);
+
   // Separate useEffect for scrolling to handle new blocks
   useEffect(() => {
     if (blocks.length > 0 && scrollContainerRef.current) {
@@ -128,33 +98,6 @@ export default function RecentBlocks() {
       updateArrows();
     }
   }, [blocks, updateArrows]);
-
-  // Fetch highest diffs for the displayed blocks
-  useEffect(() => {
-    if (blocks.length === 0) return;
-
-    async function fetchHighestDiffs() {
-      try {
-        // Fetch recent block top diffs (enough to cover all displayed blocks)
-        const topDiffs = await getRecentBlockTopDiffs(blocks.length + 10);
-        
-        // Create a map of block height to top diff data
-        const diffMap = new Map<number, BlockTopDiff>();
-        for (const topDiff of topDiffs) {
-          diffMap.set(topDiff.block_height, topDiff);
-        }
-        setHighestDiffs(diffMap);
-      } catch (error) {
-        console.error("Error fetching highest diffs:", error);
-      }
-    }
-
-    fetchHighestDiffs();
-    
-    // Refresh every 15 seconds to catch newly collected data
-    const intervalId = setInterval(fetchHighestDiffs, 15000);
-    return () => clearInterval(intervalId);
-  }, [blocks]);
 
   // Update arrows visibility when blocks data changes
   useEffect(() => {
@@ -187,7 +130,7 @@ export default function RecentBlocks() {
     }
   };
 
-  const nextBlockHeight = currentTipHeight + 1;
+  const nextBlockHeight = currentTipHeight > 0 ? currentTipHeight + 1 : null;
 
   return (
     <div className="w-full relative">
@@ -203,40 +146,19 @@ export default function RecentBlocks() {
             </button>
           )}
 
-          <div className={`flex ${isCompact ? 'gap-2' : 'gap-4'}`}>
-            {/* Combined Mining card with expand toggle below */}
-            <MiningCard
-              nextHeight={nextBlockHeight}
-              isCompact={isCompact}
-              onToggle={() => setIsCompact(!isCompact)}
-            />
-            
-            {/* Scrollable chains container */}
+          <div className="flex gap-2">
+            <MiningCard nextHeight={nextBlockHeight} feeRate={feeRate} />
+
             <div
               ref={scrollContainerRef}
-              className="overflow-x-auto snap-x scrollbar-none flex-1 transition-all duration-300 ease-in-out"
+              className="overflow-x-auto snap-x scrollbar-none flex-1 min-w-0"
               style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
             >
-              {/* Bitcoin blocks row */}
-              <div className={`flex ${isCompact ? 'space-x-2' : 'space-x-4'} mb-1`}>
+              <div className="flex space-x-2">
                 {blocks.map((block) => (
                   <BlockCard
                     key={block.id || block.height || block.timestamp}
                     block={block}
-                    newBlock={block.height > initialBlockHeight}
-                    isCompact={isCompact}
-                  />
-                ))}
-              </div>
-
-              {/* Shadow chain row - Parasite's highest diffs */}
-              <div className={`flex ${isCompact ? 'space-x-2' : 'space-x-4'}`}>
-                {blocks.map((block) => (
-                  <ShadowBlockCard
-                    key={`shadow-${block.height}`}
-                    blockHeight={block.height}
-                    highestDiff={highestDiffs.get(block.height)}
-                    isCompact={isCompact}
                   />
                 ))}
               </div>
@@ -254,19 +176,9 @@ export default function RecentBlocks() {
           )}
         </>
       ) : (
-        <div className={`flex ${isCompact ? 'gap-2' : 'gap-4'}`}>
-          {/* Keep the expand toggle available while blocks load */}
-          <div
-            className={`flex-shrink-0 self-stretch flex flex-col ${
-              isCompact ? 'w-28' : 'w-48'
-            }`}
-          >
-            <ExpandToggle
-              isCompact={isCompact}
-              onToggle={() => setIsCompact(!isCompact)}
-            />
-          </div>
-          <div className="flex-1 py-10 text-center text-accent-2 border border-border">
+        <div className="flex gap-2">
+          <MiningCard nextHeight={nextBlockHeight} feeRate={feeRate} />
+          <div className="flex-1 min-w-0 py-10 text-center text-accent-2 border border-border">
             {loading ? "Loading block data..." : "No block data available"}
           </div>
         </div>

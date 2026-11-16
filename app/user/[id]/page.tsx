@@ -673,9 +673,9 @@ export default function UserDashboard() {
   // Show dashboard (works even without userData - will show shimmer or empty states)
   return (
       <>
-        <main className="flex min-h-screen flex-col items-start py-8 gap-4">
-          <div className="w-full">
-            <div className="bg-background p-4 shadow-md border border-border mb-4 flex items-center justify-between gap-4">
+        <main className="flex min-h-screen flex-col items-start gap-3 py-8">
+          <div className="flex w-full flex-col gap-3">
+            <div className="bg-background p-4 shadow-md border border-border flex items-center justify-between gap-4">
               <h1 className="text-2xl lg:text-3xl font-bold wrap-anywhere text-ellipsis line-clamp-1">
                 {userId}
               </h1>
@@ -736,10 +736,10 @@ export default function UserDashboard() {
             </div>
 
             {/* Account Activation / Lightning & Stratum Information */}
-            <div className="w-full mt-4">
+            <div className="w-full">
               {!layoutReady ? (
                   // Loading state - Show shimmer components while data is loading
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
                     <StratumInfo
                       userId={userId}
                       isLoading={true}
@@ -774,8 +774,8 @@ export default function UserDashboard() {
                   </div>
               ) : (
                   // Own profile, authenticated with lightning address - Show Lightning, Stratum, and Dispenser
-                  <div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-3">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
                       <StratumInfo
                         userId={userId}
                         isLoading={false}
@@ -791,7 +791,6 @@ export default function UserDashboard() {
                     </div>
                     <DispenserClaim
                       userId={userId}
-                      className="mt-4"
                       collapsed={collapsedSections.dispenser}
                       onToggle={() => toggleCollapsedSection('dispenser')}
                     />

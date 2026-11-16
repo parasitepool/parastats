@@ -180,8 +180,8 @@ export default function BlockTemplatePage() {
   if (loading) {
     return (
       <main className="flex min-h-screen flex-col items-center p-8">
-        <div className="w-full max-w-7xl">
-          <div className="mb-8">
+        <div className="flex w-full max-w-7xl flex-col gap-3">
+          <div>
             <h1 className="text-3xl font-bold mb-2">Block Template</h1>
             <p className="text-accent-2 mb-4">
               Waiting for Stratum V1 messages for pool: Parasite...
@@ -198,8 +198,8 @@ export default function BlockTemplatePage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center p-1 sm:p-4">
-      <div className="w-full max-w-7xl">
-        <div className="mb-4">
+      <div className="flex w-full max-w-7xl flex-col gap-3">
+        <div>
           <div className="flex items-center gap-4">
             <h1 className="text-3xl font-bold">
               Block Template
