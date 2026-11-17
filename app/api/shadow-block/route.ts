@@ -3,14 +3,14 @@ import { getDb } from '@/lib/db';
 import { formatAddress } from '@/app/utils/formatters';
 import { checkRateLimit, getRateLimitHeaders } from '@/app/api/lib/rate-limit';
 import {
-  WINNER_MAX_BLOCKS,
-  WINNER_WINDOW_SECONDS,
-  type WinnerDiff,
-} from '@/app/utils/winners';
+  SHADOW_BLOCK_MAX_BLOCKS,
+  SHADOW_BLOCK_WINDOW_SECONDS,
+  type ShadowBlockTopDiff,
+} from '@/app/utils/shadow-block';
 
 export const dynamic = 'force-dynamic';
 
-interface WinnerDBRow {
+interface ShadowBlockTopDiffDBRow {
   block_height: number;
   block_timestamp: number | null;
   address: string | null;
@@ -35,7 +35,14 @@ export async function GET(request: Request) {
 
   try {
     const db = getDb();
-    const cutoff = Math.floor(Date.now() / 1000) - WINNER_WINDOW_SECONDS;
+    const cutoff = Math.floor(Date.now() / 1000) - SHADOW_BLOCK_WINDOW_SECONDS;
+    const requestedLimit = Number.parseInt(
+      new URL(request.url).searchParams.get('limit') ?? '',
+      10,
+    );
+    const limit = Number.isSafeInteger(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), SHADOW_BLOCK_MAX_BLOCKS)
+      : SHADOW_BLOCK_MAX_BLOCKS;
 
     const rows = db.prepare(`
       WITH recent AS (
@@ -67,25 +74,25 @@ export async function GET(request: Request) {
       FROM recent r
       LEFT JOIN ranked ON ranked.block_height = r.block_height AND ranked.rn = 1
       ORDER BY r.block_height DESC
-    `).all(cutoff, WINNER_MAX_BLOCKS) as WinnerDBRow[];
+    `).all(cutoff, limit) as ShadowBlockTopDiffDBRow[];
 
-    const winners: WinnerDiff[] = rows.map((row) => ({
+    const topDiffs: ShadowBlockTopDiff[] = rows.map((row) => ({
       block_height: row.block_height,
       block_timestamp: row.block_timestamp,
       top_diff_address: row.address ? formatAddress(row.address) : null,
       difficulty: row.difficulty,
     }));
 
-    return NextResponse.json(winners, {
+    return NextResponse.json(topDiffs, {
       headers: {
         ...getRateLimitHeaders(rateLimitResult),
         'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120',
       },
     });
   } catch (error) {
-    console.error('[api/winners] Failed to fetch block winners:', error);
+    console.error('[api/shadow-block] Failed to fetch shadow block top diffs:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch block winners' },
+      { error: 'Failed to fetch shadow block top diffs' },
       { status: 500, headers: getRateLimitHeaders(rateLimitResult) }
     );
   }

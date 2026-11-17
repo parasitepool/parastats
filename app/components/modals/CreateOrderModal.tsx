@@ -4,12 +4,23 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { request, RpcErrorCode } from '@sats-connect/core';
 import QRCode from 'react-qr-code';
 import { useWallet } from '@/app/hooks/useWallet';
-import { InfoIcon, CopyIcon, CheckIcon } from '@/app/components/icons';
+import WalletConnectButton from '@/app/components/WalletConnectButton';
+import InfoHint from '@/app/components/InfoHint';
+import HashrateField from '@/app/components/modals/HashrateField';
+import { CopyIcon, CheckIcon } from '@/app/components/icons';
 import { getBitcoinPrice } from '@/app/utils/api';
-import { formatHashDays } from '@/app/utils/hashmath';
+import {
+  ceilHashrateToWholeUnit,
+  clamp,
+  floorHashrateToWholeUnit,
+  formatHashDays,
+  MAX_TARGET_MULTIPLIER,
+  minOrderHashrate,
+  roundHashrateToWholeUnit,
+} from '@/app/utils/hashmath';
 import { formatPrice } from '@/app/utils/formatters';
 import { fetchOrderQuote, orderQuoteNeedsConfirmation, type OrderQuote } from '@/app/utils/refinery-quote';
-import type { OrderDetail, OrderResponse } from '@/app/api/refinery/types';
+import type { OrderDetail, OrderRequest, OrderResponse } from '@/app/api/refinery/types';
 
 interface CreateOrderModalProps {
   isOpen: boolean;
@@ -27,8 +38,6 @@ const MAX_PHD = 99;
 const phdToSlider = (phd: number) => phd < MIN_SLIDER_PHD ? 0 : phd;
 const sliderToPhd = (pos: number) => pos === 0 ? MIN_PHD : clamp(Math.round(pos), MIN_SLIDER_PHD, MAX_PHD);
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
-
 const formatPhd = (phd: number) => (phd < 1 ? formatHashDays(phd * 1e15) : `${trimPhd(phd)} PHd`);
 
 const trimPhd = (phd: number) => String(Math.floor(phd * 100) / 100);
@@ -39,9 +48,12 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
   const { address: walletAddress, isConnected, walletType } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [selectedPhd, setSelectedPhd] = useState(1);
+  const [advanced, setAdvanced] = useState(false);
+  const [customHashrateHps, setCustomHashrateHps] = useState<number | null>(null);
   const [editingField, setEditingField] = useState<'phd' | AmountUnit | null>(null);
   const [editValue, setEditValue] = useState('');
   const [balanceSats, setBalanceSats] = useState<number | null>(null);
+  const [blockHeight, setBlockHeight] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<'form' | 'payment'>('form');
   const [orderData, setOrderData] = useState<OrderResponse | null>(null);
@@ -53,7 +65,15 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
   const [quote, setQuote] = useState<OrderQuote | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(true);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  // True while a nested wallet-connect modal is open; the order modal then
+  // holds off its own Escape handling so one keypress closes only the top one.
+  const [nestedModalOpen, setNestedModalOpen] = useState(false);
+  // Top anchor and height cap, both measured from window.innerHeight so they
+  // can't disagree (e.g. dvh vs innerHeight on mobile browsers).
+  const [modalLayout, setModalLayout] = useState<{ top: number; maxHeight: number } | null>(null);
   const quoteRequestId = useRef(0);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const collapsedModalHeight = useRef(0);
 
   const refreshQuote = useCallback(async () => {
     const requestId = ++quoteRequestId.current;
@@ -74,6 +94,24 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
 
   const hashPrice = quote?.price ?? 0;
   const halt = quote?.halt ?? true;
+  const hashDays = selectedPhd * 1e15;
+  // Hashdays are numerically equal to the H/s needed for 24-hour delivery.
+  const defaultHashrate = hashDays;
+  const minHashrate = Math.min(
+    ceilHashrateToWholeUnit(minOrderHashrate(hashDays, blockHeight)),
+    defaultHashrate,
+  );
+  const maxHashrate = Math.max(
+    defaultHashrate,
+    floorHashrateToWholeUnit(defaultHashrate * MAX_TARGET_MULTIPLIER),
+  );
+  const customHashrate = customHashrateHps != null
+    ? clamp(roundHashrateToWholeUnit(customHashrateHps), minHashrate, maxHashrate)
+    : null;
+  const targetHashrate = customHashrate ?? defaultHashrate;
+  const hashrateIsDefault = Math.abs(targetHashrate - defaultHashrate) <= defaultHashrate * 1e-9;
+  const hashRate = hashrateIsDefault ? null : targetHashrate;
+  const createDisabled = halt || !quote?.walletSynced || submitting;
   const minSats = Math.max(1, Math.ceil(MIN_PHD * hashPrice));
   const maxSats = Math.ceil(MAX_PHD * hashPrice);
   const chargeSats = clamp(Math.ceil(selectedPhd * hashPrice), minSats, maxSats);
@@ -88,9 +126,12 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
     if (isOpen) {
       setError(null);
       setSelectedPhd(1);
+      setAdvanced(false);
+      setCustomHashrateHps(null);
       setEditingField(null);
       setEditValue('');
       setBalanceSats(null);
+      setBlockHeight(null);
       setSubmitting(false);
       setView('form');
       setOrderData(null);
@@ -99,11 +140,45 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
       setPaymentSent(false);
       setPaymentConfirmed(false);
       setBitcoinPrice(null);
+      setNestedModalOpen(false);
       setQuote(null);
       void refreshQuote();
     }
     return () => { quoteRequest.current++; };
   }, [isOpen, refreshQuote]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    setModalLayout(null);
+    collapsedModalHeight.current = 0;
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const update = () => {
+      const element = modalRef.current;
+      if (!element) return;
+
+      const height = element.getBoundingClientRect().height;
+      // Freeze the anchor while the advanced section is open so the modal
+      // grows downward instead of re-centering.
+      if (!advanced) collapsedModalHeight.current = height;
+
+      const top = Math.max(16, (window.innerHeight - collapsedModalHeight.current) / 2);
+      setModalLayout({ top, maxHeight: Math.max(0, window.innerHeight - top - 16) });
+    };
+
+    update();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    if (modalRef.current && observer) observer.observe(modalRef.current);
+    window.addEventListener('resize', update);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [isOpen, advanced]);
 
   useEffect(() => {
     if (!isOpen || view !== 'payment' || !orderData) return;
@@ -156,6 +231,15 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
       if (!cancelled) setBitcoinPrice(price);
     });
 
+    fetch('/api/network', { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!cancelled && typeof data?.height === 'number' && Number.isSafeInteger(data.height) && data.height > 0) {
+          setBlockHeight(data.height);
+        }
+      })
+      .catch(() => {});
+
     return () => {
       cancelled = true;
     };
@@ -183,11 +267,13 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
   useEffect(() => {
     if (!isOpen) return;
     const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) onClose();
+      // Nested wallet-connect modals listen for Escape themselves; skip while
+      // one is open so a single keypress closes only the topmost modal.
+      if (e.key === 'Escape' && !submitting && !nestedModalOpen) onClose();
     };
     window.addEventListener('keydown', handleEscKey);
     return () => window.removeEventListener('keydown', handleEscKey);
-  }, [isOpen, onClose, submitting]);
+  }, [isOpen, onClose, submitting, nestedModalOpen]);
 
   if (!isOpen) return null;
 
@@ -197,6 +283,11 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
     if (e.target === e.currentTarget && !submitting) {
       onClose();
     }
+  };
+
+  const toggleAdvanced = () => {
+    if (advanced) setCustomHashrateHps(null);
+    setAdvanced(!advanced);
   };
 
   const copyToClipboard = async (text: string, fieldName: string) => {
@@ -209,6 +300,8 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
 
   const setPhdAmount = (phd: number) => {
     setSelectedPhd(clamp(phd, MIN_PHD, MAX_PHD));
+    // A new work amount changes the default target rate.
+    setCustomHashrateHps(null);
   };
 
   const setSatsAmount = (sats: number) => {
@@ -272,19 +365,22 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
         throw new Error('The refinery quote or availability changed. Review the updated order and click Create & Pay again to confirm.');
       }
 
+      const orderRequest: OrderRequest = {
+        upstream_target: {
+          endpoint: 'parasite.wtf:42068',
+          username: `${address}.refinery`,
+          password: null,
+        },
+        hash_days: hashDays,
+      };
+      if (hashRate != null) orderRequest.hash_rate = hashRate;
+
       let res: Response;
       try {
         res = await fetch('/api/refinery/order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            upstream_target: {
-              endpoint: 'parasite.wtf:42068',
-              username: `${address}.refinery`,
-              password: null,
-            },
-            hash_days: selectedPhd * 1e15,
-          }),
+          body: JSON.stringify(orderRequest),
           signal: AbortSignal.timeout(ORDER_CREATE_TIMEOUT_MS),
         });
       } catch {
@@ -347,11 +443,16 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+      className={`fixed inset-0 bg-black bg-opacity-50 flex justify-center ${modalLayout == null ? 'items-center' : 'items-start'} overflow-y-auto px-4 z-50`}
       onClick={handleBackdropClick}
     >
       <div
-        className="bg-background border border-foreground p-6 max-w-2xl w-full mx-4 shadow-xl max-h-[90vh] overflow-y-auto"
+        ref={modalRef}
+        style={modalLayout != null ? {
+          marginTop: modalLayout.top,
+          maxHeight: `${modalLayout.maxHeight}px`,
+        } : undefined}
+        className="bg-background border border-foreground p-6 max-w-2xl w-full shadow-xl max-h-[calc(100dvh-2rem)] overflow-y-auto [scrollbar-gutter:stable]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-start mb-4">
@@ -378,16 +479,14 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
 
         {view === 'form' && quote && !quoteLoading && (
           <fieldset disabled={submitting} className="min-w-0 space-y-4">
-            <div>
-              <h3 className="text-sm font-medium text-accent-2 mb-2">Workername</h3>
-              <div className="bg-secondary p-3 border border-border">
-                {address ? (
+            {isConnected && address && (
+              <div>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">Workername</h3>
+                <div className="bg-secondary p-3 border border-border">
                   <p className="text-foreground break-all">{address}.refinery</p>
-                ) : (
-                  <p className="text-foreground/60">Connect your wallet</p>
-                )}
+                </div>
               </div>
-            </div>
+            )}
             <div>
               <h3 className="text-sm font-medium text-accent-2 mb-2">Endpoint</h3>
               <div className="bg-secondary p-3 border border-border">
@@ -397,12 +496,9 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
             <div>
               <h3 className="text-sm font-medium text-accent-2 mb-2 flex items-center gap-1">
                 Work
-                <span className="relative inline-flex group">
-                  <InfoIcon className="h-4 w-4 text-foreground/60 cursor-help" />
-                  <span className="pointer-events-none absolute bottom-full left-0 -translate-y-2 w-56 p-2 bg-background border border-border rounded shadow-lg text-xs font-normal text-foreground opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    PHd (petahash-day): Work done by 1 PH/s over 1 day. Conceptually like a KWh (kilowatt-hour).
-                  </span>
-                </span>
+                <InfoHint tooltipClassName="w-56">
+                  PHd (petahash-day): Work done by 1 PH/s over 1 day. Conceptually like a KWh (kilowatt-hour).
+                </InfoHint>
               </h3>
               <div className="bg-secondary p-3 border border-border space-y-2">
                 <div
@@ -442,7 +538,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
                     step={1}
                     value={clamp(phdToSlider(selectedPhd), 0, 100)}
                     onChange={(e) => {
-                      setSelectedPhd(clamp(sliderToPhd(parseFloat(e.target.value)), MIN_PHD, MAX_PHD));
+                      setPhdAmount(sliderToPhd(parseFloat(e.target.value)));
                       setEditingField(null);
                     }}
                     className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full phd-slider z-10"
@@ -450,7 +546,17 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
                 </div>
               </div>
             </div>
-            <div>
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={toggleAdvanced}
+                aria-expanded={advanced}
+                className="px-3 py-1 text-xs font-medium border border-border text-foreground/70 hover:text-foreground hover:bg-foreground/5"
+              >
+                {advanced ? 'Hide Advanced' : 'Show Advanced'}
+              </button>
+            </div>
+            <div className={advanced ? undefined : 'hidden'}>
               <h3 className="text-sm font-medium text-accent-2 mb-2">Spend</h3>
               <div className="bg-secondary p-3 border border-border space-y-2">
                 <div
@@ -553,21 +659,48 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
                   />
                 </div>
               </div>
-              <div className="mt-4 border border-border bg-secondary/50 px-3 py-2 text-sm space-y-1">
-                {walletType === 'xverse' && balanceSats != null && (
-                  <div className="flex items-baseline justify-between gap-4">
-                    <span className="text-foreground/60">Balance</span>
-                    <span className="text-foreground text-right">{balanceSats.toLocaleString()} sats</span>
-                  </div>
-                )}
+            </div>
+            <div className={advanced ? undefined : 'hidden'}>
+              <h3 className="text-sm font-medium text-accent-2 mb-2 flex items-center gap-1">
+                Hashrate
+                <InfoHint tooltipClassName="w-64">
+                  Hashrate is a best-effort target. The refinery aims for this rate but does not guarantee it. Longer delivery windows are limited by the next difficulty adjustment. Shorter delivery windows are bounded by 1h.
+                </InfoHint>
+              </h3>
+              <HashrateField
+                hashDays={hashDays}
+                minHashrate={minHashrate}
+                defaultHashrate={defaultHashrate}
+                maxHashrate={maxHashrate}
+                targetHashrate={targetHashrate}
+                disabled={submitting}
+                onChange={setCustomHashrateHps}
+              />
+            </div>
+            <div className="border border-border bg-secondary/50 px-3 py-2 text-sm space-y-1">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-foreground/60">Expected payment amount</span>
+                <span className="text-foreground text-right">
+                  {chargeSats.toLocaleString()} sats
+                  <span className="text-foreground/40 ml-2">({(chargeSats / 1e8).toFixed(8)} BTC)</span>
+                  <span className="text-foreground/40 ml-2">
+                    ({bitcoinPrice !== null ? `~${formatPrice((chargeSats / 1e8) * bitcoinPrice)}` : '~—'})
+                  </span>
+                </span>
+              </div>
+              {walletType === 'xverse' && balanceSats != null && (
                 <div className="flex items-baseline justify-between gap-4">
-                  <span className="text-foreground/60">Hashprice</span>
-                  <span className="text-foreground text-right">{hashPrice.toLocaleString()} sats/PHd</span>
+                  <span className="text-foreground/60">Balance</span>
+                  <span className="text-foreground text-right">{balanceSats.toLocaleString()} sats</span>
                 </div>
-                <div className="flex items-baseline justify-between gap-4">
-                  <span className="text-foreground/60">BTC price</span>
-                  <span className="text-foreground text-right">{formatPrice(bitcoinPrice)}</span>
-                </div>
+              )}
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-foreground/60">Hashprice</span>
+                <span className="text-foreground text-right">{hashPrice.toLocaleString()} sats/PHd</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-foreground/60">BTC price</span>
+                <span className="text-foreground text-right">{formatPrice(bitcoinPrice)}</span>
               </div>
             </div>
 
@@ -591,14 +724,18 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
               <div className="flex justify-center mt-6">
                 <button
                   onClick={handleCreate}
-                  disabled={halt || !quote.walletSynced || submitting}
-                  className={`px-4 py-2 text-sm font-medium ${halt || !quote.walletSynced || submitting ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
+                  disabled={createDisabled}
+                  className={`px-4 py-2 text-sm font-medium ${createDisabled ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
                 >
                   {submitting ? 'Creating…' : 'Create & Pay'}
                 </button>
               </div>
             ) : (
-              <p className="text-sm text-accent-2 text-center mt-4">Connect your wallet to create an order</p>
+              <div className="flex justify-center mt-4">
+                <WalletConnectButton onOpenChange={setNestedModalOpen}>
+                  Connect your wallet to create an order
+                </WalletConnectButton>
+              </div>
             )}
 
           </fieldset>

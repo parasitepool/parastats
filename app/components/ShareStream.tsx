@@ -3,28 +3,29 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { formatDifficulty } from '../utils/hashmath';
-import { getWinnerDiffs } from '../utils/api';
+import { getShadowBlockTopDiffs } from '../utils/api';
 import {
   buildRandomDelays,
-  isWinnerShare,
-  winnerSignature,
-  WINNER_POLL_INTERVAL_MS,
-  type WinnerShare,
-} from '../utils/winners';
+  isShadowBlockTopDiffShare,
+  shadowBlockTopDiffSignature,
+  SHADOW_BLOCK_POLL_INTERVAL_MS,
+  type ShadowBlockTopDiffShare,
+} from '../utils/shadow-block';
 
 const PACKET_WIDTH_PX = 80;
-const AVERAGE_CARD_GAP_PX = 50;
-const MINIMUM_CARD_GAP_PX = 20;
-const PIXELS_PER_SECOND = 20;
-// Time it takes a card to travel its own width plus the minimum 20px gap.
+const AVERAGE_CARD_GAP_PX = 120;
+const MINIMUM_CARD_GAP_PX = 30;
+const PIXELS_PER_SECOND = 90;
+// Time it takes a card to travel its own width plus the minimum 30px gap.
 const MIN_SLOT_GAP_MS = ((PACKET_WIDTH_PX + MINIMUM_CARD_GAP_PX) / PIXELS_PER_SECOND) * 1000;
+const INITIAL_TOP_DIFF_LIMIT = 24;
 
 interface ShareStreamProps {
   className?: string;
 }
 
 interface Slot {
-  share: WinnerShare;
+  share: ShadowBlockTopDiffShare;
   delayMs: number;
 }
 
@@ -38,7 +39,7 @@ function shuffle<T>(values: T[]): T[] {
 }
 
 export default function ShareStream({ className = '' }: ShareStreamProps) {
-  const [shares, setShares] = useState<WinnerShare[]>([]);
+  const [shares, setShares] = useState<ShadowBlockTopDiffShare[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [blockHeight, setBlockHeight] = useState<number | null>(null);
   const [streamWidth, setStreamWidth] = useState<number | null>(null);
@@ -60,41 +61,59 @@ export default function ShareStream({ className = '' }: ShareStreamProps) {
     return () => observer.disconnect();
   }, []);
 
-  // Follow the newest 24h winners. The full list is refreshed periodically;
-  // when the 24h window changes the stream is re-seeded with the new set.
+  // Follow the newest shadow block top diffs. The stream only needs a small
+  // recent batch; load that after the page is interactive, then refresh.
   useEffect(() => {
     let cancelled = false;
+    let intervalId: number | undefined;
+    let idleId: number | undefined;
+    const supportsIdleCallback = typeof window.requestIdleCallback === 'function';
 
-    async function loadWinners() {
+    async function loadTopDiffs() {
       try {
-        const recent = await getWinnerDiffs();
+        const recent = await getShadowBlockTopDiffs(INITIAL_TOP_DIFF_LIMIT);
         if (cancelled) return;
 
-        const winners = recent.filter(isWinnerShare);
-        const signature = winnerSignature(winners);
+        const topDiffs = recent.filter(isShadowBlockTopDiffShare);
+        const signature = shadowBlockTopDiffSignature(topDiffs);
         if (signature === loadedSignatureRef.current) return;
 
         loadedSignatureRef.current = signature;
         setBlockHeight(recent[0]?.block_height ?? null);
 
-        if (winners.length === 0) {
+        if (topDiffs.length === 0) {
           setShares([]);
           setSlots([]);
           return;
         }
 
-        setShares(shuffle(winners));
+        setShares(shuffle(topDiffs));
       } catch (error) {
         console.error('Error loading share stream:', error);
       }
     }
 
-    loadWinners();
-    const intervalId = window.setInterval(loadWinners, WINNER_POLL_INTERVAL_MS);
+    const start = async () => {
+      if (cancelled) return;
+      await loadTopDiffs();
+      // Start polling only after the first batch settles so a slow initial
+      // request can't overlap with the next one.
+      if (!cancelled) intervalId = window.setInterval(loadTopDiffs, SHADOW_BLOCK_POLL_INTERVAL_MS);
+    };
+
+    if (supportsIdleCallback) {
+      idleId = window.requestIdleCallback(start, { timeout: 1000 });
+    } else {
+      idleId = window.setTimeout(start, 250);
+    }
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      if (idleId !== undefined) {
+        if (supportsIdleCallback) window.cancelIdleCallback(idleId);
+        else window.clearTimeout(idleId);
+      }
+      if (intervalId !== undefined) window.clearInterval(intervalId);
     };
   }, []);
 
@@ -108,8 +127,8 @@ export default function ShareStream({ className = '' }: ShareStreamProps) {
     ? (travelDistance / PIXELS_PER_SECOND) * 1000
     : 0;
 
-  // Fill the strip immediately with the first batch of winners. Each slot then
-  // loops forever, taking the next winner when it re-enters from the left.
+  // Fill the strip immediately with the first batch of top diffs. Each slot
+  // then loops forever, taking the next one when it re-enters from the left.
   useEffect(() => {
     if (shares.length === 0 || slotCount === 0 || travelDurationMs <= 0) return;
 
@@ -139,12 +158,11 @@ export default function ShareStream({ className = '' }: ShareStreamProps) {
   return (
     <div className={`flex h-12 w-full gap-2 ${className}`}>
       <Link
-        href="/winners"
-        title="View 24h high difficulty shares"
+        href="/shadow-block"
+        title="View share stream"
         className="flex h-12 w-28 shrink-0 flex-col justify-center border border-foreground/20 bg-foreground/10 px-2 text-xs leading-tight text-gray-400 transition-colors hover:border-foreground/40"
       >
-        <span className="font-bold">High Diff</span>
-        <span>shares</span>
+        <span className="whitespace-nowrap font-bold">Share Stream</span>
       </Link>
       <div
         ref={containerRef}
@@ -161,8 +179,8 @@ export default function ShareStream({ className = '' }: ShareStreamProps) {
           return (
             <Link
               key={`${blockHeight}-${shares.length}-${slotCount}-${index}`}
-              href={`/winners?block=${slot.share.block_height}`}
-              aria-label={`Block ${slot.share.block_height} winner ${slot.share.top_diff_address}, difficulty ${difficulty}`}
+              href={`/shadow-block?block=${slot.share.block_height}`}
+              aria-label={`Block ${slot.share.block_height} top diff ${slot.share.top_diff_address}, difficulty ${difficulty}`}
               title={`Block ${slot.share.block_height} — ${slot.share.top_diff_address} — ${difficulty}`}
               className="share-packet absolute right-full top-0 flex h-12 w-20 cursor-pointer flex-col items-center justify-between whitespace-nowrap border border-border/80 bg-background/95 px-1 py-1.5 text-center shadow-[0_0_10px_rgba(0,0,0,0.45)] hover:border-accent-1"
               style={{

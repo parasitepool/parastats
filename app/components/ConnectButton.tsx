@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useWallet } from '../hooks/useWallet';
 import HelpModal from './modals/HelpModal';
 import WalletConnectModal, { WalletConnectView } from './modals/WalletConnectModal';
+import { CONNECT_BUTTON_CLASS } from './connect-button-styles';
+import { isWalletProviderError } from '../utils/xverse';
 
 interface ConnectButtonProps {
   /** Overrides the button classes (used for the full-width mobile menu row). */
@@ -12,7 +14,7 @@ interface ConnectButtonProps {
 }
 
 export default function ConnectButton({ className }: ConnectButtonProps) {
-  const buttonClassName = className ?? 'cursor-pointer h-10 flex items-center justify-center px-3 sm:px-4 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed';
+  const buttonClassName = className ?? CONNECT_BUTTON_CLASS;
   const { address, isConnected, disconnect, connectWithLightning } = useWallet();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -51,32 +53,7 @@ export default function ConnectButton({ className }: ConnectButtonProps) {
       }
       // If result is null, user likely cancelled - don't show help modal
     } catch (err: unknown) {
-      // Check if error indicates Xverse is not installed
-      const errorMessage = (err instanceof Error ? err.message : String(err)) || '';
-      const errorString = errorMessage.toLowerCase();
-
-      // Check for error code/name if err is an object
-      const errorObj = err && typeof err === 'object' ? err as { code?: string; name?: string } : null;
-      const errorCode = errorObj?.code;
-      const errorName = errorObj?.name;
-
-      // Common error patterns when Xverse extension is not installed
-      const isExtensionNotFound = (
-        errorString.includes('no wallet provider') ||
-        errorString.includes('wallet provider was found') ||
-        errorString.includes('extension') ||
-        errorString.includes('not found') ||
-        errorString.includes('not installed') ||
-        errorString.includes('no provider') ||
-        errorString.includes('provider not found') ||
-        errorString.includes('window.btc') ||
-        errorString.includes('sats-connect') ||
-        errorCode === 'EXTENSION_NOT_FOUND' ||
-        errorName === 'ExtensionNotFoundError' ||
-        errorName === 'ProviderNotFoundError'
-      );
-
-      if (isExtensionNotFound) {
+      if (isWalletProviderError(err)) {
         // Xverse is not installed, show help modal
         setShowHelpModal(true);
       } else {

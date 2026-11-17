@@ -26,6 +26,7 @@ export default function ParasiteEffortBar({
       current={effortPercent ?? 0}
       max={dynamicMax}
       label="Parasite Effort"
+      labelTooltip="Expected work to find a block, as a percentage of the current network difficulty."
       formatValue={() => effortValue}
       height={40}
     />

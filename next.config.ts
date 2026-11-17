@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      // The shadow-block feature was renamed from "winners"; keep old
+      // bookmarks and API clients working with permanent redirects.
+      { source: '/winners', destination: '/shadow-block', permanent: true },
+      { source: '/api/winners', destination: '/api/shadow-block', permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

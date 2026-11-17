@@ -40,7 +40,12 @@ export default function OrderDetailFields({ detail }: OrderDetailFieldsProps) {
           <ReviewBadge review={detail.review} />
         </DetailField>
         <DetailField label="Hashrate">
-          {formatHashrate(detail.upstream.hashrate_1m)}
+          <span className="block">{formatHashrate(detail.upstream.hashrate_1m)}</span>
+          {detail.target_hashrate != null && (
+            <span className="block text-xs font-normal text-foreground/60">
+              Target {formatHashrate(detail.target_hashrate)}
+            </span>
+          )}
         </DetailField>
         <div className="bg-secondary p-3 border border-border sm:col-span-2">
           <p className="text-sm text-foreground/60">Progress</p>

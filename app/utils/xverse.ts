@@ -16,6 +16,35 @@ export function isMobileDevice(): boolean {
   );
 }
 
+/**
+ * Best-effort detection of "wallet extension not installed" errors thrown by
+ * sats-connect, so every connect path treats them the same way (e.g. offering
+ * the setup guide instead of a generic failure). Patterns are kept specific to
+ * wallets/providers: a bare "not found" would also match unrelated errors,
+ * which `connectWithLightning` rethrows to all of its callers.
+ */
+export function isWalletProviderError(err: unknown): boolean {
+  const message = (err instanceof Error ? err.message : String(err)) || '';
+  const errorString = message.toLowerCase();
+  const errorObj = err && typeof err === 'object'
+    ? err as { code?: string; name?: string }
+    : null;
+
+  return (
+    errorString.includes('no wallet provider') ||
+    errorString.includes('wallet provider was found') ||
+    errorString.includes('extension') ||
+    errorString.includes('not installed') ||
+    errorString.includes('no provider') ||
+    errorString.includes('provider not found') ||
+    errorString.includes('window.btc') ||
+    errorString.includes('sats-connect') ||
+    errorObj?.code === 'EXTENSION_NOT_FOUND' ||
+    errorObj?.name === 'ExtensionNotFoundError' ||
+    errorObj?.name === 'ProviderNotFoundError'
+  );
+}
+
 export function getXverseBrowserUrl(targetUrl: string, autoConnect = false): string {
   const url = new URL(targetUrl);
   if (autoConnect) {

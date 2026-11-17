@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 interface RetroProgressBarProps {
   current: number;
@@ -8,6 +8,7 @@ interface RetroProgressBarProps {
   height?: number;
   className?: string;
   label?: string;
+  labelTooltip?: string;
   formatValue: (value: number) => string;
 }
 
@@ -17,11 +18,13 @@ export default function RetroProgressBar({
   height = 30,
   className = '',
   label = '',
+  labelTooltip,
   formatValue,
 }: RetroProgressBarProps) {
   // Calculate percentage
   const percentage = Math.min(100, Math.max(0, (current / max) * 100));
   const labelText = label || `${Math.round(percentage)}%`;
+  const tooltipId = useId();
 
   // Container ref to measure width
   const containerRef = useRef<HTMLDivElement>(null);
@@ -104,10 +107,23 @@ export default function RetroProgressBar({
           }}
         />
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-between px-2">
-          <span className="bg-background/90 px-1.5 py-0.5 text-sm font-semibold leading-none text-foreground shadow-[0_0_8px_rgba(0,0,0,0.65)]">
+          <span
+            className={`group pointer-events-auto relative inline-flex h-6 items-center justify-center whitespace-nowrap bg-background/90 px-1.5 text-sm font-semibold leading-none text-foreground shadow-[0_0_8px_rgba(0,0,0,0.65)]${labelTooltip ? ' cursor-help' : ''}`}
+            tabIndex={labelTooltip ? 0 : undefined}
+            aria-describedby={labelTooltip ? tooltipId : undefined}
+          >
             {labelText}
+            {labelTooltip && (
+              <span
+                id={tooltipId}
+                role="tooltip"
+                className="pointer-events-none absolute bottom-full left-0 z-20 w-64 -translate-y-2 whitespace-normal break-words rounded border border-border bg-background p-2 text-left text-xs font-normal leading-snug text-foreground opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              >
+                {labelTooltip}
+              </span>
+            )}
           </span>
-          <span className="bg-background/90 px-1.5 py-0.5 text-sm font-semibold leading-none text-foreground shadow-[0_0_8px_rgba(0,0,0,0.65)]">
+          <span className="inline-flex h-6 items-center justify-center whitespace-nowrap bg-background/90 px-1.5 text-sm font-semibold leading-none text-foreground shadow-[0_0_8px_rgba(0,0,0,0.65)]">
             {formatValue(current)}
           </span>
         </div>

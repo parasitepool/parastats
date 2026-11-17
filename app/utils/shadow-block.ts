@@ -1,27 +1,29 @@
-export const WINNER_WINDOW_SECONDS = 24 * 60 * 60;
+export const SHADOW_BLOCK_WINDOW_SECONDS = 24 * 60 * 60;
 // Safety cap: 24h is about 144 blocks, but blocks can arrive faster.
-export const WINNER_MAX_BLOCKS = 288;
-export const WINNER_POLL_INTERVAL_MS = 60 * 1000;
+export const SHADOW_BLOCK_MAX_BLOCKS = 288;
+export const SHADOW_BLOCK_POLL_INTERVAL_MS = 60 * 1000;
 
-export interface WinnerDiff {
+export interface ShadowBlockTopDiff {
   block_height: number;
   block_timestamp: number | null;
   top_diff_address: string | null;
   difficulty: number | null;
 }
 
-export interface WinnerShare extends WinnerDiff {
+export interface ShadowBlockTopDiffShare extends ShadowBlockTopDiff {
   top_diff_address: string;
   difficulty: number;
 }
 
-export function isWinnerShare(diff: WinnerDiff): diff is WinnerShare {
+export function isShadowBlockTopDiffShare(
+  diff: ShadowBlockTopDiff,
+): diff is ShadowBlockTopDiffShare {
   return diff.top_diff_address !== null && diff.difficulty !== null;
 }
 
-export function winnerSignature(winners: WinnerDiff[]): string {
-  return winners
-    .map((winner) => `${winner.block_height}:${winner.top_diff_address ?? ''}:${winner.difficulty ?? ''}`)
+export function shadowBlockTopDiffSignature(diffs: ShadowBlockTopDiff[]): string {
+  return diffs
+    .map((diff) => `${diff.block_height}:${diff.top_diff_address ?? ''}:${diff.difficulty ?? ''}`)
     .join('|');
 }
 

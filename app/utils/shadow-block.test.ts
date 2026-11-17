@@ -2,37 +2,43 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildRandomDelays,
-  isWinnerShare,
+  isShadowBlockTopDiffShare,
   parseBlockParam,
-  winnerSignature,
-  type WinnerDiff,
-} from './winners';
+  shadowBlockTopDiffSignature,
+  type ShadowBlockTopDiff,
+} from './shadow-block';
 
-const winner: WinnerDiff = {
+const topDiff: ShadowBlockTopDiff = {
   block_height: 975_709,
   block_timestamp: 1_794_589_633,
   top_diff_address: 'bc1q...z263',
   difficulty: 112_141_230_886,
 };
 
-test('winner share filtering', () => {
-  assert.equal(isWinnerShare(winner), true);
-  assert.equal(isWinnerShare({ ...winner, top_diff_address: null }), false);
-  assert.equal(isWinnerShare({ ...winner, difficulty: null }), false);
+test('top diff share filtering', () => {
+  assert.equal(isShadowBlockTopDiffShare(topDiff), true);
+  assert.equal(isShadowBlockTopDiffShare({ ...topDiff, top_diff_address: null }), false);
+  assert.equal(isShadowBlockTopDiffShare({ ...topDiff, difficulty: null }), false);
 });
 
-test('winner signatures change with stream content', () => {
-  const other: WinnerDiff = { ...winner, block_height: 975_710 };
+test('top diff signatures change with stream content', () => {
+  const other: ShadowBlockTopDiff = { ...topDiff, block_height: 975_710 };
 
-  assert.equal(winnerSignature([winner]), winnerSignature([{ ...winner }]));
-  assert.notEqual(winnerSignature([winner]), winnerSignature([other]));
-  assert.notEqual(
-    winnerSignature([winner]),
-    winnerSignature([{ ...winner, top_diff_address: 'bc1q...abcd' }]),
+  assert.equal(
+    shadowBlockTopDiffSignature([topDiff]),
+    shadowBlockTopDiffSignature([{ ...topDiff }]),
   );
   assert.notEqual(
-    winnerSignature([winner]),
-    winnerSignature([{ ...winner, difficulty: 1 }]),
+    shadowBlockTopDiffSignature([topDiff]),
+    shadowBlockTopDiffSignature([other]),
+  );
+  assert.notEqual(
+    shadowBlockTopDiffSignature([topDiff]),
+    shadowBlockTopDiffSignature([{ ...topDiff, top_diff_address: 'bc1q...abcd' }]),
+  );
+  assert.notEqual(
+    shadowBlockTopDiffSignature([topDiff]),
+    shadowBlockTopDiffSignature([{ ...topDiff, difficulty: 1 }]),
   );
 });
 

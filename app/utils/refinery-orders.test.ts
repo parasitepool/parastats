@@ -11,6 +11,7 @@ function order(id: number): OrderSummary {
     endpoint: 'parasite.wtf:42068',
     username: 'worker',
     requested_hash_days: 1,
+    target_hashrate: null,
     hashrate: id,
     delivered_hash_days: 0,
     best_share: null,

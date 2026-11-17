@@ -29,6 +29,13 @@ const ENDPOINTS: EndpointDoc[] = [
     path: '/status',
     description:
       'Returns the current router status: hashprice, total and used capacity, whether order creation is halted, and aggregate upstream/downstream mining stats.',
+    details: (
+      <div className="mt-4 space-y-1 text-sm text-foreground">
+        <p><code className="font-mono text-xs">hash_price</code> is the current quote in sats/PHd; <code className="font-mono text-xs">hash_value</code> is the base before premium and <code className="font-mono text-xs">difficulty_multiplier</code>.</p>
+        <p><code className="font-mono text-xs">target_hashrate</code>, <code className="font-mono text-xs">deficit_hashrate</code>, and <code className="font-mono text-xs">surplus_hashrate</code> are aggregate targets/under/over in H/s. <code className="font-mono text-xs">starving_order_count</code> counts active unfulfilled orders below target; capacity fields are in Hd.</p>
+        <p><code className="font-mono text-xs">block_count</code>/<code className="font-mono text-xs">recent_blocks</code> are router-recorded blocks, not chain height. <code className="font-mono text-xs">wallet.synced</code>/<code className="font-mono text-xs">halt</code>/<code className="font-mono text-xs">boost</code> control order creation; <code className="font-mono text-xs">git_commit</code> is the deployed build.</p>
+      </div>
+    ),
     curl: `curl -s ${BASE_URL}/status`,
     response: `{
   "uptime_secs": 166650,
@@ -42,6 +49,7 @@ const ENDPOINTS: EndpointDoc[] = [
   "halt": false,
   "boost": false,
   "wallet": { "synced": true },
+  "target_hashrate": 300000000000000,
   "deficit_hashrate": 242660823167963.25,
   "surplus_hashrate": 2409028380977510,
   "starving_order_count": 1,
@@ -137,6 +145,7 @@ const ENDPOINTS: EndpointDoc[] = [
     ],
     details: (
       <>
+        <p className="mt-4 text-sm text-foreground"><code className="font-mono text-xs">requested_hash_days</code> and <code className="font-mono text-xs">target_hashrate</code> are <code className="font-mono text-xs">null</code> for sink orders. <code className="font-mono text-xs">target_hashrate</code> is target H/s, not actual; <code className="font-mono text-xs">hashrate</code> is actual 1-minute H/s; <code className="font-mono text-xs">delivered_hash_days</code> is Hd.</p>
         <h3 className="text-sm font-semibold mt-4 mb-2">Pagination</h3>
         <p className="text-foreground text-sm mb-2">
           Without <code className="font-mono text-xs">limit</code>, the endpoint returns the newest 50 orders.
@@ -160,6 +169,7 @@ const ENDPOINTS: EndpointDoc[] = [
     "endpoint": "parasite.wtf:42068",
     "username": "bc1q....worker",
     "requested_hash_days": 10000000000000000,
+    "target_hashrate": 10000000000000000,
     "hashrate": 10400000000000000,
     "delivered_hash_days": 3200000000000000,
     "best_share": 123456789
@@ -188,7 +198,10 @@ const ENDPOINTS: EndpointDoc[] = [
     method: 'GET',
     path: '/order/{id}',
     description:
-      'Returns details for an order, including payment information, transaction ids, mining stats, and active worker sessions.',
+      'Returns details for an order, including payment information, transaction ids, mining stats, and active worker sessions. The public endpoint redacts upstream and session IP addresses.',
+    details: (
+      <p className="mt-4 text-sm text-foreground"><code className="font-mono text-xs">target_hashrate</code> is target H/s and <code className="font-mono text-xs">null</code> for sink orders. <code className="font-mono text-xs">hash_price</code>/payment fields are <code className="font-mono text-xs">null</code> for sinks; <code className="font-mono text-xs">txids</code> is empty until paid. Public responses redact <code className="font-mono text-xs">upstream_address</code> and session <code className="font-mono text-xs">remote_address</code>; <code className="font-mono text-xs">created_at</code> is Unix seconds, <code className="font-mono text-xs">created_at_height</code> is a block height.</p>
+    ),
     curl: `curl -s ${BASE_URL}/order/42`,
     response: `{
   "id": 42,
@@ -202,6 +215,7 @@ const ENDPOINTS: EndpointDoc[] = [
   "upstream_address": null,
   "upstream_disconnects_total": 0,
   "requested_hash_days": 299000000000000,
+  "target_hashrate": 299000000000000,
   "hash_price": 47096,
   "payment_address": "bc1qexamplepaymentaddress",
   "payment_amount": 14082,
@@ -261,7 +275,23 @@ const ENDPOINTS: EndpointDoc[] = [
       { name: 'upstream_target.username', type: 'string', description: 'Stratum username, typically <address>.<worker>.' },
       { name: 'upstream_target.password', type: 'string | null', description: 'Stratum password, if any.' },
       { name: 'hash_days', type: 'number', description: <>Positive finite amount of work in hashdays (<Unit>Hd</Unit>). <Num>1</Num> <Unit>PHd</Unit> = <Num>1e15</Num> <Unit>Hd</Unit>.</> },
+      { name: 'hash_rate', type: 'number', description: <>Optional target hashrate in <Unit>H/s</Unit>. Omit to target the work over 24 hours. This is a best-effort target: actual delivered hashrate can vary, and it does not change the order price.</> },
     ],
+    details: (
+      <div className="mt-4 space-y-2 text-sm text-foreground">
+        <p>The public endpoint applies the current <code className="font-mono text-xs">hash_price</code>; do not send <code className="font-mono text-xs">hash_price</code> in the request body. Payment is based on <code className="font-mono text-xs">hash_days</code>, not on the optional target hashrate.</p>
+        <p>The router allows delivery from 1 hour up to the next difficulty adjustment. Rates that would deliver faster than 1 hour or stretch past that window are rejected.</p>
+        <h3 className="text-sm font-semibold mt-4 mb-2">Common errors</h3>
+        <ul className="list-disc space-y-1 pl-5">
+          <li><code className="font-mono text-xs">400</code>: invalid hash days or target hash rate, or payment below dust.</li>
+          <li><code className="font-mono text-xs">422</code>: hashprice below the minimum or insufficient capacity.</li>
+          <li><code className="font-mono text-xs">429</code>: rate limited.</li>
+          <li><code className="font-mono text-xs">503</code>: order creation halted or router wallet syncing.</li>
+          <li><code className="font-mono text-xs">504</code>: order outcome unknown; check your orders before retrying.</li>
+          <li><code className="font-mono text-xs">502</code>: router unavailable or returned an invalid quote.</li>
+        </ul>
+      </div>
+    ),
     curl: `curl -s -X POST ${BASE_URL}/order \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -324,18 +354,45 @@ function ParamTable({ title, params }: { title: string; params: ParamDoc[] }) {
 
 export default function EndpointsSection() {
   return (
-    <DocsSection id="endpoints" title="Endpoints">
+    <DocsSection
+      id="endpoints"
+      title={
+        <>
+          Endpoints <span className="text-sm font-normal text-foreground/50">(beta)</span>
+        </>
+      }
+    >
       <p className="text-foreground">
         All endpoints are
         relative to <code className="font-mono text-sm bg-secondary border border-border px-1.5 py-0.5">{BASE_URL}</code>.
+        {' '}This is an experimental API that is still subject to a lot of changes. Please check the{' '}
+        <code className="font-mono text-sm">/status</code>{' '}
+        <code className="font-mono text-sm">git_commit</code> field to see which exact fields are returned to be sure.
       </p>
-      <p className="text-foreground">
-        <code className="font-mono text-sm">hashrate</code>, <code className="font-mono text-sm">accepted_work</code>, and{' '}
-        <code className="font-mono text-sm">hash_days</code> are approximate floating-point values.{' '}
-        <code className="font-mono text-sm">hash_price</code> and{' '}
-        <code className="font-mono text-sm">payment_amount</code> are exact integer sats. Make sure to pay the exact{' '}
-        <code className="font-mono text-sm">payment_amount</code> returned by the API.
-      </p>
+      <div className="grid gap-x-4 gap-y-1 text-sm text-foreground sm:grid-cols-[8rem_1fr]">
+        <span className="font-semibold">Integer</span>
+        <span>
+          <code className="font-mono text-sm">hash_price</code>, <code className="font-mono text-sm">hash_value</code>,{' '}
+          <code className="font-mono text-sm">payment_amount</code>, IDs, timestamps, and counts.
+        </span>
+        <span className="font-semibold">Floating-point</span>
+        <span>
+          <code className="font-mono text-sm">hashrate</code>, all <code className="font-mono text-sm">hashrate_*</code>, <code className="font-mono text-sm">target_hashrate</code>,{' '}
+          <code className="font-mono text-sm">deficit_hashrate</code>, <code className="font-mono text-sm">surplus_hashrate</code>,{' '}
+          <code className="font-mono text-sm">hash_days</code>, <code className="font-mono text-sm">requested_hash_days</code>,{' '}
+          <code className="font-mono text-sm">delivered_hash_days</code>, <code className="font-mono text-sm">hash_rate</code>,{' '}
+          <code className="font-mono text-sm">accepted_work</code>, <code className="font-mono text-sm">rejected_work</code>,{' '}
+          <code className="font-mono text-sm">sps_*</code>, <code className="font-mono text-sm">difficulty_multiplier</code>, and
+          capacity fields. <code className="font-mono text-sm">best_share</code> is an integer at ≥1 and a float below 1.
+        </span>
+        <span className="font-semibold">Units</span>
+        <span>
+          Hashrates in <Unit>H/s</Unit>; hash-day fields in <Unit>Hd</Unit>;{' '}
+          <code className="font-mono text-sm">hash_price</code>/<code className="font-mono text-sm">hash_value</code> in{' '}
+          <Unit>sats/PHd</Unit>; <code className="font-mono text-sm">payment_amount</code> in <Unit>sats</Unit>; timestamps in
+          Unix seconds.
+        </span>
+      </div>
       <p className="text-foreground">
         For conversions, see{' '}
         <a href="https://github.com/parasitepool/parastats/blob/master/app/utils/hashmath.ts" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">hashmath.ts</a>,{' '}

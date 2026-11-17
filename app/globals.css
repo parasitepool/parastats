@@ -87,12 +87,12 @@ body {
     animation-play-state: paused;
   }
 
-  /* Strong selected-row treatment for the shadow winners table */
-  .winner-selected-row > td {
+  /* Strong selected-row treatment for the shadow block top diffs table */
+  .top-diff-selected-row > td {
     background-color: rgba(204, 204, 204, 0.16);
   }
 
-  .winner-selected-row > td:first-child {
+  .top-diff-selected-row > td:first-child {
     box-shadow: inset 3px 0 0 var(--accent-1);
   }
 

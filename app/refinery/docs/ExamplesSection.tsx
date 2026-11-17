@@ -25,6 +25,8 @@ const orderResponse = await fetch(\`\${base}/order\`, {
       password: null,
     },
     hash_days: hashDays,
+    // Optional target hashrate in H/s. Omit for 24-hour delivery.
+    // hash_rate: 1.25e15,
   }),
 });
 if (!orderResponse.ok) throw new Error(await orderResponse.text());

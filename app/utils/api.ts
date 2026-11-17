@@ -5,7 +5,7 @@ import { FeesRecommended } from "@mempool/mempool.js/lib/interfaces/bitcoin/fees
 import { ProcessedUserData } from "../api/user/[address]/route";
 import { HistoricalPoolStats } from "../api/pool-stats/historical/route";
 import { HistoricalUserStats } from "../api/user/[address]/historical/route";
-import type { WinnerDiff } from "./winners";
+import type { ShadowBlockTopDiff } from "./shadow-block";
 
 // Initialize mempoolJS
 const { bitcoin } = mempoolJS();
@@ -196,20 +196,21 @@ export async function updateAccountMetadata(
 }
 
 /**
- * PRIVACY: Winner data only contains truncated addresses.
+ * PRIVACY: Top diff data only contains truncated addresses.
  * Full addresses are never exposed by the API to protect user privacy.
  */
-export async function getWinnerDiffs(): Promise<WinnerDiff[]> {
+export async function getShadowBlockTopDiffs(limit?: number): Promise<ShadowBlockTopDiff[]> {
   try {
     return await withRetry(async () => {
-      const response = await fetch('/api/winners');
+      const url = limit == null ? '/api/shadow-block' : `/api/shadow-block?limit=${limit}`;
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       return await response.json();
     });
   } catch (error) {
-    console.error("Error fetching block winners:", error);
+    console.error("Error fetching shadow block top diffs:", error);
     throw error;
   }
 }

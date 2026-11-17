@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { AddressPurpose, MessageSigningProtocols, RpcErrorCode, isProviderInstalled, request } from '@sats-connect/core';
 import { isValidBitcoinAddress, normalizeBitcoinAddress } from '@/app/utils/validators';
-import { getXverseBrowserUrl, isMobileDevice, XVERSE_PROVIDER_ID } from '@/app/utils/xverse';
+import { getXverseBrowserUrl, isMobileDevice, isWalletProviderError, XVERSE_PROVIDER_ID } from '@/app/utils/xverse';
 import ManualSignModal, { ManualSignRequest } from '@/app/components/modals/ManualSignModal';
 
 export type WalletType = 'xverse' | 'manual';
@@ -382,22 +382,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       
       return { address: paymentAddress.address, token };
     } catch (error: unknown) {
-      // Check if error indicates wallet provider is not found
-      const errorMessage = (error instanceof Error ? error.message : String(error)) || '';
-      const errorString = errorMessage.toLowerCase();
-      
-      if (
-        errorString.includes('no wallet provider') ||
-        errorString.includes('no provider') ||
-        errorString.includes('provider not found') ||
-        errorString.includes('wallet provider was found') ||
-        errorString.includes('extension') ||
-        errorString.includes('not installed')
-      ) {
+      if (isWalletProviderError(error)) {
         // Re-throw provider not found errors so they can be handled by the caller
         throw error;
       }
-      
+
       // For other errors, log and return null
       console.error('Failed to connect with Lightning:', error);
       return null;

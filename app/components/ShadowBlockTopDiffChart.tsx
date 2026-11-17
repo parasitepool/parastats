@@ -5,14 +5,14 @@ import * as echarts from 'echarts';
 import type { CallbackDataParams, ECElementEvent } from 'echarts/types/dist/shared';
 import { formatDifficulty } from '../utils/hashmath';
 
-interface WinnerChartRow {
+interface ShadowBlockTopDiffChartRow {
   block_height: number;
   difficulty: number | null;
-  winner: string | null;
+  top_diff_address: string | null;
 }
 
-interface WinnerDiffChartProps {
-  rows: WinnerChartRow[];
+interface ShadowBlockTopDiffChartProps {
+  rows: ShadowBlockTopDiffChartRow[];
   selectedHeight: number | null;
   onSelectBlock: (blockHeight: number) => void;
 }
@@ -43,17 +43,17 @@ function escapeHtml(value: string): string {
   });
 }
 
-export default function WinnerDiffChart({
+export default function ShadowBlockTopDiffChart({
   rows,
   selectedHeight,
   onSelectBlock,
-}: WinnerDiffChartProps) {
+}: ShadowBlockTopDiffChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
 
   const chartRows = useMemo(
     () => rows.filter(
-      (row): row is WinnerChartRow & { difficulty: number } =>
+      (row): row is ShadowBlockTopDiffChartRow & { difficulty: number } =>
         row.difficulty !== null && row.difficulty > 0,
     ),
     [rows],
@@ -176,7 +176,9 @@ export default function WinnerDiffChart({
           return [
             `Block ${row.block_height.toLocaleString()}`,
             `Difficulty ${formatDifficulty(row.difficulty)}`,
-            row.winner ? `Winner ${escapeHtml(row.winner)}` : 'No public winner',
+            row.top_diff_address
+              ? `Top diff ${escapeHtml(row.top_diff_address)}`
+              : 'No public top diff',
           ].join('<br/>');
         },
       },

@@ -1,5 +1,18 @@
 import { HASHES_PER_DIFF_1 } from './hashmath';
 
+/** Formats a duration for display, preferring the largest sensible unit. */
+export function formatLongDuration(seconds: number): { value: string; unit: string } | null {
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  const years = seconds / (365.25 * 86400);
+  if (years >= 2) return { value: years.toFixed(1), unit: 'years' };
+  // Floor days so the delivery estimate is never overstated.
+  const days = seconds / 86400;
+  if (days >= 2) return { value: Math.floor(days).toLocaleString(), unit: 'days' };
+  const hours = seconds / 3600;
+  if (hours >= 2) return { value: String(Math.round(hours)), unit: 'hours' };
+  return { value: String(Math.max(1, Math.round(seconds / 60))), unit: 'minutes' };
+}
+
 export function formatPrice(price: number | null): string {
   if (price === null) return "Loading...";
   return new Intl.NumberFormat('en-US', {

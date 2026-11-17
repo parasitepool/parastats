@@ -15,6 +15,8 @@ interface WalletConnectModalProps {
   initialView?: WalletConnectView;
   onClose: () => void;
   onXverse: () => void;
+  /** When true, manual connects stay in the current flow instead of navigating to the account page. */
+  stayInPlace?: boolean;
 }
 
 export default function WalletConnectModal({
@@ -22,6 +24,7 @@ export default function WalletConnectModal({
   initialView = 'choice',
   onClose,
   onXverse,
+  stayInPlace = false,
 }: WalletConnectModalProps) {
   const { connectManual } = useWallet();
   const router = useRouter();
@@ -78,7 +81,7 @@ export default function WalletConnectModal({
       const result = await connectManual(trimmedAddress);
       if (result) {
         onClose();
-        router.push(`/user/${result}`);
+        if (!stayInPlace) router.push(`/user/${result}`);
       } else {
         setError('Enter a valid Bitcoin address');
       }

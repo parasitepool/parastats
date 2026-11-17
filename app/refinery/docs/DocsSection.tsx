@@ -7,7 +7,7 @@ export default function DocsSection({
   children,
 }: {
   id: string;
-  title: string;
+  title: ReactNode;
   defaultOpen?: boolean;
   children: ReactNode;
 }) {

@@ -133,6 +133,8 @@ export interface RouterStatus {
   halt: boolean;
   boost: boolean;
   wallet: WalletInfo;
+  /** Sum of target hashrates for active, unfulfilled bucket orders, in H/s. */
+  target_hashrate: number;
   deficit_hashrate: number;
   surplus_hashrate: number;
   starving_order_count: number;
@@ -161,6 +163,8 @@ export interface OrderSummary {
   username: string;
   /** Sink orders have no work target (null); bucket orders always do. */
   requested_hash_days: number | null;
+  /** Target hashrate in H/s; null for sink orders. */
+  target_hashrate: number | null;
   hashrate: number;
   delivered_hash_days: number;
   best_share: number | null;
@@ -174,6 +178,8 @@ export interface OrderDetail {
   upstream_address: null;
   upstream_disconnects_total: number;
   requested_hash_days: number | null;
+  /** Target hashrate in H/s; null for sink orders. */
+  target_hashrate: number | null;
   hash_price: number | null;
   payment_address: string | null;
   payment_amount: number | null;
@@ -199,6 +205,8 @@ export interface RouterOrderDetail extends Omit<OrderDetail, 'upstream_address' 
 export interface OrderRequest {
   upstream_target: UpstreamTarget;
   hash_days: number;
+  /** Optional target hashrate in H/s. Omit for the router's 24-hour default. */
+  hash_rate?: number;
 }
 
 export interface OrderResponse {

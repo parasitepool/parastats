@@ -23,6 +23,7 @@ import {
   phdFromHashDays,
   shareRate,
 } from '@/app/utils/hashmath';
+import { formatLongDuration } from '@/app/utils/formatters';
 
 function formatBtc(sats: number): string {
   return (Math.round(sats) / 1e8).toFixed(8).replace(/\.?0+$/, '');
@@ -35,19 +36,6 @@ function formatChance(p: number): { value: string; unit: string } | null {
   if (percent >= 0.01) return { value: percent.toFixed(2), unit: '%' };
   // Tiny probabilities: two significant figures, still a percentage.
   return { value: parseFloat(percent.toPrecision(2)).toString(), unit: '%' };
-}
-
-function formatLongDuration(seconds: number): { value: string; unit: string } | null {
-  if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  const years = seconds / (365.25 * 86400);
-  if (years >= 2) {
-    return { value: years < 100 ? years.toFixed(1) : Math.round(years).toLocaleString(), unit: 'years' };
-  }
-  const days = seconds / 86400;
-  if (days >= 2) return { value: Math.round(days).toLocaleString(), unit: 'days' };
-  const hours = seconds / 3600;
-  if (hours >= 2) return { value: String(Math.round(hours)), unit: 'hours' };
-  return { value: String(Math.max(1, Math.round(seconds / 60))), unit: 'minutes' };
 }
 
 interface CalculatorProps {
