@@ -12,13 +12,17 @@ import { getBitcoinPrice } from '@/app/utils/api';
 import {
   ceilHashrateToWholeUnit,
   clamp,
+  customHashrateForSliderPosition,
+  durationSecondsFromHashDaysAndRate,
   floorHashrateToWholeUnit,
   formatHashDays,
+  HASHRATE_SLIDER_STEPS,
+  hashrateSliderPositionFor,
   MAX_TARGET_MULTIPLIER,
   minOrderHashrate,
   roundHashrateToWholeUnit,
 } from '@/app/utils/hashmath';
-import { formatPrice } from '@/app/utils/formatters';
+import { formatLongDuration, formatPrice } from '@/app/utils/formatters';
 import { fetchOrderQuote, orderQuoteNeedsConfirmation, type OrderQuote } from '@/app/utils/refinery-quote';
 import type { OrderDetail, OrderRequest, OrderResponse } from '@/app/api/refinery/types';
 
@@ -48,7 +52,6 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
   const { address: walletAddress, isConnected, walletType } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [selectedPhd, setSelectedPhd] = useState(1);
-  const [advanced, setAdvanced] = useState(false);
   const [customHashrateHps, setCustomHashrateHps] = useState<number | null>(null);
   const [editingField, setEditingField] = useState<'phd' | AmountUnit | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -73,7 +76,6 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
   const [modalLayout, setModalLayout] = useState<{ top: number; maxHeight: number } | null>(null);
   const quoteRequestId = useRef(0);
   const modalRef = useRef<HTMLDivElement>(null);
-  const collapsedModalHeight = useRef(0);
 
   const refreshQuote = useCallback(async () => {
     const requestId = ++quoteRequestId.current;
@@ -111,6 +113,15 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
   const targetHashrate = customHashrate ?? defaultHashrate;
   const hashrateIsDefault = Math.abs(targetHashrate - defaultHashrate) <= defaultHashrate * 1e-9;
   const hashRate = hashrateIsDefault ? null : targetHashrate;
+  const durationSeconds = durationSecondsFromHashDaysAndRate(hashDays, targetHashrate);
+  const duration = formatLongDuration(durationSeconds);
+  // The duration slider runs opposite to the hashrate slider: short delivery
+  // (high hashrate) on the left, long delivery (low hashrate) on the right.
+  const durationSliderPosition = HASHRATE_SLIDER_STEPS - clamp(
+    Math.round(hashrateSliderPositionFor(targetHashrate, minHashrate, defaultHashrate, maxHashrate)),
+    0,
+    HASHRATE_SLIDER_STEPS,
+  );
   const createDisabled = halt || !quote?.walletSynced || submitting;
   const minSats = Math.max(1, Math.ceil(MIN_PHD * hashPrice));
   const maxSats = Math.ceil(MAX_PHD * hashPrice);
@@ -126,7 +137,6 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
     if (isOpen) {
       setError(null);
       setSelectedPhd(1);
-      setAdvanced(false);
       setCustomHashrateHps(null);
       setEditingField(null);
       setEditValue('');
@@ -150,7 +160,6 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
   useEffect(() => {
     if (isOpen) return;
     setModalLayout(null);
-    collapsedModalHeight.current = 0;
   }, [isOpen]);
 
   useEffect(() => {
@@ -161,11 +170,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
       if (!element) return;
 
       const height = element.getBoundingClientRect().height;
-      // Freeze the anchor while the advanced section is open so the modal
-      // grows downward instead of re-centering.
-      if (!advanced) collapsedModalHeight.current = height;
-
-      const top = Math.max(16, (window.innerHeight - collapsedModalHeight.current) / 2);
+      const top = Math.max(16, (window.innerHeight - height) / 2);
       setModalLayout({ top, maxHeight: Math.max(0, window.innerHeight - top - 16) });
     };
 
@@ -178,7 +183,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
       observer?.disconnect();
       window.removeEventListener('resize', update);
     };
-  }, [isOpen, advanced]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || view !== 'payment' || !orderData) return;
@@ -204,9 +209,9 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
           closeTimeout = setTimeout(onClose, 3000);
           try {
             await onCreated?.();
-          } catch {}
+          } catch { }
         }
-      } catch {}
+      } catch { }
       finally {
         checking = false;
       }
@@ -238,7 +243,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
           setBlockHeight(data.height);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       cancelled = true;
@@ -256,7 +261,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
         if (cancelled || response.status !== 'success') return;
         const confirmed = Number(response.result.confirmed);
         if (Number.isFinite(confirmed)) setBalanceSats(confirmed);
-      } catch {}
+      } catch { }
     })();
 
     return () => {
@@ -285,17 +290,12 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
     }
   };
 
-  const toggleAdvanced = () => {
-    if (advanced) setCustomHashrateHps(null);
-    setAdvanced(!advanced);
-  };
-
   const copyToClipboard = async (text: string, fieldName: string) => {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedField(fieldName);
       setTimeout(() => setCopiedField(null), 2000);
-    } catch {}
+    } catch { }
   };
 
   const setPhdAmount = (phd: number) => {
@@ -508,26 +508,26 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
                   }}
                 >
                   <p className="text-foreground break-all">
-                      {editingField === 'phd' ? (
-                        <span>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onBlur={() => commitPhdEdit(editValue)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') commitPhdEdit(editValue);
-                            }}
-                            autoFocus
-                            className="w-24 bg-secondary border border-foreground text-center text-foreground outline-none"
-                          /> PHd
-                        </span>
-                      ) : (
-                        <span className="border-b border-dashed border-foreground/40 hover:border-foreground">
-                          {formatPhd(selectedPhd)}
-                        </span>
-                      )}
+                    {editingField === 'phd' ? (
+                      <span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={() => commitPhdEdit(editValue)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitPhdEdit(editValue);
+                          }}
+                          autoFocus
+                          className="w-24 bg-secondary border border-foreground text-center text-foreground outline-none"
+                        /> PHd
+                      </span>
+                    ) : (
+                      <span className="border-b border-dashed border-foreground/40 hover:border-foreground">
+                        {formatPhd(selectedPhd)}
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="relative h-7">
@@ -546,17 +546,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
                 </div>
               </div>
             </div>
-            <div className="flex justify-center">
-              <button
-                type="button"
-                onClick={toggleAdvanced}
-                aria-expanded={advanced}
-                className="px-3 py-1 text-xs font-medium border border-border text-foreground/70 hover:text-foreground hover:bg-foreground/5"
-              >
-                {advanced ? 'Hide Advanced' : 'Show Advanced'}
-              </button>
-            </div>
-            <div className={advanced ? undefined : 'hidden'}>
+            <div>
               <h3 className="text-sm font-medium text-accent-2 mb-2">Spend</h3>
               <div className="bg-secondary p-3 border border-border space-y-2">
                 <div
@@ -630,13 +620,13 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
                         <span className="text-foreground/40 ml-2">(~{editingUsd})</span>
                       </span>
                     ) : (
-                        <span className="border-b border-dashed border-foreground/40 hover:border-foreground">
-                          {chargeSats.toLocaleString()} sats
-                          <span className="text-foreground/40 ml-2">({(chargeSats / 1e8).toFixed(8)} BTC)</span>
-                          {bitcoinPrice !== null && (
-                            <span className="text-foreground/40 ml-2">(~{formatPrice((chargeSats / 1e8) * bitcoinPrice)})</span>
-                          )}
-                        </span>
+                      <span className="border-b border-dashed border-foreground/40 hover:border-foreground">
+                        {chargeSats.toLocaleString()} sats
+                        <span className="text-foreground/40 ml-2">({(chargeSats / 1e8).toFixed(8)} BTC)</span>
+                        {bitcoinPrice !== null && (
+                          <span className="text-foreground/40 ml-2">(~{formatPrice((chargeSats / 1e8) * bitcoinPrice)})</span>
+                        )}
+                      </span>
                     )}
                   </p>
                 </div>
@@ -660,11 +650,11 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
                 </div>
               </div>
             </div>
-            <div className={advanced ? undefined : 'hidden'}>
+            <div>
               <h3 className="text-sm font-medium text-accent-2 mb-2 flex items-center gap-1">
                 Hashrate
                 <InfoHint tooltipClassName="w-64">
-                  Hashrate is a best-effort target. The refinery aims for this rate but does not guarantee it. Longer delivery windows are limited by the next difficulty adjustment. Shorter delivery windows are bounded by 1h.
+                  Hashrate is a best-effort target. The refinery aims for this rate but does not guarantee it.
                 </InfoHint>
               </h3>
               <HashrateField
@@ -677,17 +667,37 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
                 onChange={setCustomHashrateHps}
               />
             </div>
-            <div className="border border-border bg-secondary/50 px-3 py-2 text-sm space-y-1">
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="text-foreground/60">Expected payment amount</span>
-                <span className="text-foreground text-right">
-                  {chargeSats.toLocaleString()} sats
-                  <span className="text-foreground/40 ml-2">({(chargeSats / 1e8).toFixed(8)} BTC)</span>
-                  <span className="text-foreground/40 ml-2">
-                    ({bitcoinPrice !== null ? `~${formatPrice((chargeSats / 1e8) * bitcoinPrice)}` : '~—'})
-                  </span>
-                </span>
+            <div>
+              <h3 className="text-sm font-medium text-accent-2 mb-2 flex items-center gap-1">
+                Duration
+                <InfoHint tooltipClassName="w-64">
+                  Duration is a best-effort target. Shorter durations require a higher hashrate. Longer durations are limited by the next difficulty adjustment.
+                </InfoHint>
+              </h3>
+              <div className="bg-secondary p-3 border border-border space-y-2">
+                <p className="text-foreground break-all">
+                  {duration ? `${duration.value} ${duration.unit}` : '—'}
+                </p>
+                <div className="relative h-7">
+                  <input
+                    type="range"
+                    min={0}
+                    max={HASHRATE_SLIDER_STEPS}
+                    step={1}
+                    value={durationSliderPosition}
+                    aria-label="Duration"
+                    aria-valuetext={duration ? `${duration.value} ${duration.unit}` : undefined}
+                    onChange={(e) => {
+                      const position = HASHRATE_SLIDER_STEPS - Number(e.target.value);
+                      setCustomHashrateHps(customHashrateForSliderPosition(position, minHashrate, defaultHashrate, maxHashrate));
+                      setEditingField(null);
+                    }}
+                    className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full phd-slider z-10"
+                  />
+                </div>
               </div>
+            </div>
+            <div className="border border-border bg-secondary/50 px-3 py-2 text-sm space-y-1">
               {walletType === 'xverse' && balanceSats != null && (
                 <div className="flex items-baseline justify-between gap-4">
                   <span className="text-foreground/60">Balance</span>
@@ -752,87 +762,87 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
               <p className="text-sm text-green-500">Payment detected</p>
             </div>
           ) : (
-          <div className="space-y-4">
-            <div className="flex flex-col items-center gap-2">
-              <div className="bg-white p-2 rounded-md overflow-hidden">
-                <QRCode
-                  value={orderData.payment_address}
-                  size={208}
-                  bgColor="#ffffff"
-                  fgColor="#000000"
-                  level="M"
-                />
+            <div className="space-y-4">
+              <div className="flex flex-col items-center gap-2">
+                <div className="bg-white p-2 rounded-md overflow-hidden">
+                  <QRCode
+                    value={orderData.payment_address}
+                    size={208}
+                    bgColor="#ffffff"
+                    fgColor="#000000"
+                    level="M"
+                  />
+                </div>
+                <p className="text-[10px] text-foreground/40">Scan to get the deposit address</p>
               </div>
-              <p className="text-[10px] text-foreground/40">Scan to get the deposit address</p>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-accent-2 mb-2">Payment Address</h3>
-              <div className="bg-secondary p-3 border border-border flex items-center justify-between gap-2">
-                <p className="text-foreground break-all text-sm flex-1">{orderData.payment_address}</p>
-                <button
-                  onClick={() => copyToClipboard(orderData.payment_address, 'address')}
-                  className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0"
-                >
-                  {copiedField === 'address' ? (
-                    <><CheckIcon className="w-3 h-3" /><span>Copied</span></>
-                  ) : (
-                    <><CopyIcon className="w-3 h-3" /><span>Copy</span></>
-                  )}
-                </button>
-              </div>
-            </div>
-            <div>
-              <h3 className="text-sm font-medium text-accent-2 mb-2">Amount</h3>
-              <div className="bg-secondary p-3 border border-border flex items-center justify-between gap-2">
-                <p className="text-foreground flex-1">
-                  {orderData.payment_amount.toLocaleString()} sats
-                  <span className="text-foreground/40 ml-2">({(orderData.payment_amount / 1e8).toFixed(8)} BTC)</span>
-                  {bitcoinPrice !== null && (
-                    <span className="text-foreground/40 ml-2">(~{formatPrice((orderData.payment_amount / 1e8) * bitcoinPrice)})</span>
-                  )}
-                </p>
-                <button
-                  onClick={() => copyToClipboard(String(orderData.payment_amount), 'amount')}
-                  className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0"
-                >
-                  {copiedField === 'amount' ? (
-                    <><CheckIcon className="w-3 h-3" /><span>Copied</span></>
-                  ) : (
-                    <><CopyIcon className="w-3 h-3" /><span>Copy</span></>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="text-[10px] text-gray-300 italic mt-4">
-              Send the exact amount to the address above. Confirmation must happen within 6 blocks, otherwise the order will expire. Use a high fee rate.
-            </div>
-
-            {error && (
-              <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
-                {error}
-              </div>
-            )}
-
-            <div className="flex flex-col items-center gap-3 mt-6">
-              <div className="flex items-center gap-2 text-sm text-foreground/60">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground" />
-                <span>Waiting for payment</span>
-              </div>
-              <div className="flex justify-center gap-3">
-                {isConnected && walletType !== 'manual' && (
+              <div>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">Payment Address</h3>
+                <div className="bg-secondary p-3 border border-border flex items-center justify-between gap-2">
+                  <p className="text-foreground break-all text-sm flex-1">{orderData.payment_address}</p>
                   <button
-                    type="button"
-                    onClick={handlePayWithXverse}
-                    disabled={paying || paymentSent || paymentConfirmed}
-                    className={`px-4 py-2 text-sm font-medium ${paying || paymentSent || paymentConfirmed ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
+                    onClick={() => copyToClipboard(orderData.payment_address, 'address')}
+                    className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0"
                   >
-                    {paying ? 'Paying…' : paymentConfirmed ? 'Payment detected' : paymentSent ? 'Waiting for payment…' : 'Pay with Xverse'}
+                    {copiedField === 'address' ? (
+                      <><CheckIcon className="w-3 h-3" /><span>Copied</span></>
+                    ) : (
+                      <><CopyIcon className="w-3 h-3" /><span>Copy</span></>
+                    )}
                   </button>
-                )}
+                </div>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-accent-2 mb-2">Amount</h3>
+                <div className="bg-secondary p-3 border border-border flex items-center justify-between gap-2">
+                  <p className="text-foreground flex-1">
+                    {orderData.payment_amount.toLocaleString()} sats
+                    <span className="text-foreground/40 ml-2">({(orderData.payment_amount / 1e8).toFixed(8)} BTC)</span>
+                    {bitcoinPrice !== null && (
+                      <span className="text-foreground/40 ml-2">(~{formatPrice((orderData.payment_amount / 1e8) * bitcoinPrice)})</span>
+                    )}
+                  </p>
+                  <button
+                    onClick={() => copyToClipboard(String(orderData.payment_amount), 'amount')}
+                    className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0"
+                  >
+                    {copiedField === 'amount' ? (
+                      <><CheckIcon className="w-3 h-3" /><span>Copied</span></>
+                    ) : (
+                      <><CopyIcon className="w-3 h-3" /><span>Copy</span></>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-gray-300 italic mt-4">
+                Send the exact amount to the address above. Confirmation must happen within 6 blocks, otherwise the order will expire. Use a high fee rate.
+              </div>
+
+              {error && (
+                <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex flex-col items-center gap-3 mt-6">
+                <div className="flex items-center gap-2 text-sm text-foreground/60">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground" />
+                  <span>Waiting for payment</span>
+                </div>
+                <div className="flex justify-center gap-3">
+                  {isConnected && walletType !== 'manual' && (
+                    <button
+                      type="button"
+                      onClick={handlePayWithXverse}
+                      disabled={paying || paymentSent || paymentConfirmed}
+                      className={`px-4 py-2 text-sm font-medium ${paying || paymentSent || paymentConfirmed ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
+                    >
+                      {paying ? 'Paying…' : paymentConfirmed ? 'Payment detected' : paymentSent ? 'Waiting for payment…' : 'Pay with Xverse'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
           )
         )}
       </div>

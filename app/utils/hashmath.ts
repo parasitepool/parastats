@@ -188,6 +188,24 @@ export function hashrateForSliderPosition(position: number, floorHps: number, de
   return defaultHps * MAX_TARGET_MULTIPLIER ** ((position - HASHRATE_SLIDER_DEFAULT) / HASHRATE_SLIDER_DEFAULT);
 }
 
+/**
+ * Custom target hashrate for a slider position, rounded to whole units and
+ * clamped to the order's bounds. Returns null at the default position (or when
+ * rounding lands on the default), so callers omit the custom rate and use the
+ * 24-hour default.
+ */
+export function customHashrateForSliderPosition(
+  position: number,
+  minHps: number,
+  defaultHps: number,
+  maxHps: number,
+): number | null {
+  if (position === HASHRATE_SLIDER_DEFAULT) return null;
+  const raw = hashrateForSliderPosition(position, minHps, defaultHps);
+  const rounded = clamp(roundHashrateToWholeUnit(raw), minHps, maxHps);
+  return Math.abs(rounded - defaultHps) <= defaultHps * 1e-9 ? null : rounded;
+}
+
 // Targets are rounded to whole TH/s below 1 PH/s and whole PH/s above it.
 
 function hashrateWholeUnit(hps: number): number {

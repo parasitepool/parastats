@@ -3,15 +3,12 @@
 import { useEffect, useState } from 'react';
 import {
   clamp,
-  durationSecondsFromHashDaysAndRate,
+  customHashrateForSliderPosition,
   formatHashrate,
-  HASHRATE_SLIDER_DEFAULT,
   HASHRATE_SLIDER_STEPS,
-  hashrateForSliderPosition,
   hashrateSliderPositionFor,
   roundHashrateToWholeUnit,
 } from '@/app/utils/hashmath';
-import { formatLongDuration } from '@/app/utils/formatters';
 
 interface HashrateFieldProps {
   /** Order size in hash-days; the 24-hour default target is numerically equal to it. */
@@ -31,10 +28,10 @@ interface HashrateFieldProps {
 }
 
 /**
- * Advanced-order hashrate control: inline target editor plus a logarithmic
- * slider from the order's minimum rate to the router's maximum (24x the
- * default). Editing state is local; any change to the order's work amount
- * (hashDays) closes an open editor and clears the custom rate.
+ * Order hashrate control: inline target editor plus a logarithmic slider from
+ * the order's minimum rate to the router's maximum (24x the default). Editing
+ * state is local; any change to the order's work amount (hashDays) closes an
+ * open editor and clears the custom rate.
  */
 export default function HashrateField({
   hashDays,
@@ -55,10 +52,8 @@ export default function HashrateField({
     setEditing(false);
   }, [hashDays]);
 
-  const isDefault = Math.abs(targetHashrate - defaultHashrate) <= defaultHashrate * 1e-9;
   const editUnit = targetHashrate >= 1e15 ? 'PH/s' : 'TH/s';
   const editFactor = editUnit === 'PH/s' ? 1e15 : 1e12;
-  const delivery = formatLongDuration(durationSecondsFromHashDaysAndRate(hashDays, targetHashrate));
   const sliderPosition = clamp(
     Math.round(hashrateSliderPositionFor(targetHashrate, minHashrate, defaultHashrate, maxHashrate)),
     0,
@@ -84,54 +79,39 @@ export default function HashrateField({
   };
 
   const setFromPosition = (position: number) => {
-    if (position === HASHRATE_SLIDER_DEFAULT) {
-      onChange(null);
-      return;
-    }
-    const raw = hashrateForSliderPosition(position, minHashrate, defaultHashrate);
-    const rounded = clamp(roundHashrateToWholeUnit(raw), minHashrate, maxHashrate);
-    onChange(Math.abs(rounded - defaultHashrate) <= defaultHashrate * 1e-9 ? null : rounded);
+    onChange(customHashrateForSliderPosition(position, minHashrate, defaultHashrate, maxHashrate));
   };
 
   return (
     <div className="bg-secondary p-3 border border-border space-y-2">
-      <div className="flex items-baseline justify-between gap-4">
-        <div
-          className="cursor-text"
-          onClick={() => {
-            if (!disabled && !editing) startEdit();
-          }}
-        >
-          <p className="text-foreground break-all">
-            {editing ? (
-              <span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => commitEdit(editValue)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') commitEdit(editValue);
-                  }}
-                  autoFocus
-                  className="w-28 bg-secondary border border-foreground text-center text-foreground outline-none"
-                /> {editUnit}
-              </span>
-            ) : (
-              <span className="border-b border-dashed border-foreground/40 hover:border-foreground">
-                {formatHashrate(targetHashrate)}
-              </span>
-            )}
-          </p>
-        </div>
-        {isDefault ? (
-          <span className="text-xs text-foreground/40">Default · 24h</span>
-        ) : (
-          <span className="text-xs text-foreground/60">
-            Delivery ~{delivery ? `${delivery.value} ${delivery.unit}` : '—'}
-          </span>
-        )}
+      <div
+        className="cursor-text"
+        onClick={() => {
+          if (!disabled && !editing) startEdit();
+        }}
+      >
+        <p className="text-foreground break-all">
+          {editing ? (
+            <span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={() => commitEdit(editValue)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitEdit(editValue);
+                }}
+                autoFocus
+                className="w-28 bg-secondary border border-foreground text-center text-foreground outline-none"
+              /> {editUnit}
+            </span>
+          ) : (
+            <span className="border-b border-dashed border-foreground/40 hover:border-foreground">
+              {formatHashrate(targetHashrate)}
+            </span>
+          )}
+        </p>
       </div>
       <div className="relative h-7">
         <input
