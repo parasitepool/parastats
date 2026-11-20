@@ -12,7 +12,7 @@ export default function OverviewSection() {
         (<Unit>PHd</Unit>), currently priced at <LiveHashPrice />. Placing an order means accepting the posted <Term>hashprice</Term>.
       </p>
       <dl className="mt-6 grid grid-cols-1 gap-x-8 gap-y-3 text-foreground sm:grid-cols-[9rem_1fr]">
-        <dt className="font-semibold">
+        <dt className="font-semibold underline underline-offset-4 sm:no-underline">
           <Term>Hashrate</Term>
         </dt>
         <dd>
@@ -20,7 +20,7 @@ export default function OverviewSection() {
           <Unit>PH/s</Unit> = <Num>10<sup>15</sup></Num> hashes per second.
         </dd>
 
-        <dt className="font-semibold">
+        <dt className="font-semibold underline underline-offset-4 sm:no-underline">
           <Term>Hashwork</Term>
         </dt>
         <dd>
@@ -30,7 +30,7 @@ export default function OverviewSection() {
           <Num>429 trillion</Num> hashes.
         </dd>
 
-        <dt className="font-semibold">
+        <dt className="font-semibold underline underline-offset-4 sm:no-underline">
           <Term>Hashdays</Term>
         </dt>
         <dd>
@@ -39,7 +39,7 @@ export default function OverviewSection() {
           <Unit>Hd</Unit> = <Num>20.12 G</Num> units of hashwork).
         </dd>
 
-        <dt className="font-semibold">
+        <dt className="font-semibold underline underline-offset-4 sm:no-underline">
           <Term>Hashprice</Term>
         </dt>
         <dd>

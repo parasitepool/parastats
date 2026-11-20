@@ -131,7 +131,8 @@ export interface RouterStatus {
   total_capacity_hash_days: number;
   used_capacity_hash_days: number;
   halt: boolean;
-  boost: boolean;
+  /** When true, connections spill to sink orders once every open bucket reaches its target. */
+  pace: boolean;
   wallet: WalletInfo;
   /** Sum of target hashrates for active, unfulfilled bucket orders, in H/s. */
   target_hashrate: number;

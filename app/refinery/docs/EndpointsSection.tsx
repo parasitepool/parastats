@@ -28,12 +28,12 @@ const ENDPOINTS: EndpointDoc[] = [
     method: 'GET',
     path: '/status',
     description:
-      'Returns the current router status: hashprice, total and used capacity, whether order creation is halted, and aggregate upstream/downstream mining stats.',
+      'Returns the current router status: hashprice, total and used capacity, whether order creation is halted, whether pace routing is enabled, and aggregate upstream/downstream mining stats.',
     details: (
       <div className="mt-4 space-y-1 text-sm text-foreground">
         <p><code className="font-mono text-xs">hash_price</code> is the current quote in sats/PHd; <code className="font-mono text-xs">hash_value</code> is the base before premium and <code className="font-mono text-xs">difficulty_multiplier</code>.</p>
         <p><code className="font-mono text-xs">target_hashrate</code>, <code className="font-mono text-xs">deficit_hashrate</code>, and <code className="font-mono text-xs">surplus_hashrate</code> are aggregate targets/under/over in H/s. <code className="font-mono text-xs">starving_order_count</code> counts active unfulfilled orders below target; capacity fields are in Hd.</p>
-        <p><code className="font-mono text-xs">block_count</code>/<code className="font-mono text-xs">recent_blocks</code> are router-recorded blocks, not chain height. <code className="font-mono text-xs">wallet.synced</code>/<code className="font-mono text-xs">halt</code>/<code className="font-mono text-xs">boost</code> control order creation; <code className="font-mono text-xs">git_commit</code> is the deployed build.</p>
+        <p><code className="font-mono text-xs">block_count</code>/<code className="font-mono text-xs">recent_blocks</code> are router-recorded blocks, not chain height. <code className="font-mono text-xs">wallet.synced</code> and <code className="font-mono text-xs">halt</code> control order creation. <code className="font-mono text-xs">pace</code> controls routing: when enabled, connections that arrive after every open bucket reaches its target spill to sink orders instead of overfilling buckets. <code className="font-mono text-xs">git_commit</code> is the deployed build.</p>
       </div>
     ),
     curl: `curl -s ${BASE_URL}/status`,
@@ -47,7 +47,7 @@ const ENDPOINTS: EndpointDoc[] = [
   "total_capacity_hash_days": 1000000000000000000,
   "used_capacity_hash_days": 18156355635669600,
   "halt": false,
-  "boost": false,
+  "pace": false,
   "wallet": { "synced": true },
   "target_hashrate": 300000000000000,
   "deficit_hashrate": 242660823167963.25,
@@ -369,30 +369,6 @@ export default function EndpointsSection() {
         <code className="font-mono text-sm">/status</code>{' '}
         <code className="font-mono text-sm">git_commit</code> field to see which exact fields are returned to be sure.
       </p>
-      <div className="grid gap-x-4 gap-y-1 text-sm text-foreground sm:grid-cols-[8rem_1fr]">
-        <span className="font-semibold">Integer</span>
-        <span>
-          <code className="font-mono text-sm">hash_price</code>, <code className="font-mono text-sm">hash_value</code>,{' '}
-          <code className="font-mono text-sm">payment_amount</code>, IDs, timestamps, and counts.
-        </span>
-        <span className="font-semibold">Floating-point</span>
-        <span>
-          <code className="font-mono text-sm">hashrate</code>, all <code className="font-mono text-sm">hashrate_*</code>, <code className="font-mono text-sm">target_hashrate</code>,{' '}
-          <code className="font-mono text-sm">deficit_hashrate</code>, <code className="font-mono text-sm">surplus_hashrate</code>,{' '}
-          <code className="font-mono text-sm">hash_days</code>, <code className="font-mono text-sm">requested_hash_days</code>,{' '}
-          <code className="font-mono text-sm">delivered_hash_days</code>, <code className="font-mono text-sm">hash_rate</code>,{' '}
-          <code className="font-mono text-sm">accepted_work</code>, <code className="font-mono text-sm">rejected_work</code>,{' '}
-          <code className="font-mono text-sm">sps_*</code>, <code className="font-mono text-sm">difficulty_multiplier</code>, and
-          capacity fields. <code className="font-mono text-sm">best_share</code> is an integer at ≥1 and a float below 1.
-        </span>
-        <span className="font-semibold">Units</span>
-        <span>
-          Hashrates in <Unit>H/s</Unit>; hash-day fields in <Unit>Hd</Unit>;{' '}
-          <code className="font-mono text-sm">hash_price</code>/<code className="font-mono text-sm">hash_value</code> in{' '}
-          <Unit>sats/PHd</Unit>; <code className="font-mono text-sm">payment_amount</code> in <Unit>sats</Unit>; timestamps in
-          Unix seconds.
-        </span>
-      </div>
       <p className="text-foreground">
         For conversions, see{' '}
         <a href="https://github.com/parasitepool/parastats/blob/master/app/utils/hashmath.ts" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">hashmath.ts</a>,{' '}
