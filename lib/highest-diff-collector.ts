@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { getDb } from './db';
 import { fetch, HttpError, isRetryableError } from './http-client';
+import { mergeBlockDiffsIntoCurrentRound } from './rounds-collector';
 
 // Types for API responses
 interface HighestDiffResponse {
@@ -339,6 +340,8 @@ export async function collectHighestDiff(blockHeight: number): Promise<boolean> 
         userStmt.run(blockHeight, entry.username, entry.diff);
       }
     }
+
+    mergeBlockDiffsIntoCurrentRound(db, blockHeight);
   })();
 
   console.log(`📊 Block ${blockHeight}: winner=${poolWinner.username.substring(0, 12)}... (${poolWinner.diff.toExponential(2)}) + ${userDiffs.length} user diffs`);

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import dynamic from "next/dynamic";
 import Leaderboard from "./components/tables/BoardDiff";
 import PoolStats from "./components/PoolStats";
 import RecentBlocks from "./components/RecentBlocks";
@@ -16,16 +15,6 @@ import HashrateChart from "./components/HashrateChart";
 import BoardCombined from "./components/tables/BoardCombined";
 import { getHashrate, getPoolStats, getHistoricalPoolStats, type PoolStats as PoolStatsType } from "./utils/api";
 import type { HistoricalPoolStats } from "./api/pool-stats/historical/route";
-
-const ShareStream = dynamic(() => import("./components/ShareStream"), {
-  ssr: false,
-  loading: () => (
-    <div className="mt-2 flex h-12 w-full gap-2">
-      <div className="h-12 w-28 shrink-0 border border-foreground/20 bg-foreground/10" />
-      <div className="h-12 flex-1 animate-pulse border border-border bg-secondary/40" />
-    </div>
-  ),
-});
 
 export default function Dashboard() {
   const [poolStats, setPoolStats] = useState<PoolStatsType>();
@@ -154,7 +143,6 @@ export default function Dashboard() {
     <main className="flex min-h-screen flex-col items-center gap-3 pb-8">
       <div className="w-full">
         <RecentBlocks />
-        <ShareStream className="mt-2" />
       </div>
       <PoolStats
         poolStats={poolStats}

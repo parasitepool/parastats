@@ -22,7 +22,6 @@ interface RoundParticipant {
 const CONFIG = {
   MAX_RETRIES: 4,
   RETRY_BASE_DELAY: 500,
-  CURRENT_ROUND_POLL_INTERVAL: '*/10 * * * *', // every 10 minutes
   CURRENT_ROUND_TIMEOUT: 30_000,
   PARTICIPANT_FETCH_TIMEOUT: 300_000, // 5 minutes
   PARTICIPANT_REFETCH_COOLDOWN: 360_000, // 6 minutes - skip re-trigger if fetched recently
@@ -35,7 +34,6 @@ let isSyncingRounds = false;
 let isFetchingPendingParticipants = false;
 let isFillingNetworkDifficulties = false;
 let syncJob: ReturnType<typeof cron.schedule> | null = null;
-let currentRoundJob: ReturnType<typeof cron.schedule> | null = null;
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -221,6 +219,54 @@ export async function syncRounds(): Promise<number> {
   }
 }
 
+export function mergeBlockDiffsIntoCurrentRound(
+  db: ReturnType<typeof getDb>,
+  blockHeight?: number,
+): void {
+  const row = db.prepare(
+    'SELECT MAX(block_height) AS max_height FROM rounds WHERE block_height > 0'
+  ).get() as { max_height: number | null } | undefined;
+
+  const lastRoundHeight = row?.max_height ?? null;
+  if (lastRoundHeight === null) return;
+
+  if (blockHeight !== undefined) {
+    if (blockHeight <= lastRoundHeight) return;
+
+    db.prepare(`
+      INSERT INTO round_participants (block_height, username, top_diff, blocks_participated, total_work)
+      SELECT
+        0,
+        u.address,
+        u.difficulty,
+        1,
+        0
+      FROM user_block_diff u
+      WHERE u.block_height = ?
+        AND u.difficulty > 0
+      ON CONFLICT(block_height, username) DO UPDATE SET
+        top_diff = MAX(round_participants.top_diff, excluded.top_diff)
+    `).run(blockHeight);
+    return;
+  }
+
+  db.prepare(`
+    INSERT INTO round_participants (block_height, username, top_diff, blocks_participated, total_work)
+    SELECT
+      0,
+      u.address,
+      MAX(u.difficulty),
+      COUNT(*),
+      0
+    FROM user_block_diff u
+    WHERE u.block_height > ?
+      AND u.difficulty > 0
+    GROUP BY u.address
+    ON CONFLICT(block_height, username) DO UPDATE SET
+      top_diff = MAX(round_participants.top_diff, excluded.top_diff)
+  `).run(lastRoundHeight);
+}
+
 /**
  * Collect current round participant data.
  * Replaces all block_height=0 rows with fresh data.
@@ -247,6 +293,8 @@ export async function collectCurrentRound(): Promise<void> {
       for (const p of participants) {
         insert.run(p.username, p.top_diff, p.blocks_participated, p.total_work ?? 0);
       }
+
+      mergeBlockDiffsIntoCurrentRound(db);
     })();
 
     console.log(`🔄 Current round: ${participants.length} participants`);
@@ -463,24 +511,22 @@ export function triggerRoundsSync(): void {
  * - Schedule periodic polling
  */
 export function startRoundsCollector(): void {
-  // Startup: sync rounds, collect current, fetch pending participants
   syncRounds()
     .then(() => {
       fillNetworkDifficulties().catch(err =>
         console.error('Error filling network difficulties on startup:', err)
       );
-      // After syncing rounds, fetch any pending participant data in background
       fetchPendingRoundParticipants().catch(err =>
         console.error('Error fetching pending round participants on startup:', err)
       );
     })
-    .catch(err => console.error('Error syncing rounds on startup:', err));
+    .catch(err => console.error('Error syncing rounds on startup:', err))
+    .finally(() => {
+      collectCurrentRound().catch(err =>
+        console.error('Error collecting current round on startup:', err)
+      );
+    });
 
-  collectCurrentRound().catch(err =>
-    console.error('Error collecting current round on startup:', err)
-  );
-
-  // Schedule periodic round list sync + retry any pending/errored participants
   syncJob = cron.schedule(CONFIG.ROUNDS_SYNC_INTERVAL, async () => {
     await syncRounds();
     fillNetworkDifficulties().catch(err =>
@@ -489,10 +535,6 @@ export function startRoundsCollector(): void {
     fetchPendingRoundParticipants().catch(err =>
       console.error('Error fetching pending round participants:', err)
     );
-  });
-
-  // Schedule current round polling
-  currentRoundJob = cron.schedule(CONFIG.CURRENT_ROUND_POLL_INTERVAL, async () => {
     await collectCurrentRound();
   });
 
@@ -506,10 +548,6 @@ export function stopRoundsCollector(): void {
   if (syncJob) {
     syncJob.stop();
     syncJob = null;
-  }
-  if (currentRoundJob) {
-    currentRoundJob.stop();
-    currentRoundJob = null;
   }
   isCollectingCurrent = false;
   isSyncingRounds = false;

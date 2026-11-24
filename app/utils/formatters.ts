@@ -28,6 +28,23 @@ export function formatAddress(address: string): string {
   return `${address.substring(0, 4)}...${address.substring(address.length - 4)}`;
 }
 
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      default:
+        return '&#39;';
+    }
+  });
+}
+
 export function formatRelativeTime(timestamp: number): string {
   // 0 is the pool's "never submitted" sentinel; callers may also pass NaN from a
   // missing lastshare. Both would otherwise render as a date near the epoch.

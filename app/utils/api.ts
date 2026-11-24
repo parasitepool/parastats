@@ -215,6 +215,21 @@ export async function getShadowBlockTopDiffs(limit?: number): Promise<ShadowBloc
   }
 }
 
+export async function getRecentBlockTopDiffs(limit: number = 25): Promise<ShadowBlockTopDiff[]> {
+  try {
+    return await withRetry(async () => {
+      const response = await fetch(`/api/highest-diff?limit=${limit}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    });
+  } catch (error) {
+    console.error("Error fetching recent block top diffs:", error);
+    throw error;
+  }
+}
+
 /**
  * PRIVACY: UserBlockDiffEntry only contains truncated addresses.
  * Full addresses are never exposed by the API to protect user privacy.

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as echarts from 'echarts';
 import type { CallbackDataParams, ECElementEvent } from 'echarts/types/dist/shared';
 import { formatDifficulty } from '../utils/hashmath';
+import { escapeHtml } from '../utils/formatters';
 
 interface ShadowBlockTopDiffChartRow {
   block_height: number;
@@ -25,23 +26,6 @@ const TOOLTIP_BORDER = '#444444';
 const TEXT_COLOR = '#ededed';
 const DOT_COLOR = '#ef4444';
 const FONT_FAMILY = '"Courier New", Courier, monospace';
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => {
-    switch (character) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '"':
-        return '&quot;';
-      default:
-        return '&#39;';
-    }
-  });
-}
 
 export default function ShadowBlockTopDiffChart({
   rows,
