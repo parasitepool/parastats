@@ -3,15 +3,11 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-// Bound memory: every distinct key (query combo) ever requested would
-// otherwise live in the Map forever. Oldest entries are evicted once the cap
-// is reached.
-const MAX_ENTRIES = 200;
+const MAX_ENTRIES = 1000;
 
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<unknown>>();
 
-// Coalesce requests per key and leave unsuccessful upstream responses uncached.
 export async function cachedJson<T>(
   key: string,
   ttlMs: number,
@@ -19,7 +15,11 @@ export async function cachedJson<T>(
   shouldCache: (data: T) => boolean = () => true,
 ): Promise<T> {
   const hit = cache.get(key);
-  if (hit && hit.expiresAt > Date.now()) return hit.data as T;
+  if (hit && hit.expiresAt > Date.now()) {
+    cache.delete(key);
+    cache.set(key, hit);
+    return hit.data as T;
+  }
 
   const pending = inFlight.get(key);
   if (pending) return pending as Promise<T>;
@@ -43,4 +43,12 @@ export async function cachedJson<T>(
 
   inFlight.set(key, promise);
   return promise;
+}
+
+export function invalidateRouteCache(prefixes: readonly string[]): void {
+  for (const key of cache.keys()) {
+    if (prefixes.some(prefix => key.startsWith(prefix))) {
+      cache.delete(key);
+    }
+  }
 }

@@ -26,11 +26,8 @@ export async function GET(
       );
     }
 
-    // Get lightning token from header if present
     const lightningToken = request.headers.get('X-Lightning-Token');
 
-    // Fetch account data
-    let accountData: AccountData | null = null;
     const apiUrl = process.env.API_URL;
     if (!apiUrl) {
       console.error("Failed to fetch user account: No API_URL defined in env");
@@ -42,38 +39,40 @@ export async function GET(
       headers['Authorization'] = `Bearer ${process.env.API_TOKEN}`;
     }
 
-    try {
-      const url = `${apiUrl}/account/${address}`;
-      const { data } = await fetchWithCache<AccountData | null>(
-        url,
-        async () => {
-          const response = await fetchWithTimeout(url, {
-            headers,
-          });
-          if (response.ok) {
-            return await response.json() as AccountData;
-          }
-          // 404 — not an error, just no account
-          if (response.status === 404) {
-            return null;
-          }
-          // Other failures (5xx etc.) must not be cached as "no account"
-          throw new HttpError(response.status, response.statusText, url);
-        },
-      );
-      accountData = data;
-    } catch (error) {
-      console.error("Error fetching account data:", error instanceof Error ? error.message : 'Unknown error');
-      // accountData stays null
-    }
+    const accountPromise = (async (): Promise<AccountData | null> => {
+      try {
+        const url = `${apiUrl}/account/${address}`;
+        const { data } = await fetchWithCache<AccountData | null>(
+          url,
+          async () => {
+            const response = await fetchWithTimeout(url, {
+              headers,
+            });
+            if (response.ok) {
+              return await response.json() as AccountData;
+            }
+            if (response.status === 404) {
+              return null;
+            }
+            throw new HttpError(response.status, response.statusText, url);
+          },
+        );
+        return data;
+      } catch (error) {
+        console.error("Error fetching account data:", error instanceof Error ? error.message : 'Unknown error');
+        return null;
+      }
+    })();
 
-    // Fetch lightning data if token is provided
-    let lightningData: { walletInfo: WalletInfo; balance: number } | null = null;
-    let lightningTokenExpired = false;
-    
-    if (lightningToken) {
+    const lightningPromise = (async (): Promise<{
+      lightningData: { walletInfo: WalletInfo; balance: number } | null;
+      lightningTokenExpired: boolean;
+    }> => {
+      if (!lightningToken) {
+        return { lightningData: null, lightningTokenExpired: false };
+      }
+
       const lightningApiUrl = process.env.LIGHTNING_API_URL;
-      
       try {
         const [userResponse, balanceResponse] = await Promise.all([
           fetchWithTimeout(`${lightningApiUrl}/wallet_user`, {
@@ -84,22 +83,32 @@ export async function GET(
           }),
         ]);
 
-        // Check if token is expired/invalid (401 Unauthorized)
         if (userResponse.status === 401 || balanceResponse.status === 401) {
-          lightningTokenExpired = true;
-        } else if (userResponse.ok && balanceResponse.ok) {
-          const userData: WalletInfo = await userResponse.json();
-          const balanceData: BalanceResponse = await balanceResponse.json();
-          lightningData = {
-            walletInfo: userData,
-            balance: balanceData.balance,
+          return { lightningData: null, lightningTokenExpired: true };
+        }
+        if (userResponse.ok && balanceResponse.ok) {
+          const [userData, balanceData] = await Promise.all([
+            userResponse.json() as Promise<WalletInfo>,
+            balanceResponse.json() as Promise<BalanceResponse>,
+          ]);
+          return {
+            lightningData: {
+              walletInfo: userData,
+              balance: balanceData.balance,
+            },
+            lightningTokenExpired: false,
           };
         }
       } catch (error) {
         console.error("Error fetching lightning data:", error instanceof Error ? error.message : 'Unknown error');
-        // lightningData stays null
       }
-    }
+      return { lightningData: null, lightningTokenExpired: false };
+    })();
+
+    const [accountData, { lightningData, lightningTokenExpired }] = await Promise.all([
+      accountPromise,
+      lightningPromise,
+    ]);
 
     const combinedResponse: CombinedAccountResponse = {
       account: accountData,

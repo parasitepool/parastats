@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cachedJson } from './route-cache';
+import { cachedJson, invalidateRouteCache } from './route-cache';
 
 test('deduplicates concurrent requests and reuses a fresh response', async () => {
   let resolveFetch!: (value: string) => void;
@@ -65,4 +65,17 @@ test('rejects failed refreshes instead of serving expired data', async () => {
   } finally {
     Date.now = realNow;
   }
+});
+
+test('invalidateRouteCache evicts matching prefixes only', async () => {
+  let fooCalls = 0;
+  let barCalls = 0;
+
+  assert.equal(await cachedJson('foo:1', 10_000, async () => `foo-${++fooCalls}`), 'foo-1');
+  assert.equal(await cachedJson('bar:1', 10_000, async () => `bar-${++barCalls}`), 'bar-1');
+
+  invalidateRouteCache(['foo:']);
+
+  assert.equal(await cachedJson('foo:1', 10_000, async () => `foo-${++fooCalls}`), 'foo-2');
+  assert.equal(await cachedJson('bar:1', 10_000, async () => `bar-${++barCalls}`), 'bar-1');
 });

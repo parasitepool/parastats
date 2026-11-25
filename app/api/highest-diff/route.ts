@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { cachedJson } from '@/lib/route-cache';
 import { formatAddress } from '@/app/utils/formatters';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { checkRateLimit, getRateLimitHeaders } from '@/app/api/lib/rate-limit';
@@ -12,6 +13,9 @@ import {
   logError,
 } from './types';
 
+const RECENT_CACHE_TTL_MS = 10_000;
+const LEADERBOARD_CACHE_TTL_MS = 60_000;
+
 /**
  * PRIVACY: This API only returns truncated addresses.
  * Full addresses are never exposed to protect user privacy.
@@ -23,9 +27,12 @@ export async function GET(request: Request) {
   if (!rateLimitResult.success) {
     return NextResponse.json(
       { error: 'Too many requests. Please try again later.' },
-      { 
+      {
         status: 429,
-        headers: getRateLimitHeaders(rateLimitResult),
+        headers: {
+          ...getRateLimitHeaders(rateLimitResult),
+          'Cache-Control': 'no-store',
+        },
       }
     );
   }
@@ -40,51 +47,61 @@ export async function GET(request: Request) {
     if (address && !isValidBitcoinAddress(address)) {
       return NextResponse.json(
         { error: 'Invalid Bitcoin address format' },
-        { status: 400, headers: getRateLimitHeaders(rateLimitResult) }
-      );
-    }
-
-    const db = getDb();
-    const claimedSet = getClaimedAddresses();
-
-    if (type === 'leaderboard') {
-      // Get leaderboard of users by watermark count (how many times they had the top diff)
-      // Only include users who are public (or not in monitored_users, which defaults to public)
-      // Note: DB column is winner_address, aliased to top_diff_address for API consistency
-      const topUsers = db.prepare(`
-        SELECT 
-          b.winner_address as address,
-          COUNT(*) as watermark_count,
-          SUM(b.difficulty) as total_diff,
-          AVG(b.difficulty) as avg_diff
-        FROM block_highest_diff b
-        LEFT JOIN monitored_users m ON b.winner_address = m.address
-        WHERE m.is_public = 1 OR m.address IS NULL
-        GROUP BY b.winner_address
-        ORDER BY watermark_count DESC
-        LIMIT ?
-      `).all(limit) as UserDiffCountRow[];
-
-      return NextResponse.json(
-        topUsers.map(u => ({
-          address: formatAddress(u.address), // Truncated only
-          claimed: claimedSet.has(u.address),
-          watermark_count: u.watermark_count,
-          total_diff: u.total_diff,
-          avg_diff: u.avg_diff,
-        })),
-        { 
+        {
+          status: 400,
           headers: {
             ...getRateLimitHeaders(rateLimitResult),
-            // Cache leaderboard for 60s, allow stale for 5min while revalidating
-            // This is an expensive query (full table scan + GROUP BY)
-            'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
-          }
+            'Cache-Control': 'no-store',
+          },
         }
       );
     }
 
+    if (type === 'leaderboard') {
+      const leaderboard = await cachedJson(
+        `highest-diff:leaderboard:${limit}`,
+        LEADERBOARD_CACHE_TTL_MS,
+        async () => {
+          const db = getDb();
+          const claimedSet = getClaimedAddresses();
+          const topUsers = db.prepare(`
+            SELECT
+              b.winner_address as address,
+              COUNT(*) as watermark_count,
+              SUM(b.difficulty) as total_diff,
+              AVG(b.difficulty) as avg_diff
+            FROM block_highest_diff b
+            LEFT JOIN monitored_users m ON b.winner_address = m.address
+            WHERE m.is_public = 1 OR m.address IS NULL
+            GROUP BY b.winner_address
+            ORDER BY watermark_count DESC
+            LIMIT ?
+          `).all(limit) as UserDiffCountRow[];
+
+          return topUsers.map(u => ({
+            address: formatAddress(u.address),
+            claimed: claimedSet.has(u.address),
+            watermark_count: u.watermark_count,
+            total_diff: u.total_diff,
+            avg_diff: u.avg_diff,
+          }));
+        },
+      );
+
+      return NextResponse.json(
+        leaderboard,
+        {
+          headers: {
+            ...getRateLimitHeaders(rateLimitResult),
+            'Cache-Control': 'public, max-age=60, s-maxage=60, stale-while-revalidate=300',
+          },
+        },
+      );
+    }
+
     if (address && type === 'user-diffs') {
+      const db = getDb();
+      const claimedSet = getClaimedAddresses();
       // Check if this user is public before returning their diffs
       const userPublicCheck = db.prepare(`
         SELECT is_public FROM monitored_users WHERE address = ?
@@ -123,6 +140,8 @@ export async function GET(request: Request) {
     }
 
     if (address) {
+      const db = getDb();
+      const claimedSet = getClaimedAddresses();
       // Check if this user is public before returning their watermarks
       const userPublicCheck = db.prepare(`
         SELECT is_public FROM monitored_users WHERE address = ?
@@ -159,54 +178,47 @@ export async function GET(request: Request) {
       );
     }
 
-    const rows = db.prepare(`
-      WITH recent AS (
-        SELECT block_height, block_timestamp
-        FROM block_highest_diff
-        ORDER BY block_height DESC
-        LIMIT ?
-      ),
-      ranked AS (
-        SELECT
-          u.block_height,
-          u.address,
-          u.difficulty,
-          ROW_NUMBER() OVER (
-            PARTITION BY u.block_height
-            ORDER BY u.difficulty DESC
-          ) AS rn
-        FROM user_block_diff u
-        INNER JOIN recent r ON r.block_height = u.block_height
-        LEFT JOIN monitored_users m ON m.address = u.address
-        WHERE m.is_public = 1 OR m.address IS NULL
-      )
-      SELECT
-        r.block_height,
-        r.block_timestamp,
-        ranked.address,
-        ranked.difficulty
-      FROM recent r
-      LEFT JOIN ranked ON ranked.block_height = r.block_height AND ranked.rn = 1
-      ORDER BY r.block_height DESC
-    `).all(limit) as {
-      block_height: number;
-      block_timestamp: number | null;
-      address: string | null;
-      difficulty: number | null;
-    }[];
+    const results = await cachedJson(
+      `highest-diff:recent:${limit}`,
+      RECENT_CACHE_TTL_MS,
+      async () => {
+        const db = getDb();
+        const claimedSet = getClaimedAddresses();
+        const recentBlocks = db.prepare(`
+          SELECT block_height, block_timestamp
+          FROM block_highest_diff
+          ORDER BY block_height DESC
+          LIMIT ?
+        `).all(limit) as { block_height: number; block_timestamp: number | null }[];
 
-    const results = rows.map(row => ({
-      block_height: row.block_height,
-      top_diff_address: row.address ? formatAddress(row.address) : null,
-      claimed: row.address ? claimedSet.has(row.address) : false,
-      difficulty: row.difficulty ?? null,
-      block_timestamp: row.block_timestamp,
-    }));
+        const getTopPublicUser = db.prepare(`
+          SELECT u.address, u.difficulty
+          FROM user_block_diff u
+          LEFT JOIN monitored_users m ON m.address = u.address
+          WHERE u.block_height = ? AND (m.is_public = 1 OR m.address IS NULL)
+          ORDER BY u.difficulty DESC
+          LIMIT 1
+        `);
+
+        return recentBlocks.map(block => {
+          const topUser = getTopPublicUser.get(block.block_height) as
+            | { address: string; difficulty: number }
+            | undefined;
+          return {
+            block_height: block.block_height,
+            top_diff_address: topUser ? formatAddress(topUser.address) : null,
+            claimed: topUser ? claimedSet.has(topUser.address) : false,
+            difficulty: topUser?.difficulty ?? null,
+            block_timestamp: block.block_timestamp,
+          };
+        });
+      },
+    );
 
     return NextResponse.json(results, {
       headers: {
         ...getRateLimitHeaders(rateLimitResult),
-        'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30',
+        'Cache-Control': 'public, max-age=10, s-maxage=10, stale-while-revalidate=30',
       },
     });
 
@@ -214,7 +226,7 @@ export async function GET(request: Request) {
     logError('highest-diff/route', error);
     return NextResponse.json(
       { error: 'Failed to fetch highest diff data' },
-      { status: 500 }
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
     );
   }
 }

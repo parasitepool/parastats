@@ -1,35 +1,10 @@
-import { NextResponse } from 'next/server';
-import { fetch } from '@/lib/http-client';
+import { proxyDispenserGet } from '@/lib/dispenser-proxy';
 
 export async function GET() {
-  try {
-    const apiUrl = process.env.DISPENSER_API_URL;
-    if (!apiUrl) {
-      console.error("Error fetching auction defaults: No DISPENSER_API_URL defined in env");
-      return NextResponse.json({ error: "Failed to fetch auction defaults" }, { status: 500 });
-    }
-
-    const headers: Record<string, string> = {};
-    if (process.env.DISPENSER_API_TOKEN) {
-      headers['Authorization'] = `Bearer ${process.env.DISPENSER_API_TOKEN}`;
-    }
-
-    const response = await fetch(`${apiUrl}/auction/defaults`, {
-      headers,
-      next: { revalidate: 60 },
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: "Failed to fetch auction defaults" },
-        { status: response.status }
-      );
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Error fetching auction defaults:", error);
-    return NextResponse.json({ error: "Failed to fetch auction defaults" }, { status: 500 });
-  }
+  return proxyDispenserGet({
+    path: '/auction/defaults',
+    cacheKey: 'dispenser:auction-defaults',
+    ttlSeconds: 60,
+    errorMessage: 'Failed to fetch auction defaults',
+  });
 }

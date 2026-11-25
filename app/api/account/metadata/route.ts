@@ -3,6 +3,7 @@ import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { upstreamErrorResponse } from '@/app/api/lib/upstream-error';
 import type { AccountMetadataUpdate } from '@/app/api/account/types';
 import { getDb } from '@/lib/db';
+import { invalidateRouteCache } from '@/lib/route-cache';
 
 export async function POST(request: Request) {
   try {
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
         const db = getDb();
         db.prepare('UPDATE monitored_users SET is_public = ? WHERE address = ?')
           .run(metadata.is_private ? 0 : 1, btc_address);
+        invalidateRouteCache(['leaderboard:', 'highest-diff:', 'shadow-block:']);
       } catch (dbError) {
         console.error('Failed to sync is_public to local DB:', dbError);
       }

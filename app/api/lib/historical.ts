@@ -17,6 +17,7 @@ const CACHE_DURATION_SECONDS: Record<string, number> = {
 };
 
 export interface HistoricalRange {
+  period: string;
   interval: string;
   intervalSeconds: number;
   cacheDuration: number;
@@ -68,6 +69,7 @@ export function parseHistoricalParams(
 
   return {
     range: {
+      period,
       interval,
       intervalSeconds,
       cacheDuration: CACHE_DURATION_SECONDS[interval],

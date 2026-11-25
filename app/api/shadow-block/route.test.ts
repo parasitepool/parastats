@@ -101,4 +101,17 @@ test('shadow-block top diffs clamp the limit, filter private users, and truncate
   assert.ok(!serialized.includes(PRIVATE_ADDRESS));
   assert.ok(!serialized.includes('bc1qprivateexampleaddress'));
   assert.ok(!allRows.some(row => row.block_height === 900_003 || row.block_height === 900_004));
+
+  const plan = db.prepare(`
+    EXPLAIN QUERY PLAN
+    SELECT u.address, u.difficulty
+    FROM user_block_diff u
+    LEFT JOIN monitored_users m ON m.address = u.address
+    WHERE u.block_height = ? AND (m.is_public = 1 OR m.address IS NULL)
+    ORDER BY u.difficulty DESC
+    LIMIT 1
+  `).all(900_001) as { detail: string }[];
+  const planText = plan.map(row => row.detail).join('\n');
+  assert.ok(planText.includes('idx_user_block_diff_height_diff'), planText);
+  assert.ok(!planText.includes('TEMP B-TREE'), planText);
 });

@@ -12,14 +12,14 @@ export function getDb(): Database.Database {
   if (!db) {
     fs.mkdirSync(/* turbopackIgnore: true */ dataDir, { recursive: true });
     db = new Database(dbPath, { timeout: 10000 });
-    
-    // Enable foreign keys
+
     db.pragma('journal_mode = WAL');
     db.pragma('synchronous = NORMAL');
     db.pragma('foreign_keys = ON');
-    
-    // Create tables if they don't exist
-    initializeTables();
+    db.pragma('cache_size = -64000');
+    db.pragma('temp_store = MEMORY');
+
+    initializeTables(db);
   }
   return db;
 }
@@ -34,8 +34,7 @@ function addColumnIfNotExists(db: Database.Database, alterStatement: string) {
   }
 }
 
-function initializeTables() {
-  const db = getDb();
+function initializeTables(db: Database.Database) {
   
   // Create pool stats table
   db.exec(`
@@ -199,9 +198,9 @@ function initializeTables() {
     )
   `);
 
-  // Index for user-specific queries
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_user_block_diff_address ON user_block_diff(address);
+    CREATE INDEX IF NOT EXISTS idx_user_block_diff_height_diff ON user_block_diff(block_height, difficulty DESC);
   `);
 
   // Create rounds table (caches completed round metadata from GET /rounds)
@@ -298,8 +297,6 @@ function initializeTables() {
     db.prepare(`UPDATE rounds SET participant_status = 'pending' WHERE participant_status = 'complete'`).run();
   }
 
-  // Created after the total_work column is guaranteed to exist (the column is
-  // only added to pre-existing round_participants tables by the migration above).
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_round_participants_work
       ON round_participants(block_height, total_work DESC);
