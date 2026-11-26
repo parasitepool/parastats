@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
+import { rateLimitResponse } from '@/app/api/lib/rate-limit';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { upstreamErrorResponse } from '@/app/api/lib/upstream-error';
 import type { AccountUpdate } from '@/app/api/account/types';
 
 export async function POST(request: Request) {
+  const limited = rateLimitResponse(request, 10, 'account-update');
+  if (limited) return limited;
+
   try {
     const apiUrl = process.env.API_URL;
     if (!apiUrl) {

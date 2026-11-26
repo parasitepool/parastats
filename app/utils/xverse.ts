@@ -21,7 +21,7 @@ export function isMobileDevice(): boolean {
  * sats-connect, so every connect path treats them the same way (e.g. offering
  * the setup guide instead of a generic failure). Patterns are kept specific to
  * wallets/providers: a bare "not found" would also match unrelated errors,
- * which `connectWithLightning` rethrows to all of its callers.
+ * which `connectXverse` rethrows to all of its callers.
  */
 export function isWalletProviderError(err: unknown): boolean {
   const message = (err instanceof Error ? err.message : String(err)) || '';

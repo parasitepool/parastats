@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { rateLimitResponse } from '@/app/api/lib/rate-limit';
 import { isValidBitcoinAddress } from '@/app/utils/validators';
 import { upstreamErrorResponse } from '@/app/api/lib/upstream-error';
 import type { AccountMetadataUpdate } from '@/app/api/account/types';
@@ -6,6 +7,9 @@ import { getDb } from '@/lib/db';
 import { invalidateRouteCache } from '@/lib/route-cache';
 
 export async function POST(request: Request) {
+  const limited = rateLimitResponse(request, 10, 'account-metadata');
+  if (limited) return limited;
+
   try {
     const apiUrl = process.env.API_URL;
     if (!apiUrl) {

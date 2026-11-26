@@ -1,49 +1,16 @@
-/**
- * Simple in-memory rate limiter for API routes
- * 
- * Note: This is a basic implementation suitable for single-instance deployments.
- * For production with multiple instances, consider using Redis or a similar
- * distributed store, or offload to Cloudflare rate limiting for route-specific limits.
- */
+import { NextResponse } from 'next/server';
 
 interface RateLimitEntry {
   count: number;
   resetTime: number;
 }
 
-// In-memory store for rate limiting
-const rateLimitStore = new Map<string, RateLimitEntry>();
-
-// Configuration
 const CONFIG = {
-  WINDOW_MS: 60 * 1000, // 1 minute window
-  MAX_REQUESTS: 200, // Max requests per window (increased from 100 to accommodate batch operations)
-  CLEANUP_INTERVAL_MS: 5 * 60 * 1000, // Cleanup every 5 minutes
+  WINDOW_MS: 60 * 1000,
+  MAX_REQUESTS: 200,
+  MAX_ENTRIES: 10_000,
+  CLEANUP_INTERVAL_MS: 5 * 60 * 1000,
 } as const;
-
-// Periodic cleanup of expired entries to prevent memory leaks
-let cleanupInterval: NodeJS.Timeout | null = null;
-
-function startCleanup(): void {
-  if (cleanupInterval) return;
-  
-  cleanupInterval = setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of rateLimitStore.entries()) {
-      if (entry.resetTime < now) {
-        rateLimitStore.delete(key);
-      }
-    }
-  }, CONFIG.CLEANUP_INTERVAL_MS);
-  
-  // Don't keep process alive just for cleanup
-  if (cleanupInterval.unref) {
-    cleanupInterval.unref();
-  }
-}
-
-// Start cleanup on module load
-startCleanup();
 
 export interface RateLimitResult {
   success: boolean;
@@ -52,20 +19,20 @@ export interface RateLimitResult {
   reset: number;
 }
 
-/**
- * Get client identifier from request
- * Prefers Cloudflare's single-value client IP header, then common proxy headers.
- */
+export interface RateLimiterOptions {
+  windowMs?: number;
+  maxRequests?: number;
+  maxEntries?: number;
+}
+
 export function getClientIdentifier(request: Request): string {
   const cloudflareIp = request.headers.get('cf-connecting-ip')?.trim();
   if (cloudflareIp) {
     return cloudflareIp;
   }
 
-  // Try to get real IP from common headers (when behind proxy/load balancer)
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
-    // X-Forwarded-For can contain multiple IPs, get the first one (client IP)
     return forwardedFor.split(',')[0].trim();
   }
 
@@ -74,73 +41,136 @@ export function getClientIdentifier(request: Request): string {
     return realIp;
   }
 
-  // Fallback - in development or when headers aren't available
   return 'unknown-client';
 }
 
-/**
- * Check if a request should be rate limited
- * 
- * @param identifierOrRequest - Either a string identifier or a Request object.
- *                              If Request is provided, getClientIdentifier is called automatically.
- * @param maxRequests - Optional custom max requests (defaults to CONFIG.MAX_REQUESTS)
- * @returns Rate limit result with success status and metadata
- */
-export function checkRateLimit(
-  identifierOrRequest: string | Request,
-  maxRequests: number = CONFIG.MAX_REQUESTS
-): RateLimitResult {
-  // Extract identifier from Request if needed
-  const identifier = typeof identifierOrRequest === 'string' 
-    ? identifierOrRequest 
-    : getClientIdentifier(identifierOrRequest);
+export function createRateLimiter(options: RateLimiterOptions = {}) {
+  const windowMs = options.windowMs ?? CONFIG.WINDOW_MS;
+  const defaultMaxRequests = options.maxRequests ?? CONFIG.MAX_REQUESTS;
+  const maxEntries = options.maxEntries ?? CONFIG.MAX_ENTRIES;
+  const store = new Map<string, RateLimitEntry>();
 
-  const now = Date.now();
-  const entry = rateLimitStore.get(identifier);
+  const pruneExpired = (now: number) => {
+    for (const [key, entry] of store.entries()) {
+      if (entry.resetTime < now) {
+        store.delete(key);
+      }
+    }
+  };
 
-  // If no entry or window has expired, create new entry
-  if (!entry || entry.resetTime < now) {
-    const newEntry: RateLimitEntry = {
-      count: 1,
-      resetTime: now + CONFIG.WINDOW_MS,
-    };
-    rateLimitStore.set(identifier, newEntry);
-    
+  const check = (
+    identifierOrRequest: string | Request,
+    maxRequests: number = defaultMaxRequests,
+  ): RateLimitResult => {
+    const identifier =
+      typeof identifierOrRequest === 'string'
+        ? identifierOrRequest
+        : getClientIdentifier(identifierOrRequest);
+
+    const now = Date.now();
+    const entry = store.get(identifier);
+
+    if (!entry || entry.resetTime < now) {
+      if (entry) {
+        store.delete(identifier);
+      } else if (store.size >= maxEntries) {
+        pruneExpired(now);
+        while (store.size >= maxEntries) {
+          const oldest = store.keys().next().value;
+          if (oldest === undefined) break;
+          store.delete(oldest);
+        }
+      }
+
+      const newEntry: RateLimitEntry = {
+        count: 1,
+        resetTime: now + windowMs,
+      };
+      store.set(identifier, newEntry);
+
+      return {
+        success: true,
+        limit: maxRequests,
+        remaining: maxRequests - 1,
+        reset: newEntry.resetTime,
+      };
+    }
+
+    entry.count++;
+
+    if (entry.count > maxRequests) {
+      return {
+        success: false,
+        limit: maxRequests,
+        remaining: 0,
+        reset: entry.resetTime,
+      };
+    }
+
     return {
       success: true,
       limit: maxRequests,
-      remaining: maxRequests - 1,
-      reset: newEntry.resetTime,
-    };
-  }
-
-  // Increment count and check limit
-  entry.count++;
-  
-  if (entry.count > maxRequests) {
-    return {
-      success: false,
-      limit: maxRequests,
-      remaining: 0,
+      remaining: maxRequests - entry.count,
       reset: entry.resetTime,
     };
-  }
+  };
 
   return {
-    success: true,
-    limit: maxRequests,
-    remaining: maxRequests - entry.count,
-    reset: entry.resetTime,
+    check,
+    pruneExpired,
+    size: () => store.size,
   };
 }
 
-/**
- * Create rate limit headers for response
- */
+const defaultLimiter = createRateLimiter();
+
+let cleanupInterval: NodeJS.Timeout | null = null;
+
+function startCleanup(): void {
+  if (cleanupInterval) return;
+
+  cleanupInterval = setInterval(() => {
+    defaultLimiter.pruneExpired(Date.now());
+  }, CONFIG.CLEANUP_INTERVAL_MS);
+
+  if (cleanupInterval.unref) {
+    cleanupInterval.unref();
+  }
+}
+
+startCleanup();
+
+export function checkRateLimit(
+  identifierOrRequest: string | Request,
+  maxRequests: number = CONFIG.MAX_REQUESTS,
+): RateLimitResult {
+  return defaultLimiter.check(identifierOrRequest, maxRequests);
+}
+
 export function getRateLimitHeaders(result: RateLimitResult): HeadersInit {
   return {
     'X-RateLimit-Limit': result.limit.toString(),
     'X-RateLimit-Remaining': result.remaining.toString(),
     'X-RateLimit-Reset': result.reset.toString(),
   };
+}
+
+export function rateLimitResponse(
+  request: Request,
+  maxRequests: number,
+  bucket: string,
+): NextResponse | null {
+  const result = checkRateLimit(`${getClientIdentifier(request)}:${bucket}`, maxRequests);
+  if (result.success) return null;
+
+  return NextResponse.json(
+    { error: 'Too many requests' },
+    {
+      status: 429,
+      headers: {
+        ...getRateLimitHeaders(result),
+        'Cache-Control': 'no-store',
+      },
+    },
+  );
 }

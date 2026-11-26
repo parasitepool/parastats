@@ -7,9 +7,9 @@ interface WithdrawModalProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete: () => void;
+  onSessionExpired?: () => void;
   balance: number;
   btcAddress: string;
-  lightningToken: string;
 }
 
 interface WithdrawQuote {
@@ -23,29 +23,36 @@ export default function WithdrawModal({
   isOpen,
   onClose,
   onComplete,
+  onSessionExpired,
   balance,
   btcAddress,
-  lightningToken
 }: WithdrawModalProps) {
   const [modalState, setModalState] = useState<ModalState>('loading');
   const [quote, setQuote] = useState<WithdrawQuote | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txid, setTxid] = useState<string | null>(null);
 
   const fetchQuote = useCallback(async () => {
     setModalState('loading');
     setError(null);
+    setSessionExpired(false);
 
     try {
       const response = await fetch('/api/lightning/withdraw/quote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Lightning-Token': lightningToken
         },
-        body: JSON.stringify({ l1_address: btcAddress })
+        body: JSON.stringify({ l1_address: btcAddress }),
       });
+
+      if (response.status === 401) {
+        setSessionExpired(true);
+        onSessionExpired?.();
+        throw new Error('Lightning session expired. Reconnect Lightning to withdraw.');
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
@@ -60,23 +67,21 @@ export default function WithdrawModal({
       setError(err instanceof Error ? err.message : 'Failed to get withdraw quote');
       setModalState('error');
     }
-  }, [btcAddress, lightningToken]);
+  }, [btcAddress, onSessionExpired]);
 
-  // Fetch quote when modal opens
   useEffect(() => {
     if (isOpen) {
-      fetchQuote();
+      void fetchQuote();
     } else {
-      // Reset state when modal closes
       setModalState('loading');
       setQuote(null);
       setError(null);
+      setSessionExpired(false);
       setIsSubmitting(false);
       setTxid(null);
     }
   }, [isOpen, fetchQuote]);
 
-  // Close modal on escape key
   useEffect(() => {
     const handleEscKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && modalState !== 'processing' && modalState !== 'success') {
@@ -105,10 +110,15 @@ export default function WithdrawModal({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Lightning-Token': lightningToken
         },
-        body: JSON.stringify({ l1_address: btcAddress })
+        body: JSON.stringify({ l1_address: btcAddress }),
       });
+
+      if (response.status === 401) {
+        setSessionExpired(true);
+        onSessionExpired?.();
+        throw new Error('Lightning session expired. Reconnect Lightning to withdraw.');
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: response.statusText }));
@@ -240,7 +250,7 @@ export default function WithdrawModal({
             </div>
             <p className="text-foreground font-semibold">Withdrawal Successful!</p>
             <p className="text-sm text-foreground/70">Your funds are on the way.</p>
-            
+
             {txid && (
               <div className="w-full">
                 <h3 className="text-sm font-medium text-accent-2 mb-2 text-center">Transaction ID</h3>
@@ -284,17 +294,18 @@ export default function WithdrawModal({
               >
                 Close
               </button>
-              <button
-                onClick={fetchQuote}
-                className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground"
-              >
-                Retry
-              </button>
+              {!sessionExpired && (
+                <button
+                  onClick={() => void fetchQuote()}
+                  className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground"
+                >
+                  Retry
+                </button>
+              )}
             </div>
           </div>
         )}
 
-        {/* Powered by footer */}
         <div className="mt-6 pt-4 border-t border-border flex items-center justify-center gap-1 text-xs text-foreground/50">
           <span>Powered by</span>
           <a
@@ -321,16 +332,15 @@ export default function WithdrawModal({
           >
             <Image
               src="https://parasite.sati.pro/xverse-logo.png"
-              alt="Xverse"
+              alt="XVERSE"
               width={16}
               height={16}
               className="h-4 w-4"
             />
-            <span>Xverse</span>
+            <span>XVERSE</span>
           </a>
         </div>
       </div>
     </div>
   );
 }
-

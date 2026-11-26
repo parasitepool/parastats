@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import { fetchWithTimeout } from '@/app/api/lib/fetch-with-timeout';
-import { isValidBitcoinAddress } from '@/app/utils/validators';
+import { rateLimitResponse } from '@/app/api/lib/rate-limit';
+import { isValidBitcoinAddress, normalizeBitcoinAddress } from '@/app/utils/validators';
 
 export async function POST(request: Request) {
+  const limited = rateLimitResponse(request, 20, 'lightning-nonce');
+  if (limited) return limited;
+
   try {
     const lightningApiUrl = process.env.LIGHTNING_API_URL;
     const identifier = process.env.LIGHTNING_API_ID;
@@ -15,7 +19,7 @@ export async function POST(request: Request) {
       );
     }
 
-    let payload: { address?: string };
+    let payload: { address?: unknown } | null;
     try {
       payload = await request.json();
     } catch {
@@ -25,17 +29,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const { address } = payload;
-
-    // Validate address input
-    if (!address || typeof address !== 'string') {
+    if (
+      !payload ||
+      typeof payload !== 'object' ||
+      typeof payload.address !== 'string' ||
+      !payload.address
+    ) {
       return NextResponse.json(
         { error: 'Address is required' },
         { status: 400 }
       );
     }
 
-    if (!isValidBitcoinAddress(address)) {
+    const normalizedAddress = normalizeBitcoinAddress(payload.address);
+
+    if (!isValidBitcoinAddress(normalizedAddress)) {
       return NextResponse.json(
         { error: 'Invalid address format' },
         { status: 400 }
@@ -43,7 +51,7 @@ export async function POST(request: Request) {
     }
 
     const response = await fetchWithTimeout(
-      `${lightningApiUrl}/login/${encodeURIComponent(address)}/auth_nonce/${encodeURIComponent(identifier)}`,
+      `${lightningApiUrl}/login/${encodeURIComponent(normalizedAddress)}/auth_nonce/${encodeURIComponent(identifier)}`,
       {
         method: 'GET',
         headers: {

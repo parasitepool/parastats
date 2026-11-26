@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, type MouseEvent } from "react";
 import Image from "next/image";
-import { useWallet, SignCancelledError } from "@/app/hooks/useWallet";
+import { useWallet, SignCancelledError, XverseAccountMismatchError } from "@/app/hooks/useWallet";
 import { isValidBitcoinAddress, normalizeBitcoinAddress } from "@/app/utils/validators";
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
 import DispenserRewards from "@/app/components/dispenser/DispenserRewards";
@@ -222,7 +222,7 @@ function CodeAssetImage() {
 }
 
 export default function DispenserClaim({ userId, className = "", collapsed = false, onToggle }: DispenserClaimProps) {
-    const { address, walletType, isInitialized, signMessage } = useWallet();
+    const { address, walletType, isInitialized, signMessage, ensureXverseAccountMatches } = useWallet();
     const [eligibility, setEligibility] = useState<Eligibility | null>(null);
     const [loading, setLoading] = useState(true);
     const [claimingSlot, setClaimingSlot] = useState<number | null>(null);
@@ -234,6 +234,10 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     // destination address before signing the claim.
     const [manualSlot, setManualSlot] = useState<Slot | null>(null);
     const [manualDestination, setManualDestination] = useState("");
+    const [xverseClaim, setXverseClaim] = useState<{
+        slot: Slot;
+        destinationAddress: string;
+    } | null>(null);
     const [showRewards, setShowRewards] = useState(false);
     // Auction flow
     const [auctionModalSlot, setAuctionModalSlot] = useState<Slot | null>(null);
@@ -244,7 +248,8 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     const [liveAuctions, setLiveAuctions] = useState<Map<string, LiveAuction>>(new Map());
     const [auctionPayout, setAuctionPayout] = useState<AuctionPayout>("address");
 
-    const isOwner = address === userId;
+    const normalizedUserId = normalizeBitcoinAddress(userId);
+    const isOwner = address === normalizedUserId;
     const isManual = walletType === "manual";
 
     // Base URL of the standalone Leptos auction house
@@ -274,7 +279,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
     const fetchEligibility = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await fetch(`/api/dispenser/eligibility/${encodeURIComponent(userId)}`, {
+            const response = await fetch(`/api/dispenser/eligibility/${encodeURIComponent(normalizedUserId)}`, {
                 cache: "no-store",
             });
             if (response.ok) {
@@ -290,7 +295,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         } finally {
             setLoading(false);
         }
-    }, [userId]);
+    }, [normalizedUserId]);
 
     const fetchAuctions = useCallback(async () => {
         try {
@@ -353,7 +358,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                username: userId,
+                username: normalizedUserId,
                 tier,
                 slot: tierSlotIndex,
                 destination_address: destinationAddress,
@@ -368,9 +373,8 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         }
 
         return data ?? {};
-    }, [userId]);
+    }, [normalizedUserId]);
 
-    // Reserve, increment and duration are set by the dispenser, not sent here.
     const submitAuction = useCallback(async (
         tier: string,
         tierSlotIndex: number,
@@ -381,7 +385,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                username: userId,
+                username: normalizedUserId,
                 tier,
                 slot: tierSlotIndex,
                 signature,
@@ -396,25 +400,41 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         }
 
         return data ?? {};
-    }, [userId]);
+    }, [normalizedUserId]);
 
-    const handleClaim = async (tier: string, slotIndex: number, tierSlotIndex: number) => {
+    const handleClaim = async (slot: Slot) => {
         if (!address) return;
 
-        setClaimingSlot(slotIndex);
+        setClaimingSlot(slot.index);
         setError(null);
-        // setTxHex(null);
 
         try {
-            const { request, AddressPurpose } = await import("@sats-connect/core");
+            await ensureXverseAccountMatches(address);
+
+            const { request, AddressPurpose, RpcErrorCode } = await import("@sats-connect/core");
 
             const accountsResponse = await request("getAccounts", {
-                purposes: [AddressPurpose.Ordinals],
+                purposes: [AddressPurpose.Payment, AddressPurpose.Ordinals],
                 message: "Select your Ordinals address for the dispenser",
             });
 
             if (accountsResponse.status !== "success") {
+                if (accountsResponse.error?.code === RpcErrorCode.USER_REJECTION) {
+                    throw new SignCancelledError();
+                }
                 throw new Error("Failed to get Ordinals address from wallet");
+            }
+
+            const paymentAccount = accountsResponse.result.find(
+                (addr) => addr.purpose === AddressPurpose.Payment
+            );
+            if (!paymentAccount) {
+                throw new Error("XVERSE did not return a payment account");
+            }
+
+            const paymentAddress = normalizeBitcoinAddress(paymentAccount.address);
+            if (paymentAddress !== address) {
+                throw new XverseAccountMismatchError(address, paymentAddress);
             }
 
             const ordinalsAccount = accountsResponse.result.find(
@@ -425,19 +445,48 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 throw new Error("No Ordinals address found in wallet");
             }
 
-            const destinationAddress = ordinalsAccount.address;
-            const message = buildClaimMessage(userId, tier, tierSlotIndex, destinationAddress);
+            const destinationAddress = normalizeBitcoinAddress(ordinalsAccount.address);
+            if (!isValidBitcoinAddress(destinationAddress)) {
+                throw new Error("XVERSE returned an invalid Ordinals address");
+            }
+
+            setXverseClaim({
+                slot,
+                destinationAddress,
+            });
+        } catch (err) {
+            console.error("Claim error:", err);
+            setError(getClaimErrorMessage(err));
+        } finally {
+            setClaimingSlot(null);
+        }
+    };
+
+    const handleXverseClaim = async () => {
+        if (!xverseClaim || !address) return;
+
+        if (address !== normalizedUserId) {
+            setXverseClaim(null);
+            setError("The active wallet changed. Please reopen the claim.");
+            return;
+        }
+
+        const { slot, destinationAddress } = xverseClaim;
+        setXverseClaim(null);
+        setClaimingSlot(slot.index);
+        setError(null);
+
+        try {
+            const message = buildClaimMessage(normalizedUserId, slot.tier, slot.tierSlotIndex, destinationAddress);
 
             const data = await signMessage({
                 address,
                 message,
-                submit: (signature: string) => submitClaim(tier, tierSlotIndex, destinationAddress, signature),
+                submit: (signature: string) => submitClaim(slot.tier, slot.tierSlotIndex, destinationAddress, signature),
             });
 
-            // setTxHex(data.hex);
-            setLocalClaimed((prev) => new Set(prev).add(slotIndex));
+            setLocalClaimed((prev) => new Set(prev).add(slot.index));
 
-            // Link assets dispense a redemption URL, redirect to it
             const claimUrl = getSafeClaimUrl(data.claim_url);
             if (claimUrl) {
                 window.location.assign(claimUrl);
@@ -453,6 +502,22 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
             setClaimingSlot(null);
         }
     };
+
+    const closeXverseClaim = useCallback(() => {
+        setXverseClaim(null);
+        setError(null);
+    }, []);
+
+    useEffect(() => {
+        if (!xverseClaim) return;
+
+        const handleEscKey = (event: KeyboardEvent) => {
+            if (event.key === "Escape") closeXverseClaim();
+        };
+
+        window.addEventListener("keydown", handleEscKey);
+        return () => window.removeEventListener("keydown", handleEscKey);
+    }, [xverseClaim, closeXverseClaim]);
 
     const openManualClaim = (slot: Slot) => {
         setManualSlot(slot);
@@ -482,10 +547,10 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         setManualSlot(null);
 
         try {
-            const message = buildClaimMessage(userId, slot.tier, slot.tierSlotIndex, destinationAddress);
+            const message = buildClaimMessage(normalizedUserId, slot.tier, slot.tierSlotIndex, destinationAddress);
 
             const data = await signMessage({
-                address: userId,
+                address: normalizedUserId,
                 message,
                 submit: (signature: string) => submitClaim(slot.tier, slot.tierSlotIndex, destinationAddress, signature),
             });
@@ -533,14 +598,10 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
         setAuctionModalSlot(null);
 
         try {
-            const message = buildAuctionMessage(userId, tier, tierSlotIndex, payout);
+            const message = buildAuctionMessage(normalizedUserId, tier, tierSlotIndex, payout);
 
-            // Signs through the wallet abstraction so manual (self-supplied)
-            // wallets get the paste-a-signature modal instead of a sats-connect
-            // call they can't service. Submitting inside the callback keeps
-            // failures retryable within that modal.
             const data = await signMessage({
-                address: userId,
+                address: normalizedUserId,
                 message,
                 submit: (signature: string) => submitAuction(tier, tierSlotIndex, signature, payout),
             });
@@ -651,7 +712,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                     <button
                                         onClick={() => isManual
                                             ? openManualClaim(slot)
-                                            : handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
+                                            : handleClaim(slot)}
                                         disabled={claiming || claimingSlot !== null}
                                         className="flex items-center gap-1 px-2 py-1 border border-border hover:bg-secondary-hover transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                                         title="Reopen claim page"
@@ -695,7 +756,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                     <button
                                         onClick={() => isManual
                                             ? openManualClaim(slot)
-                                            : handleClaim(slot.tier, slot.index, slot.tierSlotIndex)}
+                                            : handleClaim(slot)}
                                         disabled={claiming || claimingSlot !== null}
                                         className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
@@ -800,7 +861,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                 </div>
             )**/}
 
-            {!collapsed && error && !manualSlot && (
+            {!collapsed && error && !manualSlot && !xverseClaim && (
                 <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-2 border border-red-500/20">
                     {error}
                 </div>
@@ -838,28 +899,26 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                         className="bg-background border border-foreground p-4 sm:p-6 max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto"
                         onClick={(event) => event.stopPropagation()}
                     >
-                        <div className="flex justify-between items-start gap-4 mb-4">
-                            <h2 className="text-xl sm:text-2xl font-bold text-accent-3">Claim Inscription</h2>
-                            <button
-                                onClick={closeManualClaim}
-                                className="text-gray-400 hover:text-gray-500 focus:outline-none"
-                                title="Close"
-                            >
-                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-4">
+                            <div />
+                            <h2 className="text-center text-xl sm:text-2xl font-bold text-accent-3">Claim</h2>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={closeManualClaim}
+                                    className="text-gray-400 hover:text-gray-500 focus:outline-none"
+                                    title="Close"
+                                >
+                                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
 
                         <div className="space-y-4">
-                            <div className="bg-secondary border border-border p-3 text-sm text-foreground/80">
-                                Enter the Ordinals address where the inscription should be sent. You&apos;ll then
-                                sign a message with your mining address to authorize the claim.
-                            </div>
-
                             <div>
                                 <label className="block text-sm font-medium text-accent-2 mb-2" htmlFor="manual-dispenser-destination">
-                                    Destination Ordinals address
+                                    Ordinal address
                                 </label>
                                 <input
                                     id="manual-dispenser-destination"
@@ -871,13 +930,18 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                 />
                             </div>
 
+                            <div className="bg-secondary border border-border p-3 text-sm text-foreground/80">
+                                Enter the Bitcoin address the inscription should be sent to. You&apos;ll authorize by
+                                signing a message with your mining address.
+                            </div>
+
                             {error && (
                                 <div className="text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
                                     {error}
                                 </div>
                             )}
 
-                            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-2">
+                            <div className="flex flex-col sm:flex-row justify-center gap-2 pt-2">
                                 <button
                                     onClick={closeManualClaim}
                                     className="px-4 py-2 border border-border hover:bg-secondary-hover text-sm font-medium transition-colors"
@@ -890,6 +954,70 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                                     className="px-4 py-2 bg-foreground text-background hover:bg-foreground/80 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Continue
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {xverseClaim && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50"
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) {
+                            event.stopPropagation();
+                            closeXverseClaim();
+                        }
+                    }}
+                >
+                    <div
+                        className="bg-background border border-foreground p-4 sm:p-6 max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex justify-between items-start gap-4 mb-4">
+                            <h2 className="text-xl sm:text-2xl font-bold text-accent-3">Confirm Claim</h2>
+                            <button
+                                onClick={closeXverseClaim}
+                                className="text-gray-400 hover:text-gray-500 focus:outline-none"
+                                title="Close"
+                            >
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="space-y-4 text-sm">
+                            <div className="bg-secondary border border-border p-3 text-foreground/80">
+                                {xverseClaim.slot.inscriptionId
+                                    ? "The inscription will be sent to the Ordinals address below. Verify it before signing."
+                                    : "Verify your signing address and destination address before continuing."}
+                            </div>
+
+                            <div>
+                                <p className="text-xs font-medium text-accent-2 mb-1">Signing address</p>
+                                <p className="font-mono text-xs break-all">{address}</p>
+                            </div>
+
+                            <div>
+                                <p className="text-xs font-medium text-accent-2 mb-1">Destination Ordinals address</p>
+                                <p className="font-mono text-xs break-all">{xverseClaim.destinationAddress}</p>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row justify-center gap-2 pt-2">
+                                <button
+                                    onClick={closeXverseClaim}
+                                    className="px-4 py-2 border border-border hover:bg-secondary-hover text-sm font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => void handleXverseClaim()}
+                                    disabled={claimingSlot !== null}
+                                    className="px-4 py-2 bg-foreground text-background hover:bg-foreground/80 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Confirm Claim
                                 </button>
                             </div>
                         </div>
@@ -928,7 +1056,7 @@ export default function DispenserClaim({ userId, className = "", collapsed = fal
                             <span>
                                 <span className="font-medium">Fund my Refinery with the proceeds</span>
                                 <span className="block text-xs text-accent-2">
-                                    Settlement pays a hashrate order opened for {userId}.refinery.
+                                    Settlement pays a hashrate order opened for {normalizedUserId}.refinery.
                                     The work bought is priced at the hashprice when the payment
                                     confirms, and shows up in your Refinery orders.
                                 </span>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet, SignCancelledError } from '@/app/hooks/useWallet';
-import type { AccountData, WalletInfo, CombinedAccountResponse } from '@/app/api/account/types';
+import type { AccountData, CombinedAccountResponse } from '@/app/api/account/types';
 
 interface LightningModalProps {
   isOpen: boolean;
@@ -11,79 +11,57 @@ interface LightningModalProps {
 }
 
 export default function LightningModal({ isOpen, onClose, onUpdate }: LightningModalProps) {
-  const { address, lightningToken, signMessage, walletType } = useWallet();
+  const { address, isAccountGateOpen, isManualSignOpen, signMessage } = useWallet();
   const [accountData, setAccountData] = useState<AccountData | null>(null);
-  const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
-  const [balance, setBalance] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [newLnAddress, setNewLnAddress] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const fetchCombinedData = useCallback(async () => {
+  const fetchAccountData = useCallback(async () => {
     if (!address) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const headers: Record<string, string> = {};
-      if (lightningToken) {
-        headers['X-Lightning-Token'] = lightningToken;
-      }
-
       const response = await fetch(`/api/account/${address}`, {
         cache: 'no-store',
-        headers,
       });
 
       if (response.ok) {
         const data: CombinedAccountResponse = await response.json();
         setAccountData(data.account);
         setNewLnAddress(data.account?.ln_address || '');
-        
-        if (data.lightning) {
-          setWalletInfo(data.lightning.walletInfo);
-          setBalance(data.lightning.balance);
-        } else {
-          setWalletInfo(null);
-          setBalance(null);
-        }
       } else {
         setAccountData(null);
-        setWalletInfo(null);
-        setBalance(null);
       }
     } catch (err) {
-      console.error('Error fetching combined data:', err);
+      console.error('Error fetching account data:', err);
       setError(err instanceof Error ? err.message : 'Failed to load account data');
     } finally {
       setIsLoading(false);
     }
-  }, [address, lightningToken]);
+  }, [address]);
 
   useEffect(() => {
     if (isOpen && address) {
-      fetchCombinedData();
+      void fetchAccountData();
       setIsEditing(false);
     }
-  }, [isOpen, address, fetchCombinedData]);
+  }, [isOpen, address, fetchAccountData]);
 
-  // Clean up state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setIsEditing(false);
       setError(null);
-      setWalletInfo(null);
-      setBalance(null);
     }
   }, [isOpen]);
 
-  // Close modal on escape key
   useEffect(() => {
     const handleEscKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !isAccountGateOpen && !isManualSignOpen) {
         onClose();
       }
     };
@@ -95,7 +73,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
     return () => {
       window.removeEventListener('keydown', handleEscKey);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, isAccountGateOpen, isManualSignOpen]);
 
   const handleSave = async () => {
     if (!address || !newLnAddress) {
@@ -107,7 +85,6 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
     setError(null);
 
     try {
-      // Sign the Lightning address (BIP322) and submit the update
       const updatedData = await signMessage({
         address,
         message: newLnAddress,
@@ -120,7 +97,7 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
             body: JSON.stringify({
               btc_address: address,
               ln_address: newLnAddress,
-              signature: signature,
+              signature,
             }),
           });
 
@@ -130,24 +107,20 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
               const errorData = await response.json();
               errorMessage = errorData.error || errorMessage;
             } catch {
-              // If response is not JSON, use default error message
             }
             throw new Error(errorMessage);
           }
 
-          return await response.json() as AccountData;
+          return (await response.json()) as AccountData;
         },
       });
 
-      // Update modal state immediately with returned data
       setAccountData(updatedData);
       setNewLnAddress(updatedData.ln_address || '');
       setIsEditing(false);
 
-      // Re-fetch to ensure we have the latest data
-      await fetchCombinedData();
+      await fetchAccountData();
 
-      // Trigger refresh in parent component
       if (onUpdate) {
         onUpdate();
       }
@@ -162,15 +135,13 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
 
   const handleCancel = () => {
     setIsEditing(false);
-    // Reset to account data only
     setNewLnAddress(accountData?.ln_address || '');
     setError(null);
   };
 
   const displayLnAddress = accountData?.ln_address || '';
   const hasAccountData = accountData !== null;
-  const hasLightningData = walletInfo !== null && balance !== null;
-  const canEdit = hasAccountData || walletType === 'manual';
+  const canEdit = Boolean(address);
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
@@ -204,13 +175,8 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin h-8 w-8 border-4 border-accent-3 border-t-transparent rounded-full"></div>
           </div>
-        ) : error && !hasAccountData && !hasLightningData ? (
-          <div className="text-sm text-red-500 bg-red-500/10 p-4 border border-red-500/20">
-            {error}
-          </div>
         ) : (
           <div className="space-y-6">
-            {/* Current Lightning Address */}
             <div>
               <h3 className="text-lg font-semibold text-foreground mb-2">Current Lightning Address</h3>
               {isEditing && canEdit ? (
@@ -272,7 +238,6 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
               )}
             </div>
 
-            {/* Past Lightning Addresses - only show if we have account data */}
             {hasAccountData && accountData?.past_ln_addresses && accountData.past_ln_addresses.length > 0 && (
               <div className="flex flex-col">
                 <h3 className="text-lg font-semibold text-foreground mb-2">Past Lightning Addresses</h3>
@@ -292,11 +257,11 @@ export default function LightningModal({ isOpen, onClose, onUpdate }: LightningM
                       background: rgba(255, 255, 255, 0.25);
                     }
                   `}} />
-                  <div 
+                  <div
                     className="h-full overflow-y-auto past-addresses-scroll"
-                    style={{ 
+                    style={{
                       scrollbarWidth: 'thin',
-                      scrollbarColor: 'rgba(255, 255, 255, 0.15) transparent'
+                      scrollbarColor: 'rgba(255, 255, 255, 0.15) transparent',
                     }}
                   >
                     <div className="space-y-2">

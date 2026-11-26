@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, type MouseEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useRef, type MouseEvent } from "react";
 import CardHeader from "@/app/components/CardHeader";
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from "@/app/components/collapsible";
 import { LightningIcon } from "@/app/components/icons";
 import { useWallet, SignCancelledError } from "@/app/hooks/useWallet";
+import { normalizeBitcoinAddress } from "@/app/utils/validators";
 import LightningModal from "@/app/components/modals/LightningModal";
 import WithdrawModal from "@/app/components/modals/WithdrawModal";
-import WalletConnectModal from "@/app/components/modals/WalletConnectModal";
 import type { AccountData, WalletInfo, CombinedAccountResponse } from "@/app/api/account/types";
 
 interface LightningBalanceProps {
@@ -18,6 +17,7 @@ interface LightningBalanceProps {
   loading?: boolean;
   collapsed?: boolean;
   onToggle?: () => void;
+  onAccountUpdated?: (account: AccountData) => void;
 }
 
 export default function LightningBalance({
@@ -27,17 +27,17 @@ export default function LightningBalance({
   loading = false,
   collapsed = false,
   onToggle,
+  onAccountUpdated,
 }: LightningBalanceProps) {
-  const router = useRouter();
   const {
-    lightningToken,
+    lightningAuthStatus,
     isLightningAuthenticated,
     isInitialized,
     isConnected,
     address,
-    addressPublicKey,
     walletType,
-    connectWithLightning,
+    refreshLightningAuth,
+    markLightningExpired,
     signMessage,
   } = useWallet();
   const [balance, setBalance] = useState<number | null>(null);
@@ -47,10 +47,18 @@ export default function LightningBalance({
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState<boolean>(false);
   const [isResetting, setIsResetting] = useState<boolean>(false);
+  const [isActivating, setIsActivating] = useState<boolean>(false);
   const [showResetConfirm, setShowResetConfirm] = useState<boolean>(false);
-  const [isConnecting, setIsConnecting] = useState<boolean>(false);
-  const [showConnectModal, setShowConnectModal] = useState<boolean>(false);
+  const [isReconnectingLightning, setIsReconnectingLightning] = useState<boolean>(false);
   const [isFetching, setIsFetching] = useState<boolean>(false);
+  const fetchIdRef = useRef(0);
+
+  const normalizedUserId = userId ? normalizeBitcoinAddress(userId) : null;
+  const isOwner = Boolean(isConnected && address && (!normalizedUserId || address === normalizedUserId));
+  const isManual = walletType === "manual";
+  const isXverse = walletType === "xverse";
+  const shouldIncludeLightning = isOwner && isXverse && isLightningAuthenticated;
+
   const containerClassName = getCollapsibleContainerClassName(
     `bg-background p-4 sm:p-6 shadow-md border border-border ${className}`.trim(),
     collapsed,
@@ -71,24 +79,29 @@ export default function LightningBalance({
   };
 
   const fetchCombinedData = useCallback(async () => {
-    if (!userId) return;
+    if (!normalizedUserId) return;
 
+    const fetchId = ++fetchIdRef.current;
     setIsFetching(true);
+    setError(null);
     try {
-      const headers: Record<string, string> = {};
-      if (lightningToken) {
-        headers['X-Lightning-Token'] = lightningToken;
-      }
+      const url = shouldIncludeLightning
+        ? `/api/account/${normalizedUserId}?includeLightning=1`
+        : `/api/account/${normalizedUserId}`;
 
-      const response = await fetch(`/api/account/${userId}`, {
-        cache: 'no-store',
-        headers,
-      });
+      const response = await fetch(url, { cache: "no-store" });
+      if (fetchId !== fetchIdRef.current) return;
 
       if (response.ok) {
         const data: CombinedAccountResponse = await response.json();
+        if (fetchId !== fetchIdRef.current) return;
+
         setAccountData(data.account);
-        if (data.lightning) {
+        if (data.lightningTokenExpired) {
+          markLightningExpired();
+          setWalletInfo(null);
+          setBalance(null);
+        } else if (data.lightning) {
           setWalletInfo(data.lightning.walletInfo);
           setBalance(data.lightning.balance);
         } else {
@@ -101,48 +114,106 @@ export default function LightningBalance({
         setBalance(null);
       }
     } catch (err) {
+      if (fetchId !== fetchIdRef.current) return;
       console.error("Error fetching combined data:", err);
       setError("Failed to load data");
       setAccountData(null);
       setWalletInfo(null);
       setBalance(null);
     } finally {
-      setIsFetching(false);
+      if (fetchId === fetchIdRef.current) {
+        setIsFetching(false);
+      }
     }
-  }, [userId, lightningToken]);
+  }, [normalizedUserId, shouldIncludeLightning, markLightningExpired]);
 
   useEffect(() => {
-    if (isInitialized) {
-      fetchCombinedData();
+    if (isInitialized && lightningAuthStatus !== "checking") {
+      void fetchCombinedData();
     }
-  }, [isInitialized, fetchCombinedData]);
+  }, [isInitialized, lightningAuthStatus, fetchCombinedData]);
 
-  const handleConnectXverse = async () => {
-    setIsConnecting(true);
+  const handleReconnectLightning = async () => {
+    setIsReconnectingLightning(true);
     setError(null);
     try {
-      const result = await connectWithLightning();
-      // A null result means the user cancelled the wallet popup; stay quiet.
-      if (result) {
-        router.push(`/user/${result.address}`);
-      }
+      await refreshLightningAuth();
     } catch (err) {
-      console.error('Connection error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+      if (err instanceof SignCancelledError) return;
+      console.error("Lightning reconnect error:", err);
+      setError(err instanceof Error ? err.message : "Failed to reconnect Lightning");
     } finally {
-      setIsConnecting(false);
+      setIsReconnectingLightning(false);
     }
   };
 
-  // Open reset confirmation modal
+  const submitLnAddressUpdate = useCallback(
+    async (lnAddress: string): Promise<AccountData> => {
+      if (!address) {
+        throw new Error("Wallet not connected");
+      }
+
+      return await signMessage({
+        address,
+        message: lnAddress,
+        submit: async (signature: string) => {
+          const response = await fetch("/api/account/update", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              btc_address: address,
+              ln_address: lnAddress,
+              signature,
+            }),
+          });
+
+          if (!response.ok) {
+            let errorMessage = "Failed to update Lightning address";
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorMessage;
+            } catch {
+            }
+            throw new Error(errorMessage);
+          }
+
+          return (await response.json()) as AccountData;
+        },
+      });
+    },
+    [address, signMessage],
+  );
+
+  const handleActivateDefaultLnAddress = async () => {
+    if (!walletInfo?.username) return;
+
+    const usernameAddress = `${walletInfo.username}@sati.pro`;
+    setIsActivating(true);
+    setError(null);
+
+    try {
+      const updatedData = await submitLnAddressUpdate(usernameAddress);
+      setAccountData(updatedData);
+      onAccountUpdated?.(updatedData);
+      await fetchCombinedData();
+    } catch (err) {
+      if (err instanceof SignCancelledError) return;
+      console.error("Error activating default Lightning address:", err);
+      setError(err instanceof Error ? err.message : "Failed to set Lightning address");
+    } finally {
+      setIsActivating(false);
+    }
+  };
+
   const handleResetClick = () => {
     setShowResetConfirm(true);
   };
 
-  // Reset to default lightning address
   const handleResetToDefault = async () => {
-    if (!address || !addressPublicKey || !walletInfo?.username) {
-      setError('Missing required data');
+    if (!address || !walletInfo?.username) {
+      setError("Missing required data");
       setShowResetConfirm(false);
       return;
     }
@@ -152,60 +223,25 @@ export default function LightningBalance({
     setError(null);
 
     try {
-      // Request signature for the Lightning address (BIP322)
-      const signature = await signMessage({
-        address,
-        message: usernameAddress,
-      });
-
-      // Send update request
-      const response = await fetch('/api/account/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          btc_address: address,
-          ln_address: usernameAddress,
-          signature: signature,
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage = 'Failed to update Lightning address';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          // If response is not JSON, use default error message
-        }
-        throw new Error(errorMessage);
-      }
-
-      const updatedData: AccountData = await response.json();
+      const updatedData = await submitLnAddressUpdate(usernameAddress);
       setAccountData(updatedData);
+      onAccountUpdated?.(updatedData);
       setShowResetConfirm(false);
-
-      // Re-fetch to ensure we have the latest data
       await fetchCombinedData();
     } catch (err) {
       if (err instanceof SignCancelledError) return;
-      console.error('Error resetting Lightning address:', err);
-      setError(err instanceof Error ? err.message : 'Failed to reset Lightning address');
+      console.error("Error resetting Lightning address:", err);
+      setError(err instanceof Error ? err.message : "Failed to reset Lightning address");
     } finally {
       setIsResetting(false);
     }
   };
 
-  // Show loading shimmer if not initialized, explicitly loading, or fetching data
-  const isLoading = !isInitialized || loading || isFetching;
+  const isLoading = !isInitialized || loading || isFetching || lightningAuthStatus === "checking";
 
   if (isLoading && compact) {
     return (
-      <div
-        className={compactContainerClassName}
-        onClick={handleClick}
-      >
+      <div className={compactContainerClassName} onClick={handleClick}>
         <CardHeader
           title="Lightning"
           icon={<LightningIcon />}
@@ -247,25 +283,20 @@ export default function LightningBalance({
     );
   }
 
-  // Check if the connected wallet owns this account
-  const isOwner = !userId || address === userId;
-  const isManual = walletType === 'manual';
-
   const displayLnAddress = accountData?.ln_address || null;
-  const hasData = isManual || (isLightningAuthenticated && (balance !== null || walletInfo !== null || accountData !== null));
-
-  // Check if username matches lightning address
   const usernameWithDomain = walletInfo?.username ? `${walletInfo.username}@sati.pro` : null;
-  const addressesMatch = usernameWithDomain && displayLnAddress && usernameWithDomain === displayLnAddress;
+  const addressesMatch = Boolean(usernameWithDomain && displayLnAddress && usernameWithDomain === displayLnAddress);
+  const showBalanceRow = isOwner && isXverse && (
+    !isLightningAuthenticated ||
+    balance === null ||
+    addressesMatch ||
+    balance > 0
+  );
 
-  // If compact mode, show the old compact view
   if (compact) {
     return (
       <>
-        <div
-          className={compactContainerClassName}
-          onClick={handleClick}
-        >
+        <div className={compactContainerClassName} onClick={handleClick}>
           <CardHeader
             title="Lightning"
             icon={<LightningIcon />}
@@ -292,7 +323,6 @@ export default function LightningBalance({
     );
   }
 
-  // Expanded full-width view
   return (
     <>
       <div className={containerClassName} onClick={handleClick}>
@@ -304,56 +334,87 @@ export default function LightningBalance({
 
         {!collapsed && (
           <>
-            {!isLightningAuthenticated && !isManual ? (
-              <div className="flex justify-center py-8">
-                <button
-                  onClick={() => (isConnected ? handleConnectXverse() : setShowConnectModal(true))}
-                  disabled={isConnecting}
-                  className="px-6 py-3 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isConnecting ? 'Connecting...' : 'Connect'}
-                </button>
-              </div>
-            ) : !hasData ? (
-              <div className="text-center py-8">
-                <p className="text-2xl font-semibold text-gray-400">-</p>
-              </div>
-            ) : addressesMatch ? (
-              <div className="grid grid-cols-1 gap-4 sm:gap-6">
-                <div className="flex flex-col">
-                  <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
-                  <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
-                    <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
-                    {isOwner && (isLightningAuthenticated || isManual) && (
-                      <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium flex-shrink-0"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                        <span>Edit</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {balance !== null && (
-                  <div className="flex flex-col">
-                    <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
-                    <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
-                      <p className="text-lg sm:text-xl font-semibold">
-                        {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
+            <div className="grid grid-cols-1 gap-4 sm:gap-6">
+              <div className="flex flex-col">
+                <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
+                <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
+                  {displayLnAddress ? (
+                    <>
+                      <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">
+                        {displayLnAddress}
                       </p>
-                      {isOwner && isLightningAuthenticated && (
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {!addressesMatch && walletInfo?.username && isOwner && (
+                          <button
+                            onClick={handleResetClick}
+                            className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span>Reset</span>
+                          </button>
+                        )}
+                        {isOwner && (
+                          <button
+                            onClick={() => setIsModalOpen(true)}
+                            className="flex items-center gap-1 px-2 py-1 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            <span>Edit</span>
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  ) : isOwner ? (
+                    <>
+                      <p className="text-sm text-foreground/60 truncate">
+                        {usernameWithDomain ? `Default: ${usernameWithDomain}` : "Not set"}
+                      </p>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {isXverse && usernameWithDomain && (
+                          <button
+                            onClick={handleActivateDefaultLnAddress}
+                            disabled={isActivating}
+                            className="px-2.5 py-1 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isActivating ? "Activating..." : "Use Default"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setIsModalOpen(true)}
+                          disabled={isActivating}
+                          className="px-2.5 py-1 border border-border hover:bg-secondary-hover transition-colors text-xs font-medium disabled:opacity-50"
+                        >
+                          {isXverse && usernameWithDomain ? "Custom" : "Set Address"}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-lg font-semibold text-gray-400">-</p>
+                  )}
+                </div>
+              </div>
+
+              {showBalanceRow && (
+                <div className="flex flex-col">
+                  <h3 className="text-sm font-medium text-accent-2 mb-2">Balance</h3>
+                  <div className="bg-secondary p-3 sm:p-4 border border-border flex-1 flex items-center justify-between gap-2 h-[5rem]">
+                    {isLightningAuthenticated && balance !== null ? (
+                      <>
+                        <p className="text-lg sm:text-xl font-semibold">
+                          {balance.toLocaleString()} <span className="text-sm text-foreground/70">sats</span>
+                        </p>
                         <div className="relative group">
                           <button
                             onClick={() => balance >= 8000 && setIsWithdrawModalOpen(true)}
                             disabled={balance < 8000}
                             className={`flex items-center gap-1 px-2 py-1 text-xs font-medium flex-shrink-0 ${
                               balance >= 8000
-                                ? 'bg-foreground text-background hover:bg-gray-700 transition-colors cursor-pointer'
-                                : 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-50'
+                                ? "bg-foreground text-background hover:bg-gray-700 transition-colors cursor-pointer"
+                                : "bg-gray-400 text-gray-600 cursor-not-allowed opacity-50"
                             }`}
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -367,60 +428,44 @@ export default function LightningBalance({
                             </div>
                           )}
                         </div>
-                      )}
-                    </div>
+                      </>
+                    ) : isLightningAuthenticated ? (
+                      <>
+                        <p className="text-xs sm:text-sm text-foreground/60">
+                          Balance unavailable
+                        </p>
+                        <button
+                          onClick={() => void fetchCombinedData()}
+                          disabled={isFetching}
+                          className="px-3 py-1.5 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Retry
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs sm:text-sm text-foreground/60">
+                          {lightningAuthStatus === "expired"
+                            ? "Lightning session expired"
+                            : "Reconnect to view balance"}
+                        </p>
+                        <button
+                          onClick={handleReconnectLightning}
+                          disabled={isReconnectingLightning}
+                          className="px-3 py-1.5 bg-foreground text-background hover:bg-foreground/80 transition-colors text-xs font-medium flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isReconnectingLightning ? "Reconnecting..." : "Reconnect Lightning"}
+                        </button>
+                      </>
+                    )}
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {displayLnAddress ? (
-                  <div className="flex flex-col">
-                    <h3 className="text-sm font-medium text-accent-2 mb-2">LN Address</h3>
-                    <div className="bg-secondary p-3 sm:p-4 border border-border flex items-center justify-between gap-2 h-[5rem]">
-                      <p className="text-lg sm:text-xl font-semibold whitespace-nowrap overflow-x-auto flex-1 scrollbar-hide">{displayLnAddress}</p>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {walletInfo?.username && isOwner && (
-                          <button
-                            onClick={handleResetClick}
-                            className="flex items-center gap-1 px-2 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            <span>Reset</span>
-                          </button>
-                        )}
-                        {isOwner && (isLightningAuthenticated || isManual) && (
-                          <button
-                            onClick={() => setIsModalOpen(true)}
-                            className="flex items-center gap-1 px-2 py-2 bg-foreground text-background hover:bg-gray-700 transition-colors text-xs font-medium"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            <span>Edit</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : isManual && isOwner ? (
-                  <div className="flex justify-center py-8">
-                    <button
-                      onClick={() => setIsModalOpen(true)}
-                      className="px-6 py-3 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground"
-                    >
-                      Set Lightning Address
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
             {isManual && (
               <p className="mt-4 text-xs text-foreground/50">
-                Balance and withdrawals require connecting with Xverse.
+                Balance and withdrawals require connecting with XVERSE.
               </p>
             )}
 
@@ -436,28 +481,24 @@ export default function LightningBalance({
       <LightningModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onUpdate={fetchCombinedData}
+        onUpdate={() => {
+          void fetchCombinedData();
+        }}
       />
 
-      <WalletConnectModal
-        isOpen={showConnectModal}
-        onClose={() => setShowConnectModal(false)}
-        onXverse={handleConnectXverse}
-      />
-
-      {/* Withdraw Modal */}
-      {isWithdrawModalOpen && balance !== null && lightningToken && accountData?.btc_address && (
+      {isWithdrawModalOpen && address && (
         <WithdrawModal
           isOpen={isWithdrawModalOpen}
           onClose={() => setIsWithdrawModalOpen(false)}
-          onComplete={fetchCombinedData}
-          balance={balance}
-          btcAddress={accountData.btc_address}
-          lightningToken={lightningToken}
+          onComplete={() => {
+            void fetchCombinedData();
+          }}
+          onSessionExpired={markLightningExpired}
+          balance={balance ?? 0}
+          btcAddress={accountData?.btc_address ?? address}
         />
       )}
 
-      {/* Reset Confirmation Modal */}
       {showResetConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-background border border-foreground p-6 max-w-md w-full mx-4 shadow-xl">
@@ -477,7 +518,7 @@ export default function LightningBalance({
               <div>
                 <h3 className="text-sm font-medium text-accent-2 mb-2">Current LN Address</h3>
                 <div className="bg-secondary p-3 border border-border">
-                  <p className="text-foreground break-all">{displayLnAddress || 'Not set'}</p>
+                  <p className="text-foreground break-all">{displayLnAddress || "Not set"}</p>
                 </div>
               </div>
 
@@ -507,7 +548,7 @@ export default function LightningBalance({
                   disabled={isResetting}
                   className="px-4 py-2 bg-foreground text-background text-sm font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isResetting ? 'Resetting...' : 'Confirm'}
+                  {isResetting ? "Resetting..." : "Confirm"}
                 </button>
               </div>
             </div>

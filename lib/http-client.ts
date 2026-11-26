@@ -163,12 +163,10 @@ function getAgent(): Dispatcher {
  */
 function recreateAgent(reason: string): Dispatcher {
   console.warn(`[http-client] recreating HTTP agent: ${reason}`);
-  // Close the old agent if it exists (ignore errors)
   if (globalForHttp2.__http2Agent) {
     try {
-      (globalForHttp2.__http2Agent as Agent).close();
+      void (globalForHttp2.__http2Agent as Agent).close().catch(() => {});
     } catch {
-      // Ignore - agent might already be destroyed
     }
   }
   globalForHttp2.__http2Agent = createAgent();
@@ -197,11 +195,23 @@ function recreateAgent(reason: string): Dispatcher {
  * });
  */
 export type ExtendedRequestInit = RequestInit & {
-  /** Request timeout in milliseconds. Set to 0 to disable. Default: CONFIG.REQUEST_TIMEOUT */
   timeout?: number;
-  /** If true, throws TimeoutError on timeout instead of generic AbortError */
   throwOnTimeout?: boolean;
+  retry?: boolean;
 };
+
+const SAFE_RETRY_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+function shouldRetryRequest(
+  input: string | URL | Request,
+  init?: ExtendedRequestInit,
+): boolean {
+  if (init?.retry !== undefined) {
+    return init.retry;
+  }
+  const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  return SAFE_RETRY_METHODS.has(method);
+}
 
 // Unique symbol to identify our timeout aborts
 const TIMEOUT_ABORT_REASON = Symbol('http-client-timeout');
@@ -236,20 +246,23 @@ export function isTimeoutError(error: unknown): boolean {
  * This happens when HTTP/2 sessions are closed while requests are in-flight
  */
 export function isClientDestroyedError(error: unknown): boolean {
-  if (error instanceof Error) {
-    // Check error code (undici sets this)
-    const code = (error as Error & { code?: string }).code;
+  const seen = new Set<unknown>();
+  let current: unknown = error;
+
+  while (current instanceof Error && !seen.has(current)) {
+    seen.add(current);
+    const { code, cause } = current as Error & { code?: string; cause?: unknown };
     if (code === 'UND_ERR_DESTROYED') return true;
-    
-    // Check error name
-    if (error.name === 'ClientDestroyedError') return true;
-    
-    // Check message as fallback
-    const msg = error.message.toLowerCase();
+    if (current.name === 'ClientDestroyedError') return true;
+
+    const msg = current.message.toLowerCase();
     if (msg.includes('client is destroyed') || msg.includes('clientdestroyederror')) {
       return true;
     }
+
+    current = cause;
   }
+
   return false;
 }
 
@@ -326,8 +339,10 @@ function doFetch(
     timeout: timeoutOverride,
     signal: userSignal,
     throwOnTimeout = true,
+    retry: _retry,
     ...restInit
   } = init ?? {};
+  void _retry;
 
   const controller = new AbortController();
   const timeoutMs = timeoutOverride ?? CONFIG.REQUEST_TIMEOUT;
@@ -422,7 +437,7 @@ export async function fetch(
   init?: ExtendedRequestInit
 ): Promise<Response> {
   let lastError: unknown;
-  const maxRetries = CONFIG.CONNECTION_RETRIES;
+  const maxRetries = shouldRetryRequest(input, init) ? CONFIG.CONNECTION_RETRIES : 0;
   const urlString = typeof input === 'string'
     ? input
     : input instanceof URL
@@ -480,76 +495,55 @@ export async function fetch(
  * @example
  * const data = await fetchJson<UserData>('https://api.example.com/user/1');
  */
+async function fetchAndRead<T>(
+  input: string | URL | Request,
+  init: ExtendedRequestInit | undefined,
+  read: (response: Response) => Promise<T>,
+  label: string,
+): Promise<T> {
+  const urlString = typeof input === 'string'
+    ? input
+    : input instanceof URL
+      ? input.toString()
+      : input.url;
+  const maxRetries = shouldRetryRequest(input, init) ? CONFIG.CONNECTION_RETRIES : 0;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(input, init);
+
+    if (!response.ok) {
+      throw new HttpError(response.status, response.statusText, urlString);
+    }
+
+    try {
+      return await read(response);
+    } catch (error) {
+      if (isClientDestroyedError(error)) {
+        recreateAgent(`client destroyed while reading body for ${urlString}`);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          continue;
+        }
+      }
+      throw error;
+    }
+  }
+
+  throw new Error(`${label}: unexpected state`);
+}
+
 export async function fetchJson<T>(
   input: string | URL | Request,
   init?: ExtendedRequestInit
 ): Promise<T> {
-  const urlString = typeof input === 'string' 
-    ? input 
-    : input instanceof URL 
-      ? input.toString() 
-      : input.url;
-
-  // Retry the entire operation if body reading fails due to connection issues
-  for (let attempt = 0; attempt <= CONFIG.CONNECTION_RETRIES; attempt++) {
-    try {
-      const response = await fetch(input, init);
-
-      if (!response.ok) {
-        throw new HttpError(response.status, response.statusText, urlString);
-      }
-
-      return await response.json() as T;
-    } catch (error) {
-      if (isClientDestroyedError(error) && attempt < CONFIG.CONNECTION_RETRIES) {
-        recreateAgent(`client destroyed while reading body for ${urlString}`);
-        await new Promise(resolve => setTimeout(resolve, 50));
-        continue;
-      }
-      throw error;
-    }
-  }
-  
-  // Should never reach here
-  throw new Error('fetchJson: unexpected state');
+  return fetchAndRead(input, init, response => response.json() as Promise<T>, 'fetchJson');
 }
 
-/**
- * Convenience wrapper that validates response status and returns text
- * Includes retry logic for connection errors during body reading
- */
 export async function fetchText(
   input: string | URL | Request,
   init?: ExtendedRequestInit
 ): Promise<string> {
-  const urlString = typeof input === 'string' 
-    ? input 
-    : input instanceof URL 
-      ? input.toString() 
-      : input.url;
-
-  // Retry the entire operation if body reading fails due to connection issues
-  for (let attempt = 0; attempt <= CONFIG.CONNECTION_RETRIES; attempt++) {
-    try {
-      const response = await fetch(input, init);
-
-      if (!response.ok) {
-        throw new HttpError(response.status, response.statusText, urlString);
-      }
-
-      return await response.text();
-    } catch (error) {
-      if (isClientDestroyedError(error) && attempt < CONFIG.CONNECTION_RETRIES) {
-        recreateAgent(`client destroyed while reading body for ${urlString}`);
-        await new Promise(resolve => setTimeout(resolve, 50));
-        continue;
-      }
-      throw error;
-    }
-  }
-  
-  // Should never reach here
-  throw new Error('fetchText: unexpected state');
+  return fetchAndRead(input, init, response => response.text(), 'fetchText');
 }
 
 /**

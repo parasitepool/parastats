@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { request, RpcErrorCode } from '@sats-connect/core';
 import QRCode from 'react-qr-code';
-import { useWallet } from '@/app/hooks/useWallet';
+import { useWallet, SignCancelledError } from '@/app/hooks/useWallet';
 import WalletConnectButton from '@/app/components/WalletConnectButton';
 import InfoHint from '@/app/components/InfoHint';
 import HashrateField from '@/app/components/modals/HashrateField';
@@ -49,13 +49,18 @@ const trimPhd = (phd: number) => String(Math.floor(phd * 100) / 100);
 type AmountUnit = 'sats' | 'btc';
 
 export default function CreateOrderModal({ isOpen, onClose, onCreated, address }: CreateOrderModalProps) {
-  const { address: walletAddress, isConnected, walletType } = useWallet();
+  const {
+    address: walletAddress,
+    isConnected,
+    walletType,
+    isAccountGateOpen,
+    confirmXversePaymentAccount,
+  } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [selectedPhd, setSelectedPhd] = useState(1);
   const [customHashrateHps, setCustomHashrateHps] = useState<number | null>(null);
   const [editingField, setEditingField] = useState<'phd' | AmountUnit | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [balanceSats, setBalanceSats] = useState<number | null>(null);
   const [blockHeight, setBlockHeight] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<'form' | 'payment'>('form');
@@ -140,7 +145,6 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
       setCustomHashrateHps(null);
       setEditingField(null);
       setEditValue('');
-      setBalanceSats(null);
       setBlockHeight(null);
       setSubmitting(false);
       setView('form');
@@ -251,34 +255,15 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || walletType !== 'xverse') return;
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const response = await request('getBalance', null);
-        if (cancelled || response.status !== 'success') return;
-        const confirmed = Number(response.result.confirmed);
-        if (Number.isFinite(confirmed)) setBalanceSats(confirmed);
-      } catch { }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, walletType]);
-
-  useEffect(() => {
     if (!isOpen) return;
     const handleEscKey = (e: KeyboardEvent) => {
       // Nested wallet-connect modals listen for Escape themselves; skip while
       // one is open so a single keypress closes only the topmost modal.
-      if (e.key === 'Escape' && !submitting && !nestedModalOpen) onClose();
+      if (e.key === 'Escape' && !submitting && !nestedModalOpen && !isAccountGateOpen) onClose();
     };
     window.addEventListener('keydown', handleEscKey);
     return () => window.removeEventListener('keydown', handleEscKey);
-  }, [isOpen, onClose, submitting, nestedModalOpen]);
+  }, [isOpen, onClose, submitting, nestedModalOpen, isAccountGateOpen]);
 
   if (!isOpen) return null;
 
@@ -416,11 +401,13 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
   };
 
   const handlePayWithXverse = async () => {
-    if (!orderData) return;
+    if (!orderData || !walletAddress) return;
     setPaying(true);
     setError(null);
 
     try {
+      await confirmXversePaymentAccount(walletAddress);
+
       const response = await request('sendTransfer', {
         recipients: [{ address: orderData.payment_address, amount: orderData.payment_amount }],
       });
@@ -434,6 +421,7 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
 
       setPaymentSent(true);
     } catch (err) {
+      if (err instanceof SignCancelledError) return;
       const message = err instanceof Error ? err.message : String(err);
       setError(message || 'Failed to send payment');
     } finally {
@@ -698,12 +686,6 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
               </div>
             </div>
             <div className="border border-border bg-secondary/50 px-3 py-2 text-sm space-y-1">
-              {walletType === 'xverse' && balanceSats != null && (
-                <div className="flex items-baseline justify-between gap-4">
-                  <span className="text-foreground/60">Balance</span>
-                  <span className="text-foreground text-right">{balanceSats.toLocaleString()} sats</span>
-                </div>
-              )}
               <div className="flex items-baseline justify-between gap-4">
                 <span className="text-foreground/60">Hashprice</span>
                 <span className="text-foreground text-right">{hashPrice.toLocaleString()} sats/PHd</span>
@@ -829,15 +811,15 @@ export default function CreateOrderModal({ isOpen, onClose, onCreated, address }
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-foreground/30 border-t-foreground" />
                   <span>Waiting for payment</span>
                 </div>
-                <div className="flex justify-center gap-3">
-                  {isConnected && walletType !== 'manual' && (
+                <div className="flex flex-col items-center gap-2">
+                  {isConnected && walletType === 'xverse' && (
                     <button
                       type="button"
                       onClick={handlePayWithXverse}
                       disabled={paying || paymentSent || paymentConfirmed}
                       className={`px-4 py-2 text-sm font-medium ${paying || paymentSent || paymentConfirmed ? 'bg-foreground/40 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:bg-foreground/80'}`}
                     >
-                      {paying ? 'Paying…' : paymentConfirmed ? 'Payment detected' : paymentSent ? 'Waiting for payment…' : 'Pay with Xverse'}
+                      {paying ? 'Paying…' : paymentConfirmed ? 'Payment detected' : paymentSent ? 'Waiting for payment…' : 'Pay with XVERSE'}
                     </button>
                   )}
                 </div>

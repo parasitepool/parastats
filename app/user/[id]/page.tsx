@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect, useMemo } from 'react';
 import HashrateChart from '../../components/HashrateChart';
-import { isValidBitcoinAddress } from '@/app/utils/validators';
+import { isValidBitcoinAddress, normalizeBitcoinAddress } from '@/app/utils/validators';
 import { getUserData, getHistoricalUserStats, getHashrate, updateAccountMetadata, getUserBlockDiffs, getUserRounds, getUserBadges, type UserBlockDiffEntry, type UserRoundsResponse, type BadgesPayload } from '@/app/utils/api';
 import { ProcessedUserData } from '@/app/api/user/[address]/route';
 import { HistoricalUserStats } from '@/app/api/user/[address]/historical/route';
@@ -25,7 +25,6 @@ import Auction from '@/app/components/auction/Auction';
 import ErrorBoundary from '@/app/components/ErrorBoundary';
 import UserMiners from '@/app/components/UserMiners';
 import CardHeader from '@/app/components/CardHeader';
-import WalletConnectModal from '@/app/components/modals/WalletConnectModal';
 import { getCollapsibleContainerClassName, shouldToggleCollapse } from '@/app/components/collapsible';
 
 const CURRENT_ROUND_BLOCK = Number.MAX_SAFE_INTEGER;
@@ -72,7 +71,8 @@ function parseCollapsedSections(value: string | null): CollapsedSections {
 export default function UserDashboard() {
   const params = useParams();
   const router = useRouter();
-  const userId = params.id as string;
+  const rawUserId = params.id as string;
+  const userId = normalizeBitcoinAddress(rawUserId);
   const [isValidAddress, setIsValidAddress] = useState<boolean | null>(null);
   const [userData, setUserData] = useState<ProcessedUserData | null>(null);
   const [historicalData, setHistoricalData] = useState<HistoricalUserStats[] | null>(null);
@@ -80,11 +80,9 @@ export default function UserDashboard() {
   const [hashrate, setHashrate] = useState<Hashrate>();
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
-  const [showConnectModal, setShowConnectModal] = useState(false);
   const [hasInitiallyLoaded, setHasInitiallyLoaded] = useState(false);
   const [accountData, setAccountData] = useState<AccountData | null>(null);
   const [isLoadingAccountData, setIsLoadingAccountData] = useState(true);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [userBlockDiffs, setUserBlockDiffs] = useState<UserBlockDiffEntry[]>([]);
   const [roundsData, setRoundsData] = useState<UserRoundsResponse | null>(null);
   const [roundsLoaded, setRoundsLoaded] = useState(false);
@@ -94,11 +92,8 @@ export default function UserDashboard() {
 
   const {
     address,
-    walletType,
-    isLightningAuthenticated,
     isInitialized,
     isConnected,
-    connectWithLightning,
     signMessage,
   } = useWallet();
 
@@ -426,12 +421,7 @@ export default function UserDashboard() {
 
   const isPrivate = accountData?.metadata?.is_private ?? false;
   const isOwnProfile = isConnected && address === userId;
-  const isManualOwner = isOwnProfile && walletType === 'manual';
   const refineryLoading = !isInitialized || !hasInitiallyLoaded || isLoadingAccountData;
-  const refineryActivated = Boolean(isLightningAuthenticated && accountData && accountData.ln_address);
-  const showRefinery = isOwnProfile && (refineryLoading || refineryActivated || isManualOwner);
-  // Everything that decides the page layout (wallet init, user data, account data,
-  // rounds, collapse preferences) has resolved - render sections all at once
   const layoutReady =
     isInitialized &&
     hasInitiallyLoaded &&
@@ -456,119 +446,26 @@ export default function UserDashboard() {
     try {
       const metadata = { is_private: !isPrivate };
 
-      await signMessage({
+      const updatedAccount = await signMessage({
         address: userId,
         message: JSON.stringify(metadata),
         submit: (signature: string) => updateAccountMetadata(userId, metadata, signature),
       });
 
-      window.location.reload();
+      if (updatedAccount && typeof updatedAccount === 'object' && 'btc_address' in updatedAccount) {
+        setAccountData(updatedAccount as AccountData);
+      } else {
+        setAccountData((prev) =>
+          prev ? { ...prev, metadata: { ...prev.metadata, ...metadata } } : prev,
+        );
+      }
     } catch (error) {
       console.error('Failed to toggle visibility:', error);
-      // Don't nag the user when they intentionally cancelled the signature.
       if (!(error instanceof SignCancelledError)) {
         alert(error instanceof Error ? error.message : 'Failed to toggle visibility. Please try again.');
       }
     } finally {
       setIsTogglingVisibility(false);
-    }
-  };
-
-  const handleConnectXverse = async () => {
-    setIsConnecting(true);
-    setError(null);
-    try {
-      const result = await connectWithLightning();
-      // A null result means the user cancelled the wallet popup; stay quiet.
-      if (result) {
-        router.push(`/user/${result.address}`);
-      }
-    } catch (err) {
-      console.error('Connect error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  // Handle account activation
-  const handleActivateAccount = async () => {
-    if (!isConnected) {
-      setShowConnectModal(true);
-      return;
-    }
-
-    if (!isLightningAuthenticated) {
-      await handleConnectXverse();
-      return;
-    }
-
-    setIsConnecting(true);
-    setError(null);
-    try {
-      // Already authenticated - do the full activation flow to set Lightning address
-      const result = await connectWithLightning();
-      if (!result || !result.address || !result.token) {
-        setError('Failed to get wallet info');
-        return;
-      }
-
-      // Fetch wallet info to get the username using combined endpoint
-      const walletResponse = await fetch(`/api/account/${result.address}`, {
-        headers: { 'X-Lightning-Token': result.token },
-        cache: 'no-store',
-      });
-
-      if (!walletResponse.ok) {
-        throw new Error('Failed to fetch wallet info');
-      }
-
-      const combinedData: CombinedAccountResponse = await walletResponse.json();
-      if (!combinedData.lightning?.walletInfo) {
-        throw new Error('Failed to get wallet info');
-      }
-
-      const usernameAddress = `${combinedData.lightning.walletInfo.username}@sati.pro`;
-
-      // Request signature for the Lightning address (BIP322). Activation is
-      // Xverse-only, so this resolves through the Xverse signing path.
-      const signature = await signMessage({
-        address: result.address,
-        message: usernameAddress,
-      });
-
-      // Send update request to set the Lightning address
-      const updateResponse = await fetch('/api/account/update', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          btc_address: result.address,
-          ln_address: usernameAddress,
-          signature: signature,
-        }),
-      });
-
-      if (!updateResponse.ok) {
-        let errorMessage = 'Failed to activate account';
-        try {
-          const errorData = await updateResponse.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          // If response is not JSON, use default error message
-        }
-        throw new Error(errorMessage);
-      }
-
-      // Refresh the page to show updated data
-      window.location.reload();
-    } catch (err) {
-      if (err instanceof SignCancelledError) return;
-      console.error('Activation error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to activate account');
-    } finally {
-      setIsConnecting(false);
     }
   };
 
@@ -735,10 +632,9 @@ export default function UserDashboard() {
               </div>
             </div>
 
-            {/* Account Activation / Lightning & Stratum Information */}
-            <div className="w-full">
-              {!layoutReady ? (
-                  // Loading state - Show shimmer components while data is loading
+            {isOwnProfile && (
+              <div className="w-full">
+                {!layoutReady ? (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
                     <StratumInfo
                       userId={userId}
@@ -753,27 +649,7 @@ export default function UserDashboard() {
                       onToggle={() => toggleCollapsedSection('stratumLightning')}
                     />
                   </div>
-              ) : isConnected && !isOwnProfile ? null
-              : !isManualOwner && (!isLightningAuthenticated || !accountData || !accountData.ln_address) ? (
-                      // Not authenticated, no account data, or no lightning address - Show Connect/Activate Account button
-                  <div className="bg-background p-6 sm:p-8 shadow-md border border-border">
-                    <div className="flex flex-col items-center justify-center py-8">
-                      <button
-                          onClick={handleActivateAccount}
-                          disabled={isConnecting}
-                          className="px-8 py-4 bg-foreground text-background text-lg font-medium hover:bg-foreground/80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {isConnecting ? 'Connecting...' : (!isLightningAuthenticated ? 'Connect' : 'Activate Account')}
-                      </button>
-                      {error && (
-                          <div className="mt-4 text-sm text-red-500 bg-red-500/10 p-3 border border-red-500/20">
-                            {error}
-                          </div>
-                      )}
-                    </div>
-                  </div>
-              ) : (
-                  // Own profile, authenticated with lightning address - Show Lightning, Stratum, and Dispenser
+                ) : (
                   <div className="flex flex-col gap-3">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
                       <StratumInfo
@@ -787,6 +663,7 @@ export default function UserDashboard() {
                         loading={false}
                         collapsed={collapsedSections.stratumLightning}
                         onToggle={() => toggleCollapsedSection('stratumLightning')}
+                        onAccountUpdated={setAccountData}
                       />
                     </div>
                     <DispenserClaim
@@ -795,11 +672,12 @@ export default function UserDashboard() {
                       onToggle={() => toggleCollapsedSection('dispenser')}
                     />
                   </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {layoutReady && showRefinery && (
+          {layoutReady && isOwnProfile && (
             <ErrorBoundary>
               <Refinery
                 address={userId}
@@ -818,12 +696,6 @@ export default function UserDashboard() {
               />
             </ErrorBoundary>
           )}
-
-          <WalletConnectModal
-            isOpen={showConnectModal}
-            onClose={() => setShowConnectModal(false)}
-            onXverse={handleConnectXverse}
-          />
 
           <div className="w-full">
             <HashrateChart

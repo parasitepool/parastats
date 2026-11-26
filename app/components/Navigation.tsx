@@ -39,7 +39,12 @@ export default function Navigation({
   const menuOpenRef = useRef(false);
   const router = useRouter();
   const pathname = usePathname();
-  const { address: walletAddress, isConnected, disconnect } = useWallet();
+  const {
+    address: walletAddress,
+    isConnected,
+    disconnect,
+    openConnectModal,
+  } = useWallet();
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const desktopLinkClass = (href: string) =>
@@ -423,7 +428,16 @@ export default function Navigation({
             </button>
             <button
               onClick={() => {
-                disconnect();
+                setMenuOpen(false);
+                openConnectModal({ initialView: 'switcher' });
+              }}
+              className="block w-full text-left px-4 py-3 text-sm font-medium hover:bg-foreground/5 border-t border-border"
+            >
+              Switch
+            </button>
+            <button
+              onClick={() => {
+                void disconnect();
                 setMenuOpen(false);
               }}
               className="block w-full text-left px-4 py-3 text-sm font-medium hover:bg-foreground/5 border-t border-border"

@@ -11,7 +11,7 @@ export default function MinerSetupGuide() {
           <div className="flex gap-3">
             <span className="font-mono text-foreground/50 shrink-0">A.</span>
             <div>
-              <p className="font-medium">With Xverse wallet</p>
+              <p className="font-medium">With XVERSE wallet</p>
               <p className="text-sm text-foreground/70">
                 Install{" "}
                 <Link
@@ -20,7 +20,7 @@ export default function MinerSetupGuide() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Xverse
+                  XVERSE
                 </Link>
                 {" "}→ Connect at{" "}
                 <Link
